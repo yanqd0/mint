@@ -1,0 +1,11 @@
+# 项目记忆索引
+
+> 索引入口：新会话先看这里定位权威信息。每个条目一行链接 + 一句话说明。
+
+- [领域概念词汇表](DDD.md) — Issue/Kind/Status/状态机/capture/context/adapter 等核心概念的中英文对照与关系。
+- [开发路线图](roadmap.md) — 版本规划（0.1.0→1.0）、发布策略（1.0 前公开预览）、每版目标。
+- 设计决策记录 — `~/Documents/claude/mint.md`（仓库外）：早期设计全过程，需求、方案对比、架构取舍、命名由来（mint/mint-faa/docket 被否）。
+- Rust 开发与构建偏好 — mem-lite #189：release 优化矩阵、thiserror/eyre、workspace 结构、.cargo/config.toml 全显式（mold/国内镜像）。
+- 命名决策 — mem-lite #188：命令名 `mint`、crates.io 包名 `mint-faa`、候选评估与 `mint-cli` 被占用约束。
+
+> 注意：`../../Documents/claude/mint.md` 是仓库外文件（位于 `~/Documents/claude/`），仅本机可读。
