@@ -10,10 +10,10 @@ pub mod sql;
 
 /// 有序迁移：每项 (目标版本, 迁移 SQL)。从当前 user_version 逐级升到最新。
 /// 每个迁移 SQL 自带 BEGIN/COMMIT，末尾 `PRAGMA user_version = <目标版本>`，失败整体回滚。
-const MIGRATIONS: &[(i32, &str)] = &[(1, MIGRATION_001), (2, MIGRATION_002)];
+const MIGRATIONS: &[(i32, &str)] = &[(1, MIGRATION_001), (2, MIGRATION_002), (3, MIGRATION_003)];
 
 /// 数据库当前 schema 版本（须与 MIGRATIONS 最后一个目标版本一致）。
-const CURRENT_VERSION: i32 = 2;
+const CURRENT_VERSION: i32 = 3;
 
 /// 打开（必要时创建）SQLite 数据库并迁移到最新版本。
 /// 父目录不存在时自动创建（首次运行的真实场景）。
@@ -73,7 +73,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
 
         let tables: Vec<String> = conn
             .prepare(
@@ -84,7 +84,7 @@ mod tests {
             .unwrap()
             .map(|r| r.unwrap())
             .collect();
-        assert_eq!(tables.len(), 8);
+        assert_eq!(tables.len(), 9);
         for t in [
             "projects",
             "issues",
@@ -94,14 +94,15 @@ mod tests {
             "plans",
             "roadmap_issues",
             "plan_issues",
+            "issue_links",
         ] {
             assert!(tables.iter().any(|n| n == t), "missing table {t}");
         }
     }
 
-    /// v1 → v2 升级：先建 v1 库，再 migrate，验证不重跑 001、加 last_commit_id。
+    /// v1 → v3 升级：先建 v1 库，再 migrate，验证增量升级不重跑 001。
     #[test]
-    fn migrate_upgrades_v1_to_v2() {
+    fn migrate_upgrades_v1_to_v3() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         conn.execute_batch(MIGRATION_001).unwrap(); // 模拟已发布的 v1 库
         let version: i32 = conn
@@ -109,12 +110,12 @@ mod tests {
             .unwrap();
         assert_eq!(version, 1);
 
-        migrate(&conn).unwrap(); // 增量升级：跳过 001，只跑 002
+        migrate(&conn).unwrap(); // 增量升级：跳过 001，跑 002 + 003
 
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
         // issues 表含 last_commit_id 列
         let cols: Vec<String> = conn
             .prepare("PRAGMA table_info(issues)")
@@ -124,6 +125,44 @@ mod tests {
             .map(|r| r.unwrap())
             .collect();
         assert!(cols.iter().any(|c| c == "last_commit_id"));
+        // issue_links 表存在
+        let has_links: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='issue_links'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap()
+            > 0;
+        assert!(has_links);
+    }
+
+    /// v2 → v3 升级：先建 v2 库，再 migrate，只跑 003。
+    #[test]
+    fn migrate_upgrades_v2_to_v3() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATION_001).unwrap();
+        conn.execute_batch(MIGRATION_002).unwrap(); // 模拟 v2 库
+        let version: i32 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
+
+        migrate(&conn).unwrap();
+
+        let version: i32 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 3);
+        let has_links: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='issue_links'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap()
+            > 0;
+        assert!(has_links);
     }
 
     /// 外键约束生效（默认关闭，需 PRAGMA foreign_keys）。
