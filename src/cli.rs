@@ -838,7 +838,10 @@ fn cmd_link_remove(conn: &rusqlite::Connection, a: &LinkRemoveArgs) -> Result<()
             }))?
         );
     } else {
-        println!("unlinked issue #{} from #{} ({})", a.from, a.to, a.link_type);
+        println!(
+            "unlinked issue #{} from #{} ({})",
+            a.from, a.to, a.link_type
+        );
     }
     Ok(())
 }

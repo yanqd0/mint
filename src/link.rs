@@ -11,12 +11,7 @@ use crate::error::Error;
 use crate::models::{Link, LinkType};
 
 /// 建立 issue 链接（含冲突校验）。related 归一化方向；solves/duplicates 反向互斥。
-pub fn create(
-    conn: &Connection,
-    from_id: i64,
-    ty: LinkType,
-    to_id: i64,
-) -> Result<(), Error> {
+pub fn create(conn: &Connection, from_id: i64, ty: LinkType, to_id: i64) -> Result<(), Error> {
     if from_id == to_id {
         return Err(Error::Other(format!(
             "cannot link issue #{from_id} to itself"
@@ -209,7 +204,10 @@ mod tests {
     fn create_missing_issue_error() {
         let (conn, a, _) = setup();
         let err = create(&conn, a, LinkType::Related, 999).unwrap_err();
-        assert!(err.to_string().contains("issue #999 not found"), "err: {err}");
+        assert!(
+            err.to_string().contains("issue #999 not found"),
+            "err: {err}"
+        );
     }
 
     /// remove 对称：存 A related B，remove(B, related, A) 能删。
