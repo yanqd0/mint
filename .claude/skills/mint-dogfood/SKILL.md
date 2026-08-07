@@ -85,6 +85,10 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
 - **mint 管 issue（可执行待办），mem-lite 管记忆（事实/教训）**——两者不混，避免重复沉淀；
   双向关联（`issue#N` ↔ `memory#N`）与降级方案见 `references/mem-lite.md`。
 - `close` 缺 `--test-cmd` 会被 CLI 拒绝，报错信息即提示：用 `not-tested` 表示"跳过测试"。
+- **close 前记录关联 commit**：每个 issue 的开发实现 commit 落库后（my-git-commit 之后），
+  用 `mint commit <id> --sha <SHA>`（或读 HEAD）记录 `last_commit_id`——否则 `mint show` 看不到
+  该 issue 的开发记录。同一 issue 多个 commit 只记最后一个（覆盖式）。「多 issue plan」场景
+  在统一 close 前逐个补记。
 - 默认库是全局共享的 `~/.local/share/mint/mint.db`；验证性/演示性操作优先设
   `MINT_DB_PATH=<临时文件>` 避免污染真实库。
 - 探测到的相对路径前缀（`./target/release/mint`）首次调用可能触发权限确认，属正常，允许一次即可。
