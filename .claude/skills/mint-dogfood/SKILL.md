@@ -3,6 +3,7 @@ name: mint-dogfood
 description: >-
   用 mint CLI 记录并推进 mint 项目自身的开发 issue（dogfooding）。
   当用户在 mint 仓库内"发现一个 bug / 有个需求 / 要登记一个 issue / 开个 issue /
+  收到审查/复查报告（code-reviewer/security-auditor/tester）中的观察项或技术债 /
   把某个 issue 推进到 plan/start/stage/close/reset/drop/reopen / 开始做/测试/关闭/放弃
   某件事 / 本次改动值得记一条"等意图时自动触发；也支持手动 /mint-dogfood。
   基于 0.1.0 现有命令（add/list/show/state/tag，无 dedup/FTS——登记前先 list 查重标题防噪音）。
@@ -38,6 +39,9 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
    kind 默认 `problem`（缺陷），需求用 `requirement`；`--tag` 支持 `name` 或 `name:description`、逗号分隔。
    记录 add 返回的 `id`，供后续状态操作引用。
    **克制登记**：只记"可执行、真会推动开发"的事项；事实/教训/决策类归属 mem-lite，不登记。
+   **审查/复查报告观察项**：收到 code-reviewer/security-auditor/tester 报告时，其中的
+   非阻塞观察项、技术债、已知限制也应登记为 issue（`kind=problem`，tag `dev-clean:技术债`），
+   并标注来源（如"security-auditor 复审观察"）与排期。审查报告"未发现"不登记。
    **mem-lite 关联**（可选增强）：若某条事实/教训对应本 issue，且 `which claude-mem-lite` 存在，
    按 `references/mem-lite.md` 保存带 `issue#<id>` 与读取命令的 observation；mem-lite 缺失则跳过。
 
