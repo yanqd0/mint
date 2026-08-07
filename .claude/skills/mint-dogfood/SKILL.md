@@ -87,5 +87,5 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
 - `close` 缺 `--test-cmd` 会被 CLI 拒绝，报错信息即提示：用 `not-tested` 表示"跳过测试"。
 - 默认库是全局共享的 `~/.local/share/mint/mint.db`；验证性/演示性操作优先设
   `MINT_DB_PATH=<临时文件>` 避免污染真实库。
-- 探测到的相对路径前缀（`./target/release/mint`）首次调用可能触发权限确认，属正常，允许一次即可；
-  长期使用建议 `cargo build --release` 后把 `target/release` 加入 PATH，直接命中 `Bash(mint:*)`。
+- 探测到的相对路径前缀（`./target/release/mint`）首次调用可能触发权限确认，属正常，允许一次即可。
+- **PATH 软链接**：`~/bin/mint` 软链接指向 `target/release/mint`（本机已建）。开发过程中**时常执行 `cargo build --release`** 更新该产物，使软链接始终指向最新二进制（默认命中 `which mint` → `Bash(mint:*)`，无相对路径权限弹窗）。
