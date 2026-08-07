@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::db;
 use crate::error::Error;
@@ -59,8 +59,8 @@ fn dir_basename(cwd: &Path) -> Option<String> {
 
 /// 确保 project 存在，返回其 id。不存在则自动注册（name/git/abs_dir）。
 pub fn ensure(conn: &Connection, name: &str, cwd: &Path) -> Result<i64, Error> {
-    // 已有则直接返回
-    if let Ok(id) = query_id(conn, name) {
+    // 已有则直接返回（仅「不存在」走注册；其他错误向上传播，不吞）
+    if let Some(id) = query_id(conn, name)? {
         return Ok(id);
     }
     let git = git_repo_url(cwd);
@@ -68,12 +68,14 @@ pub fn ensure(conn: &Connection, name: &str, cwd: &Path) -> Result<i64, Error> {
         .ok()
         .map(|p| p.to_string_lossy().into_owned());
     conn.execute(db::PROJECT_INSERT, params![name, git, abs_dir])?;
-    query_id(conn, name)
+    query_id(conn, name)?
+        .ok_or_else(|| Error::Other(format!("project '{name}' just inserted but not found")))
 }
 
-/// 查询 project 的 id（不存在返回 None 语义的 Err 由调用方处理）。
-pub fn query_id(conn: &Connection, name: &str) -> Result<i64, Error> {
+/// 查询 project 的 id（不存在返回 None）。
+pub fn query_id(conn: &Connection, name: &str) -> Result<Option<i64>, Error> {
     conn.query_row(db::PROJECT_SELECT_ID, params![name], |r| r.get(0))
+        .optional()
         .map_err(Error::from)
 }
 

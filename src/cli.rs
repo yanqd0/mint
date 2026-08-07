@@ -214,6 +214,12 @@ impl Cli {
 }
 
 fn cmd_add(conn: &rusqlite::Connection, cwd: &std::path::Path, a: &AddArgs) -> Result<(), Error> {
+    if a.title.trim().is_empty() {
+        return Err(Error::Other("title must not be empty".to_string()));
+    }
+    if a.project.as_deref().is_some_and(|p| p.trim().is_empty()) {
+        return Err(Error::Other("--project must not be empty".to_string()));
+    }
     let pname = project::detect_name(cwd, a.project.as_deref());
     let pid = project::ensure(conn, &pname, cwd)?;
 
@@ -338,16 +344,10 @@ fn cmd_trans(conn: &rusqlite::Connection, t: &TransArgs, action: Action) -> Resu
     transition(conn, t.id, action, None, None, t.json)
 }
 
-/// stage：dev→test，可选 --test-cmd。
+/// stage：dev→test，可选 --test-cmd（空白归一为 None，避免写入空串）。
 fn cmd_stage(conn: &rusqlite::Connection, s: &StageArgs) -> Result<(), Error> {
-    transition(
-        conn,
-        s.id,
-        Action::Stage,
-        s.test_cmd.as_deref(),
-        None,
-        s.json,
-    )
+    let test_cmd = s.test_cmd.as_deref().filter(|c| !c.trim().is_empty());
+    transition(conn, s.id, Action::Stage, test_cmd, None, s.json)
 }
 
 /// close：test→done，必填 --test-cmd。
@@ -387,19 +387,20 @@ fn transition(
             other => Error::from(other),
         })?;
 
-    // close 必填 test_cmd
-    if !state::close_requires_test_cmd(action, test_cmd) {
-        return Err(Error::Other(
-            "close requires --test-cmd (use 'not-tested' if tests were skipped)".to_string(),
-        ));
-    }
-
     let target = state::target_of(action);
+    // 先校验状态转换，避免 test_cmd 错误掩盖真正的 invalid transition
     if !state::can_transition(current, action, target) {
         return Err(Error::Other(format!(
             "invalid transition: {} -> {} via {:?}",
             current, target, action
         )));
+    }
+
+    // close 必填 test_cmd
+    if !state::close_requires_test_cmd(action, test_cmd) {
+        return Err(Error::Other(
+            "close requires --test-cmd (use 'not-tested' if tests were skipped)".to_string(),
+        ));
     }
 
     let reset = action == Action::Reset;

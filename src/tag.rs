@@ -13,15 +13,17 @@ pub fn parse_specs(raw: &[String]) -> Vec<(String, Option<String>)> {
         .flat_map(|s| s.split(','))
         .map(|part| part.trim())
         .filter(|part| !part.is_empty())
-        .map(|part| {
-            if let Some((name, desc)) = part.split_once(':') {
-                let name = name.trim();
-                let desc = desc.trim();
-                if !name.is_empty() && !desc.is_empty() {
-                    return (name.to_string(), Some(desc.to_string()));
+        .filter_map(|part| {
+            match part.split_once(':') {
+                // name:desc 两段均非空才采用
+                Some((name, desc)) if !name.trim().is_empty() && !desc.trim().is_empty() => {
+                    Some((name.trim().to_string(), Some(desc.trim().to_string())))
                 }
+                // 含冒号但任一段为空（如 "a:" / ":desc"）→ 丢弃，不产出畸形 tag
+                Some(_) => None,
+                // 无冒号 → 纯 name
+                None => Some((part.to_string(), None)),
             }
-            (part.to_string(), None)
         })
         .collect()
 }
@@ -32,7 +34,8 @@ pub fn ensure(conn: &Connection, name: &str, description: Option<&str>) -> Resul
         return Ok(id);
     }
     conn.execute(db::TAG_INSERT, params![name, description])?;
-    Ok(query_id(conn, name)?.expect("tag just inserted"))
+    query_id(conn, name)?
+        .ok_or_else(|| Error::Other(format!("tag '{name}' just inserted but not found")))
 }
 
 /// 查询 tag id（不存在返回 None）。
@@ -115,6 +118,14 @@ mod tests {
                 ("ui".to_string(), None),
             ]
         );
+    }
+
+    /// 边界：冒号段任一侧为空（"a:"/":desc"）不产出畸形 tag。
+    #[test]
+    fn parse_specs_drops_malformed_colon() {
+        let raw = vec!["a:".to_string(), ":desc".to_string(), "ok".to_string()];
+        let specs = parse_specs(&raw);
+        assert_eq!(specs, vec![("ok".to_string(), None)]);
     }
 
     /// 新 tag 自动注册，重复 ensure 复用同一 id。
