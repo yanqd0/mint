@@ -64,14 +64,45 @@ use crate::tag;
 - [ ] 生产代码无 `unwrap()`/`expect()`（仅 `#[cfg(test)]` 内可用）；无 `todo!()`/`unimplemented!()`
 - [ ] 无超过 300 行的 `.rs` 文件（`find src tests -name '*.rs' | xargs wc -l | sort -rn | head`）
 
-## SQL 组织约定（指针）
+## SQL 组织与格式化约定
 
-目标：**所有 SQL（迁移 DDL + 查询/写入）集中在 `src/db/` 下的 `.sql` 文件，用 `include_str!` 编译期内嵌**；禁止在 Rust 字符串字面量里写多行 SQL。
+**所有 SQL（迁移 DDL + 查询/写入）集中在 `src/db/` 下的 `.sql` 文件，用 `include_str!` 编译期内嵌**；禁止在 Rust 字符串字面量里写多行 SQL。
 
-- 目录结构：`src/db/`（`mod.rs` + `sql.rs` + `migrations/` + `queries/`），详见「数据模型约束」。
-- 动态查询用**参数化模板**（`?N IS NULL OR ...`），禁止字符串拼接 WHERE。
-- SQL 格式化/lint 用 **sqruff**（`sqruff lint` / `sqruff format`，dialect=sqlite）。
-- 详细章节（目录结构、命名、格式化约定、工具结论）由当前版本的 SQL 抽取工作补全。
+### 目录结构
+
+```
+src/db/
+├── mod.rs          # open / migrate / migrate_for_test + pub use sql::*
+├── sql.rs          # 全部 include_str! 常量（MIGRATION_001 / ISSUE_* / PROJECT_* / TAG_*）
+├── migrations/     # 版本化迁移，命名 NNN_<desc>.sql（如 001_init.sql）
+└── queries/        # 查询/写入，命名 <table>_<action>.sql（如 issue_list.sql）
+```
+
+- 新增 SQL：写 `.sql` 文件 → 在 `sql.rs` 加 `pub const X: &str = include_str!(...)` → 调用方用 `db::X`。
+- 缺失文件=编译错误；`.sql` 不参与 `cargo fmt`（由 sqruff 管）。
+
+### 动态查询：参数化模板
+
+动态过滤用**参数化模板**（`?N IS NULL OR ...`），**禁止字符串拼接 WHERE**。
+
+```sql
+-- 列表查询：?1 all(0/1), ?2 status(NULL=不过滤), ?3 tag, ?4 project
+SELECT ... FROM issues i JOIN projects p ON p.id = i.project_id
+WHERE (?1 = 1 OR ?2 IS NOT NULL OR i.status IN ('open','planned','dev','test'))
+  AND (?2 IS NULL OR i.status = ?2)
+  AND (?3 IS NULL OR EXISTS (...))
+  AND (?4 IS NULL OR p.name = ?4)
+ORDER BY i.id DESC
+```
+
+`rusqlite::params!` 支持 `Option<T: ToSql>`（NULL 即不过滤），可完全消除 `Vec<Box<dyn ToSql>>` 与字符串拼接。
+
+### sqruff 格式化 / lint
+
+- 工具：**sqruff**（Rust 单二进制，`cargo install sqruff`，dialect=sqlite），配置在根 `sqruff.toml`（扫描 `src/db/**/*.sql`）。
+- 命令（从项目根执行）：`sqruff lint src/db`（提交前检查）；`sqruff fix src/db`（自动格式化）。
+- 约定：关键字大写；SELECT 列每行一列、4 空格缩进；子查询独立缩进；多行 `AND` 前导；字符串单引号；每条语句以分号结尾；参数占位符在顶部 `-- ?N:` 注释说明含义。
+- sqruff 是**开发期工具**，服务于 mint 项目自身；"轻量、无配置"原则针对发布交付件，二者不冲突。
 
 ## UT 测试规范
 
