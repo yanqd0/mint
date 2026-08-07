@@ -11,6 +11,7 @@ pub const ISSUE_LIST: &str = include_str!("queries/issue_list.sql");
 pub const ISSUE_SHOW: &str = include_str!("queries/issue_show.sql");
 pub const ISSUE_SELECT_STATUS: &str = include_str!("queries/issue_select_status.sql");
 pub const ISSUE_UPDATE_TRANSITION: &str = include_str!("queries/issue_update_transition.sql");
+pub const ISSUE_UPDATE_LAST_COMMIT: &str = include_str!("queries/issue_update_last_commit.sql");
 
 pub const PROJECT_INSERT: &str = include_str!("queries/project_insert.sql");
 pub const PROJECT_SELECT_ID: &str = include_str!("queries/project_select_id.sql");
@@ -28,6 +29,8 @@ pub const ROADMAP_SELECT: &str = include_str!("queries/roadmap_select.sql");
 pub const ROADMAP_ATTACH: &str = include_str!("queries/roadmap_attach.sql");
 pub const ROADMAP_DETACH: &str = include_str!("queries/roadmap_detach.sql");
 pub const ROADMAP_ISSUES_FOR: &str = include_str!("queries/roadmap_issues_for.sql");
+pub const ROADMAP_SELECT_STATUS: &str = include_str!("queries/roadmap_select_status.sql");
+pub const ROADMAP_UPDATE_STATUS: &str = include_str!("queries/roadmap_update_status.sql");
 
 pub const PLAN_INSERT: &str = include_str!("queries/plan_insert.sql");
 pub const PLAN_LIST: &str = include_str!("queries/plan_list.sql");
@@ -35,3 +38,5 @@ pub const PLAN_SELECT: &str = include_str!("queries/plan_select.sql");
 pub const PLAN_ATTACH: &str = include_str!("queries/plan_attach.sql");
 pub const PLAN_DETACH: &str = include_str!("queries/plan_detach.sql");
 pub const PLAN_ISSUES_FOR: &str = include_str!("queries/plan_issues_for.sql");
+pub const PLAN_SELECT_STATUS: &str = include_str!("queries/plan_select_status.sql");
+pub const PLAN_UPDATE_STATUS: &str = include_str!("queries/plan_update_status.sql");
