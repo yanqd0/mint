@@ -123,8 +123,75 @@ pub struct Issue {
     pub dropped_reason: Option<String>,
     pub last_commit_id: Option<String>,
     pub tags: Vec<String>,
+    pub links: Vec<Link>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// issue 链接类型：related（相关）/ solves（解决）/ duplicates（重复）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum LinkType {
+    Related,
+    Solves,
+    Duplicates,
+}
+
+impl LinkType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            LinkType::Related => "related",
+            LinkType::Solves => "solves",
+            LinkType::Duplicates => "duplicates",
+        }
+    }
+
+    /// 反向类型的字符串表示（仅显示用，不落库）：
+    /// solves → "solved-by"，duplicates → "duplicated-by"，related 对称仍为 "related"。
+    pub fn reverse(&self) -> &'static str {
+        match self {
+            LinkType::Related => "related",
+            LinkType::Solves => "solved-by",
+            LinkType::Duplicates => "duplicated-by",
+        }
+    }
+}
+
+impl std::fmt::Display for LinkType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl rusqlite::ToSql for LinkType {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::Borrowed(self.as_str().into()))
+    }
+}
+
+impl rusqlite::types::FromSql for LinkType {
+    fn column_result(v: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        match v.as_str()? {
+            "related" => Ok(LinkType::Related),
+            "solves" => Ok(LinkType::Solves),
+            "duplicates" => Ok(LinkType::Duplicates),
+            other => Err(rusqlite::types::FromSqlError::Other(
+                format!("invalid link type: {other}").into(),
+            )),
+        }
+    }
+}
+
+/// issue 链接（从某 issue 视角聚合出向 + 入向）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Link {
+    /// 对端 issue id
+    pub other_id: i64,
+    /// 对端 issue 标题
+    pub other_title: String,
+    /// 显示关系：related / solves / solved-by / duplicates / duplicated-by
+    pub rel: String,
+    pub created_at: String,
 }
 
 /// Tag 标签。
@@ -201,4 +268,52 @@ pub struct IssueSummary {
     pub kind: Kind,
     pub status: Status,
     pub project: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// LinkType 的 as_str/reverse/Display。
+    #[test]
+    fn link_type_str_and_reverse() {
+        assert_eq!(LinkType::Related.as_str(), "related");
+        assert_eq!(LinkType::Solves.as_str(), "solves");
+        assert_eq!(LinkType::Duplicates.as_str(), "duplicates");
+
+        assert_eq!(LinkType::Related.reverse(), "related");
+        assert_eq!(LinkType::Solves.reverse(), "solved-by");
+        assert_eq!(LinkType::Duplicates.reverse(), "duplicated-by");
+
+        assert_eq!(LinkType::Solves.to_string(), "solves");
+    }
+
+    /// LinkType 的 rusqlite ToSql/FromSql 往返。
+    #[test]
+    fn link_type_sql_roundtrip() {
+        for (ty, s) in [
+            (LinkType::Related, "related"),
+            (LinkType::Solves, "solves"),
+            (LinkType::Duplicates, "duplicates"),
+        ] {
+            let conn = rusqlite::Connection::open_in_memory().unwrap();
+            conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();
+            conn.execute("INSERT INTO t VALUES (?1)", [ty]).unwrap();
+            let got: LinkType = conn.query_row("SELECT x FROM t", [], |r| r.get(0)).unwrap();
+            assert_eq!(got, ty);
+            assert_eq!(s, ty.as_str());
+        }
+    }
+
+    /// 非法 LinkType 值报错。
+    #[test]
+    fn link_type_invalid_value_errors() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();
+        conn.execute("INSERT INTO t VALUES ('bogus')", []).unwrap();
+        let err = conn
+            .query_row::<LinkType, _, _>("SELECT x FROM t", [], |r| r.get(0))
+            .unwrap_err();
+        assert!(err.to_string().contains("invalid link type"));
+    }
 }

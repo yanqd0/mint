@@ -419,6 +419,7 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
             dropped_reason: r.get(8)?,
             last_commit_id: r.get(9)?,
             tags: Vec::new(),
+            links: Vec::new(),
             created_at: r.get(10)?,
             updated_at: r.get(11)?,
         })
@@ -454,6 +455,7 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
                 dropped_reason: r.get(8)?,
                 last_commit_id: r.get(9)?,
                 tags: Vec::new(),
+                links: Vec::new(),
                 created_at: r.get(10)?,
                 updated_at: r.get(11)?,
             })
