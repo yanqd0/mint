@@ -136,6 +136,18 @@
 
 **理由**：符合单机 SQLite 定位（离线可用）；machine_id 与 project 一样是"来源标签"哲学扩展；按 uid 去重使重复同步不产生重复行；派生视图让写路径保持单一真相源、短 id 无歧义。
 
+## D15. 早期实验 adapter：项目级 skill 直调 mint CLI
+
+**背景**：0.1.0 完成后 roadmap 硬约束"用 mint 管 mint"（dogfooding）尚未闭环——缺一个让 Claude Code 主动记录/推进 issue 的机制。0.3.0 规划的 capture/context/dedup 基建较远，等它落地再开始 dogfooding 会推迟真实使用反馈。
+
+**决策**：先做**项目级 skill** `.claude/skills/mint-dogfood`（基于 0.1.0 现有命令 add/list/show/state/tag），作为 0.3.0 适配器的**早期实验**：
+- skill 直接 shell 调 mint CLI，探测回退链（which mint → `./target/release/mint` → `./target/debug/mint` → `cargo run --`）。
+- **无 dedup 时的防噪音**：登记前 `list --json` 人工查重标题；克制登记（只记可执行事项，事实/教训归 mem-lite）。
+- **状态机提示词独立成 `references/state-machine.md`**——0.3.0 适配器直接复用，不重写。
+- 0.3.0 的 capture/context/dedup 落地后，skill 升级走 capture（真 dedup + search），查重步骤删除。
+
+**理由**：dogfooding 要尽早产生真实使用反馈（驱动后续版本设计），不必等 capture 基建；skill 是纯外部提示词、零 Rust 代码成本，随 0.3.0 平滑演进；状态机提示词先行沉淀为可复用件。
+
 ---
 
 ## 后续待定（暂未决策）

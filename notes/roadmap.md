@@ -59,6 +59,8 @@
   - SessionStart 注入 `mint context --project`
   - **状态机提示词**：跳过测试也要走 stage、test_cmd 填 `not-tested`——写入 adapter 提示词
 
+> **早期实验**：0.1.0 后已落地 `.claude/skills/mint-dogfood`（项目级 skill，基于 0.1.0 命令的主动登记 + list 查重防噪音）。0.3.0 的 capture/context/dedup 落地后该 skill 升级复用；`references/state-machine.md` 即本条目"状态机提示词"的先行交付，可直接复用。
+
 **验收**：agent 会话中自动捕获生效；重复 issue 自动合并。
 
 ## 0.4.0 — TUI（人工查看）
