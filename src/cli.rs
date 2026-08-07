@@ -4,6 +4,7 @@ use crate::db;
 use crate::error::Error;
 use crate::models::{Issue, Kind, Status};
 use crate::project;
+use crate::state::{self, Action};
 use crate::tag;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -28,6 +29,61 @@ enum Commands {
     List(ListArgs),
     /// Show an issue's details
     Show(ShowArgs),
+    /// Advance open → planned
+    Plan(TransArgs),
+    /// Advance planned → dev
+    Start(TransArgs),
+    /// Advance dev → test (enter testing)
+    Stage(StageArgs),
+    /// Close test → done (requires --test-cmd)
+    Close(CloseArgs),
+    /// Rework: planned/dev/test → open
+    Reset(TransArgs),
+    /// Drop an issue (any status)
+    Drop(DropArgs),
+    /// Reopen done/dropped → open
+    Reopen(TransArgs),
+}
+
+#[derive(clap::Args)]
+struct TransArgs {
+    id: i64,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct StageArgs {
+    id: i64,
+    /// Test command used to reproduce/verify (e.g. 'cargo test')
+    #[arg(long)]
+    test_cmd: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct CloseArgs {
+    id: i64,
+    /// Test command used to reproduce/verify (required; '没测' if skipped)
+    #[arg(long)]
+    test_cmd: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct DropArgs {
+    id: i64,
+    /// Optional reason
+    #[arg(long)]
+    reason: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(clap::Args)]
@@ -88,6 +144,13 @@ impl Cli {
             Commands::Add(a) => cmd_add(&conn, &cwd, a),
             Commands::List(l) => cmd_list(&conn, l),
             Commands::Show(s) => cmd_show(&conn, s),
+            Commands::Plan(t) => cmd_trans(&conn, t, Action::Plan),
+            Commands::Start(t) => cmd_trans(&conn, t, Action::Start),
+            Commands::Stage(s) => cmd_stage(&conn, s),
+            Commands::Close(c) => cmd_close(&conn, c),
+            Commands::Reset(t) => cmd_trans(&conn, t, Action::Reset),
+            Commands::Drop(d) => cmd_drop(&conn, d),
+            Commands::Reopen(t) => cmd_trans(&conn, t, Action::Reopen),
         }
     }
 
@@ -269,6 +332,76 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
         }
         println!("  created: {}", issue.created_at);
         println!("  updated: {}", issue.updated_at);
+    }
+    Ok(())
+}
+
+/// 执行无额外参数的状态转换（plan/start/reset/reopen）。
+fn cmd_trans(conn: &rusqlite::Connection, t: &TransArgs, action: Action) -> Result<(), Error> {
+    transition(conn, t.id, action, None, None, t.json)
+}
+
+/// stage：dev→test，可选 --test-cmd。
+fn cmd_stage(conn: &rusqlite::Connection, s: &StageArgs) -> Result<(), Error> {
+    transition(conn, s.id, Action::Stage, s.test_cmd.as_deref(), None, s.json)
+}
+
+/// close：test→done，必填 --test-cmd。
+fn cmd_close(conn: &rusqlite::Connection, c: &CloseArgs) -> Result<(), Error> {
+    transition(conn, c.id, Action::Close, c.test_cmd.as_deref(), None, c.json)
+}
+
+/// drop：任意状态→dropped，可选 --reason。
+fn cmd_drop(conn: &rusqlite::Connection, d: &DropArgs) -> Result<(), Error> {
+    transition(conn, d.id, Action::Drop, None, d.reason.as_deref(), d.json)
+}
+
+/// 核心状态转换：读当前 → 校验 → 更新。
+fn transition(
+    conn: &rusqlite::Connection,
+    id: i64,
+    action: Action,
+    test_cmd: Option<&str>,
+    _reason: Option<&str>,
+    json: bool,
+) -> Result<(), Error> {
+    let current: Status = conn
+        .query_row("SELECT status FROM issues WHERE id = ?1", rusqlite::params![id], |r| r.get(0))
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => Error::Other(format!("issue #{id} not found")),
+            other => Error::from(other),
+        })?;
+
+    // close 必填 test_cmd
+    if !state::close_requires_test_cmd(action, test_cmd) {
+        return Err(Error::Other(
+            "close requires --test-cmd (use '没测' if tests were skipped)".to_string(),
+        ));
+    }
+
+    let target = state::target_of(action);
+    if !state::can_transition(current, action, target) {
+        return Err(Error::Other(format!(
+            "invalid transition: {} → {} via {:?}",
+            current, target, action
+        )));
+    }
+
+    conn.execute(
+        "UPDATE issues SET status = ?1, test_cmd = COALESCE(?2, test_cmd),
+                updated_at = datetime('now') WHERE id = ?3",
+        rusqlite::params![target, test_cmd, id],
+    )?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "id": id, "from": current, "to": target,
+            }))?
+        );
+    } else {
+        println!("issue #{id}: {} → {}", current, target);
     }
     Ok(())
 }
