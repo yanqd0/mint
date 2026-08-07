@@ -85,10 +85,24 @@
 
 **理由**：贴合基于 git 的开发场景；`default` 兜底保证无 git 上下文也可用；自动注册免人工维护项目清单。
 
+## D11. 版本排期：0.4 TUI / 0.5 体积优化 / 0.6 其它 agent / 1.0 含 i18n+docs
+
+**背景**：0.1.0 完成后规划后续版本。
+
+**决策**：
+- 0.4.0 TUI（ratatui，只读浏览 + 快捷状态操作，不做内联编辑）
+- 0.5.0 交付件大小性能总优化：**评估去掉内置 SQLite**（换系统 libsqlite3 或替代存储，量化大小/性能影响后决策）、调整技术选型、SQLite compile options 裁剪（保留 FTS5）
+- 0.6.0 其它 agent 支持：Codex（AGENTS.md + MCP）+ OpenCode（TS 插件 hooks 转发 capture），无 hooks 时降级指令驱动
+- **i18n + docs 并入 1.0**（不再独立版本）：1.0 = 发布 + i18n + docs + crates.io + CI/CD
+- 容器（roadmap/plan）越早越好，优先于去重/搜索/agent 适配
+
+**理由**：容器是 issue 之上最基础的结构，前移；体积优化需量化评估（去 SQLite 是开放问题，可能结论是保留）；i18n/docs 是发布前置，与 1.0 合并避免版本碎片化。**D5 的"体积优化排 i18n+docs 版本"据此更新为 0.5.0。**
+
 ---
 
 ## 后续待定（暂未决策）
 
 - 去重算法细节（相似度阈值、多候选选择）——0.3.0 前
 - roadmap/plan 容器的字段与状态集——0.2.0 前
-- SQLite compile options 裁剪清单——i18n+docs 版本前
+- 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
+- i18n 实现方式（gettext / 内建表 / 编译期）——1.0 前

@@ -46,7 +46,7 @@ mint 的基本单位：一个可执行的问题（problem）或需求（requirem
 - `tags`：`name`(UNIQUE) + `description`
 - `issue_tags`：`(issue_id, tag_id)` 复合主键，仅 `created_at`
 
-CLI 内联 `--tag`（按 clap 框架能力，逗号/重复）；`mint tag list` 列出 name|description 供 agent 学习含义。
+CLI 内联 `--tag`（按 clap 框架能力，逗号/重复）；`mint tag list` 列出 name|description 供 agent 学习含义。**注意**：tag.rs 的 `list()` 已实现，但 CLI 子命令尚未接线（0.2.0 或补小 commit）。
 
 ### 状态机（6 态）
 
@@ -81,11 +81,11 @@ stateDiagram-v2
 | done/dropped → open | `reopen` | 重开 |
 | 任意 → dropped | `drop` | 可附 `--reason` |
 
-**无 dev→done 捷径**：跳过测试也要 `stage` 到 `test`，close 时 test_cmd 填"没测"。此规则需写入未来 adapter 提示词。
+**无 dev→done 捷径**：跳过测试也要 `stage` 到 `test`，close 时 test_cmd 填 `not-tested`（用户侧英文值；中文语境下可写作"没测"）。此规则需写入未来 adapter 提示词。
 
 ### capture（捕获）
 
-hook 事件的统一入口：接收 agent 传来的原始信号，做归一化、去重后入库。**归一化放 CLI 侧（`capture.rs`），不放 hook 侧**——hook 只做"检测信号 + 转发原始信息"的传声筒。
+hook 事件的统一入口：接收 agent 传来的原始信号，做归一化、去重后入库。**归一化放 CLI 侧（`capture.rs`），不放 hook 侧**——hook 只做"检测信号 + 转发原始信息"的传声筒。**0.3.0 实现**（随 Claude 适配器）。
 
 ### context（上下文注入）
 
@@ -97,7 +97,7 @@ hook 事件的统一入口：接收 agent 传来的原始信号，做归一化�
 
 ### dedup（去重）
 
-`add`/`capture` 时对 open/active 做标题模糊匹配，命中则 `hit_count+1` 并打印"已合并 #id"，未命中才新建。是系统长期不变成垃圾场的关键。**0.3.0 实现**。
+`add`/`capture` 时对未关闭状态（open/planned/dev/test）做标题模糊匹配，命中则 `hit_count+1` 并打印"已合并 #id"，未命中才新建。是系统长期不变成垃圾场的关键。**0.3.0 实现**。
 
 ### FTS（全文检索）
 

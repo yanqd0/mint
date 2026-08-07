@@ -20,15 +20,11 @@ mint = **M**inimal **I**ssue & **N**eeds **T**racker。一个全局、单机、S
 
 ## 文档导航
 
-| 文档 | 内容 |
-|------|------|
-| `notes/MEMORY.md` | 项目记忆索引（索引入口，先看这里） |
-| `notes/DDD.md` | 领域概念词汇表（Issue/Project/Tag/6 态状态机/capture/context/...） |
-| `notes/roadmap.md` | 版本规划与发布策略 |
-| `notes/decisions.md` | 技术选型与决策记录（ADR 式） |
-| `notes/CLAUDE.md` | notes/ 使用规范（全中文） |
-| `src/CLAUDE.md` | Rust 编码规范 + UT 测试规范 |
-| `~/Documents/claude/mint.md` | 早期设计决策记录（架构取舍、命名由来） |
+- **`notes/` 是项目记忆目录**：所有项目记忆（概念/路线/决策/规范）在 notes/ 下，索引见 `notes/MEMORY.md`——**新会话先读 MEMORY.md**，它指向全部权威文档。
+- **`src/CLAUDE.md`**：Rust 编码规范 + UT 测试规范。
+- **`~/Documents/claude/mint.md`**（仓库外）：早期设计决策记录（架构取舍、命名由来）。
+
+> notes/ 内容变化时更新 MEMORY.md 索引；不要在此重复 notes/ 的逐条列举。
 
 ## 记忆约定
 
