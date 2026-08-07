@@ -10,7 +10,8 @@ use crate::container::{self, ContainerKind};
 use crate::db;
 use crate::error::Error;
 use crate::git;
-use crate::models::{Issue, Kind, Status};
+use crate::link;
+use crate::models::{Issue, Kind, LinkType, Status};
 use crate::output;
 use crate::project;
 use crate::state::{self, Action};
@@ -47,6 +48,8 @@ enum Commands {
     Plan(PlanArgs),
     /// Record the last commit that addressed an issue
     Commit(CommitArgs),
+    /// Issue link subcommands
+    Link(LinkArgs),
 }
 
 #[derive(clap::Args)]
@@ -203,6 +206,55 @@ struct ContainerDropArgs {
 }
 
 #[derive(clap::Args)]
+struct LinkArgs {
+    #[command(subcommand)]
+    command: LinkCmd,
+}
+
+#[derive(Subcommand)]
+enum LinkCmd {
+    /// Create a typed link between two issues
+    Create(LinkCreateArgs),
+    /// Remove a typed link between two issues
+    Remove(LinkRemoveArgs),
+    /// List an issue's links
+    List(LinkListArgs),
+}
+
+#[derive(clap::Args)]
+struct LinkCreateArgs {
+    /// Source issue id
+    from: i64,
+    /// Link type: related, solves, duplicates
+    #[arg(value_enum)]
+    link_type: LinkType,
+    /// Target issue id
+    to: i64,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct LinkRemoveArgs {
+    from: i64,
+    #[arg(value_enum)]
+    link_type: LinkType,
+    to: i64,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct LinkListArgs {
+    id: i64,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
 struct ListTagsArgs {
     /// Output as JSON
     #[arg(long)]
@@ -331,6 +383,7 @@ impl Cli {
                 &ContainerCmdDispatch::from(&p.command),
             ),
             Commands::Commit(c) => cmd_commit(&conn, &cwd, c),
+            Commands::Link(l) => cmd_link(&conn, &l.command),
         }
     }
 
@@ -467,6 +520,7 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
 
     let mut issue = issue;
     issue.tags = tag::names_for_issue(conn, id)?;
+    issue.links = link::links_for(conn, id)?;
 
     if s.json {
         println!("{}", serde_json::to_string(&issue)?);
@@ -744,6 +798,70 @@ fn cmd_commit(
         );
     } else {
         println!("issue #{}: recorded commit {}", c.id, sha);
+    }
+    Ok(())
+}
+
+/// link 子命令分发。
+fn cmd_link(conn: &rusqlite::Connection, cmd: &LinkCmd) -> Result<(), Error> {
+    match cmd {
+        LinkCmd::Create(a) => cmd_link_create(conn, a),
+        LinkCmd::Remove(a) => cmd_link_remove(conn, a),
+        LinkCmd::List(a) => cmd_link_list(conn, a),
+    }
+}
+
+/// link create：建立带类型链接。
+fn cmd_link_create(conn: &rusqlite::Connection, a: &LinkCreateArgs) -> Result<(), Error> {
+    link::create(conn, a.from, a.link_type, a.to)?;
+    if a.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "from": a.from, "to": a.to, "type": a.link_type,
+            }))?
+        );
+    } else {
+        println!("linked issue #{} to #{} ({})", a.from, a.to, a.link_type);
+    }
+    Ok(())
+}
+
+/// link remove：删除链接（对称）。
+fn cmd_link_remove(conn: &rusqlite::Connection, a: &LinkRemoveArgs) -> Result<(), Error> {
+    link::remove(conn, a.from, a.link_type, a.to)?;
+    if a.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "from": a.from, "to": a.to, "type": a.link_type,
+            }))?
+        );
+    } else {
+        println!("unlinked issue #{} from #{} ({})", a.from, a.to, a.link_type);
+    }
+    Ok(())
+}
+
+/// link list：列出某 issue 的全部链接。
+fn cmd_link_list(conn: &rusqlite::Connection, a: &LinkListArgs) -> Result<(), Error> {
+    // 校验 issue 存在
+    let exists: Option<String> = conn
+        .query_row(db::ISSUE_SELECT_STATUS, rusqlite::params![a.id], |r| {
+            r.get(0)
+        })
+        .optional()
+        .map_err(Error::from)?;
+    if exists.is_none() {
+        return Err(Error::Other(format!("issue #{} not found", a.id)));
+    }
+    let links = link::links_for(conn, a.id)?;
+    if a.json {
+        println!("{}", serde_json::to_string(&links)?);
+    } else {
+        for l in &links {
+            println!("#{} {} #{}  ({})", a.id, l.rel, l.other_id, l.other_title);
+        }
     }
     Ok(())
 }

@@ -48,6 +48,15 @@ pub fn format_issue(i: &Issue) -> String {
     if !i.tags.is_empty() {
         out.push_str(&format!("  tags:    {}\n", i.tags.join(", ")));
     }
+    if !i.links.is_empty() {
+        out.push_str(&format!("  links:    {}\n", i.links.len()));
+        for l in &i.links {
+            out.push_str(&format!(
+                "    #{:<4} {:<12} #{:<4} {}\n",
+                i.id, l.rel, l.other_id, l.other_title
+            ));
+        }
+    }
     out.push_str(&format!("  created: {}\n", i.created_at));
     out.push_str(&format!("  updated: {}\n", i.updated_at));
     out
