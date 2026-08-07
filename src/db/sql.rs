@@ -21,3 +21,17 @@ pub const TAG_SELECT_ID: &str = include_str!("queries/tag_select_id.sql");
 pub const TAG_ATTACH: &str = include_str!("queries/tag_attach.sql");
 pub const TAG_LIST: &str = include_str!("queries/tag_list.sql");
 pub const TAG_NAMES_FOR_ISSUE: &str = include_str!("queries/tag_names_for_issue.sql");
+
+pub const ROADMAP_INSERT: &str = include_str!("queries/roadmap_insert.sql");
+pub const ROADMAP_LIST: &str = include_str!("queries/roadmap_list.sql");
+pub const ROADMAP_SELECT: &str = include_str!("queries/roadmap_select.sql");
+pub const ROADMAP_ATTACH: &str = include_str!("queries/roadmap_attach.sql");
+pub const ROADMAP_DETACH: &str = include_str!("queries/roadmap_detach.sql");
+pub const ROADMAP_ISSUES_FOR: &str = include_str!("queries/roadmap_issues_for.sql");
+
+pub const PLAN_INSERT: &str = include_str!("queries/plan_insert.sql");
+pub const PLAN_LIST: &str = include_str!("queries/plan_list.sql");
+pub const PLAN_SELECT: &str = include_str!("queries/plan_select.sql");
+pub const PLAN_ATTACH: &str = include_str!("queries/plan_attach.sql");
+pub const PLAN_DETACH: &str = include_str!("queries/plan_detach.sql");
+pub const PLAN_ISSUES_FOR: &str = include_str!("queries/plan_issues_for.sql");
