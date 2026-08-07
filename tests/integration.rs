@@ -197,3 +197,43 @@ fn migration_is_idempotent() {
         .unwrap();
     assert_eq!(version, 3);
 }
+
+/// link 数据流：create → links_for → remove → 表空。
+#[test]
+fn link_create_remove_data_flow() {
+    let (conn, _dir, pid) = setup();
+    let a = add_issue(&conn, pid, "link a");
+    let b = add_issue(&conn, pid, "link b");
+
+    mint_faa::link::create(&conn, a, mint_faa::models::LinkType::Solves, b).unwrap();
+    let la = mint_faa::link::links_for(&conn, a).unwrap();
+    assert_eq!(la.len(), 1);
+    assert_eq!(la[0].rel, "solves");
+
+    mint_faa::link::remove(&conn, b, mint_faa::models::LinkType::Solves, a).unwrap();
+    let cnt: i64 = conn
+        .query_row("SELECT COUNT(*) FROM issue_links", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(cnt, 0);
+}
+
+/// link 反向冲突规则：related 对称 no-op vs solves 冲突。
+#[test]
+fn link_reverse_conflict_rules() {
+    let (conn, _dir, pid) = setup();
+    let a = add_issue(&conn, pid, "a");
+    let b = add_issue(&conn, pid, "b");
+
+    // related 对称：B related A no-op（归一化）
+    mint_faa::link::create(&conn, a, mint_faa::models::LinkType::Related, b).unwrap();
+    mint_faa::link::create(&conn, b, mint_faa::models::LinkType::Related, a).unwrap();
+    let cnt: i64 = conn
+        .query_row("SELECT COUNT(*) FROM issue_links", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(cnt, 1);
+
+    // solves 反向冲突
+    mint_faa::link::create(&conn, a, mint_faa::models::LinkType::Solves, b).unwrap();
+    let err = mint_faa::link::create(&conn, b, mint_faa::models::LinkType::Solves, a).unwrap_err();
+    assert!(err.to_string().contains("already linked"));
+}
