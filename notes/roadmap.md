@@ -43,6 +43,8 @@
 - **plan 表**：编程 agent 的 plan，记录 + 状态管理，关联多个 issue
 - git commit 关联：`issues.last_commit_id`（多个 commit 只记最后一个），dev 状态记录 HEAD
 - 两种容器共享建模模式（"容器关联多个 issue"），一次设计
+- **issue links**：`related`/`solves`/`duplicates` 带类型多对多关系（单向存 + 反向派生），`mint link create/remove/list`（对应 issue #16）
+- **时区显示修复**：存储 UTC、显示转本地时区（`datetime(col,'localtime')`）（对应 issue #17）
 
 **验收**：roadmap/plan 能聚合其下 issue；agent 的 plan 可入库管理。
 

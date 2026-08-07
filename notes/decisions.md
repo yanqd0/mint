@@ -171,6 +171,18 @@
 
 **理由**：mint 单 crate、线性 schema 历史、每次迁移严格顺序推进；user_version 写操作在事务内，迁移中途失败整体回滚，无"半应用"态。轻量符合项目定位。
 
+## D18. issue links：单向存储 + 反向自动派生
+
+**背景**：mint 无法表达 issue 间关系（如"#10 被 #12 顺带解决"），只能靠文字。参考 JIRA 但需精简、语义清晰、易被 LLM 理解。
+
+**决策**：
+- **3 种类型**：`related`（相关，对称）/ `solves`（#A 解决 #B）/ `duplicates`（#A 重复 #B）。
+- **单向存储 + 反向自动派生**：存一条 `(from_id, type, to_id)`，查询时补 reverse（`solves→solved-by`、`duplicates→duplicated-by`、`related` 对称），不冗余双写。
+- **冲突规则**：同向幂等（INSERT OR IGNORE）；`solves`/`duplicates` 反向互斥报错；`related` 反向对称 no-op（方向归一化 min,max）；自环禁；跨类型并存。
+- **CLI 形态**：`mint link` 命名空间 + create/remove/list（与 state/tag/roadmap/plan 两级嵌套一致）；`mint show` 内嵌 links、list 不内嵌（避免 N+1）。
+
+**理由**：轻量（3 类型少而清晰）、语义精确（LLM 直接读 rel 字段判断方向）、避免双写一致性问题；related 对称故反向幂等，solves/duplicates 有向故反向矛盾。
+
 ---
 
 ## 后续待定（暂未决策）

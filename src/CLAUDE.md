@@ -117,9 +117,10 @@ ORDER BY i.id DESC
 
 ## 数据模型约束
 
-- 8 表：`projects` / `issues` / `tags` / `issue_tags` / `roadmaps` / `plans` / `roadmap_issues` / `plan_issues`（migration 有序数组驱动 `PRAGMA user_version`，当前 v2，见 `notes/DDD.md`）。
+- 9 表：`projects` / `issues` / `tags` / `issue_tags` / `roadmaps` / `plans` / `roadmap_issues` / `plan_issues` / `issue_links`（migration 有序数组驱动 `PRAGMA user_version`，当前 v3，见 `notes/DDD.md`）。
 - `issues`：`kind` 限 `problem|requirement`；`status` 限 `open|planned|dev|test|done|dropped`；`last_commit_id` 记最后关联 commit。
 - 容器（`roadmaps`/`plans`）：`status` 限 `open|done|dropped`（独立 3 态，不复用 issue 6 态）。
+- `issue_links`：`type` 限 `related|solves|duplicates`；复合主键 `(from_id,type,to_id)`；禁自环；单向存 + 反向派生。
 - 状态转换写 `updated_at`；`close` 必填 `test_cmd`；`drop` 写 `dropped_reason`；**不做 `resolution`/`resolved_at`**。
 - FTS5（0.3.0 实现）用 external content + 触发器同步 `issues_fts`；0.1.0 不建 FTS。
 

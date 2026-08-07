@@ -88,6 +88,26 @@ issue 之上的**聚合容器**：把多个 issue 归组到一个"开发方向 /
 
 `issues.last_commit_id TEXT`：最后一个解决/推进该 issue 的 git commit（**多个 commit 只记最后一个**，覆盖式写入）。写入时机：`mint commit <id>`（开发/测试阶段任意时刻）——读取当前 HEAD（`git rev-parse HEAD`）或 `--sha` 显式指定；"dev 状态记录 HEAD"即此语义。读取侧：`mint show <id>` 展示；done 的解决方案从该 commit 的 message 读（不做 resolution，见 D7）。
 
+### Issue Link（issue 关联）
+
+表达 **issue 间关系**（如"#10 被 #12 顺带解决"），是 `refs`（跨项目/记忆互引，`memory#N`）的 **issue 内部关系版本**。
+
+- 表：`issue_links(from_id, type, to_id)` 复合主键 + `CHECK (from_id != to_id)` + `type` 限 `related|solves|duplicates`。
+- 3 类型语义：`related`（相关，对称）；`solves`（#A 解决 #B，反向 `solved-by`）；`duplicates`（#A 重复 #B，反向 `duplicated-by`）。
+- **单向存储 + 反向查询自动派生**：`solves↔solved-by`、`duplicates↔duplicated-by`、`related` 对称。
+
+**冲突规则**：
+
+| 边界 | 规则 |
+|------|------|
+| 同向同类型重复 | 幂等成功（INSERT OR IGNORE no-op） |
+| 反向同类型（B solves A vs A solves B） | **互斥报错**（互相声称对方被自己解决/重复，矛盾） |
+| 反向 related | 幂等成功（对称，方向归一化 min,max） |
+| 自环 from==to | 禁止 |
+| 跨类型并存 | 允许（A related B + A solves B 可共存） |
+
+**CLI 形态**：`mint link create <FROM> <TYPE> <TO>` / `mint link remove <FROM> <TYPE> <TO>` / `mint link list <ID>`；`mint show <id>` 内嵌 links（list 不内嵌，避免 N+1）。
+
 ### 状态机（6 态）
 
 `test` 状态语义 = **testing**（测试中/等待测试），非"测试完成"。

@@ -21,15 +21,19 @@
 | `roadmap create\|list\|show\|link\|unlink\|close\|drop\|reopen ... [--json]` | roadmap 容器：聚合 issue；link/unlink 关联；close/drop/reopen 容器状态 |
 | `plan create\|list\|show\|link\|unlink\|close\|drop\|reopen ... [--json]` | plan 容器（镜像 roadmap，共享建模） |
 | `commit <ID> [--sha <SHA>] [--json]` | 记录 issue 的最后关联 commit；--sha 优先，否则读当前 HEAD（非 git 目录报错） |
+| `link create <FROM> <TYPE> <TO> [--json]` | 建 issue 链接；TYPE: related\|solves\|duplicates；solves/duplicates 反向互斥报错 |
+| `link remove <FROM> <TYPE> <TO> [--json]` | 删链接（对称：任一端表述都能删） |
+| `link list <ID> [--json]` | 列某 issue 的全部链接（出向 + 入向反向派生） |
 
 ## --json 字段
 
-- `list` / `show`：`id title body kind status project_id project test_cmd dropped_reason last_commit_id tags created_at updated_at`
+- `list` / `show`：`id title body kind status project_id project test_cmd dropped_reason last_commit_id tags links created_at updated_at`
 - `add`：`id title project kind status`
 - `state`：`id from to`
 - `tag list`：`name description` + 关联 issue 计数
 - `roadmap` / `plan`：`list` 每项含 `issue_count`；`show` 含 `issues` 摘要列表；`close/drop/reopen` 返回 `{id, from, to}`
 - `commit`：`{id, last_commit_id}`
+- `link create/remove`：`{from, to, type}`；`link list`：`[{other_id, other_title, rel, created_at}]`；`show` 含 `links` 数组（rel: related/solves/solved-by/duplicates/duplicated-by）
 
 ## 数据位置
 
