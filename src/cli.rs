@@ -13,7 +13,7 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(name = "mint", version, about = "Minimal Issue & Needs Tracker")]
 pub struct Cli {
-    /// 覆盖默认数据库路径（默认 $XDG_DATA_HOME/mint/mint.db）
+    /// Override DB path (default: $XDG_DATA_HOME/mint/mint.db)
     #[arg(long, global = true, env = "ISSUES_DB_PATH")]
     db: Option<PathBuf>,
 
@@ -29,19 +29,19 @@ enum Commands {
     List(ListArgs),
     /// Show an issue's details
     Show(ShowArgs),
-    /// Advance open → planned
+    /// Advance open -> planned
     Plan(TransArgs),
-    /// Advance planned → dev
+    /// Advance planned -> dev
     Start(TransArgs),
-    /// Advance dev → test (enter testing)
+    /// Advance dev -> test (enter testing)
     Stage(StageArgs),
-    /// Close test → done (requires --test-cmd)
+    /// Close test -> done (requires --test-cmd)
     Close(CloseArgs),
-    /// Rework: planned/dev/test → open
+    /// Rework: planned/dev/test -> open
     Reset(TransArgs),
     /// Drop an issue (any status)
     Drop(DropArgs),
-    /// Reopen done/dropped → open
+    /// Reopen done/dropped -> open
     Reopen(TransArgs),
 }
 
@@ -67,7 +67,7 @@ struct StageArgs {
 #[derive(clap::Args)]
 struct CloseArgs {
     id: i64,
-    /// Test command used to reproduce/verify (required; '没测' if skipped)
+    /// Test command used to reproduce/verify (required; 'not-tested' if skipped)
     #[arg(long)]
     test_cmd: Option<String>,
     /// Output as JSON
@@ -356,7 +356,7 @@ fn cmd_drop(conn: &rusqlite::Connection, d: &DropArgs) -> Result<(), Error> {
     transition(conn, d.id, Action::Drop, None, d.reason.as_deref(), d.json)
 }
 
-/// 核心状态转换：读当前 → 校验 → 更新。
+/// 核心状态转换：读当前 -> 校验 -> 更新。
 fn transition(
     conn: &rusqlite::Connection,
     id: i64,
@@ -375,14 +375,14 @@ fn transition(
     // close 必填 test_cmd
     if !state::close_requires_test_cmd(action, test_cmd) {
         return Err(Error::Other(
-            "close requires --test-cmd (use '没测' if tests were skipped)".to_string(),
+            "close requires --test-cmd (use 'not-tested' if tests were skipped)".to_string(),
         ));
     }
 
     let target = state::target_of(action);
     if !state::can_transition(current, action, target) {
         return Err(Error::Other(format!(
-            "invalid transition: {} → {} via {:?}",
+            "invalid transition: {} -> {} via {:?}",
             current, target, action
         )));
     }
@@ -401,7 +401,7 @@ fn transition(
             }))?
         );
     } else {
-        println!("issue #{id}: {} → {}", current, target);
+        println!("issue #{id}: {} -> {}", current, target);
     }
     Ok(())
 }
