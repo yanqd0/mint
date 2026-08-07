@@ -49,6 +49,45 @@ mint 的基本单位：一个可执行的问题（problem）或需求（requirem
 
 CLI 内联 `--tag`（按 clap 框架能力，逗号/重复）；`mint tag list` 列出 name|description + issue 计数供 agent 学习含义（0.1.0 已接线）。
 
+### Container（容器）
+
+issue 之上的**聚合容器**：把多个 issue 归组到一个"开发方向 / 执行计划"下。`roadmap` 与 `plan` 两类容器**共享同一建模**（"容器关联多个 issue"），复用 tag 的独立表 + 关联表模式（D9）。
+
+| 字段 | 含义 |
+|------|------|
+| `id` | 自增主键 |
+| `title` | 标题（NOT NULL，无需唯一——同 issues.title 语义） |
+| `description` | 描述（可选） |
+| `status` | `open` \| `done` \| `dropped` |
+| `dropped_reason` | drop 理由（`--reason`，可空） |
+| `created_at` | 创建时间 |
+| `updated_at` | 状态转换时写入 |
+
+**状态集定案：独立 3 态 `open`/`done`/`dropped`，不复用 issue 6 态。**
+6 态中的 `dev`/`test`/`stage`/`test_cmd` 描述"单条 issue 的开发流水线"，对聚合容器无意义（容器不分 dev/test、无测试命令）。容器生命周期只需"进行中 / 已完成 / 已放弃"；`done` 表示其下 issue 已全部 close（含统一测试通过）。roadmap 与 plan **共用同一状态集**（一次设计）。
+
+| 转换 | 触发 | 约束 |
+|------|------|------|
+| open → done | `close` | 建议其下 issue 全 close 后执行 |
+| open → dropped | `drop` | 可附 `--reason`，写入 dropped_reason |
+| done/dropped → open | `reopen` | — |
+
+**关联语义**：`roadmap_issues`/`plan_issues` 复合主键 `(container_id, issue_id)`，`INSERT OR IGNORE` 幂等 attach（重复 link 忽略）。issue 可同时属于多个容器；同容器内一条 issue 至多一次。**容器不拥有 issue 的生命周期**——删除容器不级联删 issue（当前无删容器命令）。
+
+**CLI 形态**：`mint roadmap <sub>` / `mint plan <sub>`，子命令 create/list/show/link/unlink/close/drop/reopen（两级嵌套，仿 state/tag 命名空间）。
+
+### Roadmap（路线图）
+
+数据库化的开发路线，对应 notes/roadmap.md 的文本形式：聚合一个开发方向下的多个 issue（如"0.2.0 容器 + git 关联" → 一组 issue）。
+
+### Plan（计划）
+
+编程 agent 的执行计划：把一个目标拆成多个 issue 的登记 + 状态管理。程序化承载 mint-dogfood skill 的"多 issue plan 统一测试"模式（SKILL.md「多 issue plan 的执行模式」）——plan 记录拆解、issue 分批推进、全绿后统一 `close`。
+
+### Git 关联（issues.last_commit_id）
+
+`issues.last_commit_id TEXT`：最后一个解决/推进该 issue 的 git commit（**多个 commit 只记最后一个**，覆盖式写入）。写入时机：`mint commit <id>`（开发/测试阶段任意时刻）——读取当前 HEAD（`git rev-parse HEAD`）或 `--sha` 显式指定；"dev 状态记录 HEAD"即此语义。读取侧：`mint show <id>` 展示；done 的解决方案从该 commit 的 message 读（不做 resolution，见 D7）。
+
 ### 状态机（6 态）
 
 `test` 状态语义 = **testing**（测试中/等待测试），非"测试完成"。

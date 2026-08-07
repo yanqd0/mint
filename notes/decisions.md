@@ -148,11 +148,33 @@
 
 **理由**：dogfooding 要尽早产生真实使用反馈（驱动后续版本设计），不必等 capture 基建；skill 是纯外部提示词、零 Rust 代码成本，随 0.3.0 平滑演进；状态机提示词先行沉淀为可复用件。
 
+## D16. 容器建模：roadmap/plan 共享 3 态，独立于 issue 6 态
+
+**背景**：0.2.0 引入容器（roadmap/plan）聚合 issue。需定案容器字段与状态集（原开放问题）。
+
+**决策**：
+- **容器独立 3 态 `open`/`done`/`dropped`，不复用 issue 6 态**。理由：6 态的 `dev`/`test`/`stage`/`test_cmd` 描述单条 issue 的开发流水线，对聚合容器无意义（容器不分 dev/test、无测试命令）；容器只需"进行中 / 已完成 / 已放弃"。
+- **roadmap 与 plan 共用同一建模**：同字段集（id/title/description/status/dropped_reason/created_at/updated_at）、同状态集、同关联语义，"容器关联多个 issue"一次设计（共享 `container.rs` 模块，`ContainerKind` 枚举分发）。
+- **关联表复用 `issue_tags` 模式**（D9）：复合主键 + `INSERT OR IGNORE` 幂等 attach；issue 可属多容器；容器不拥有 issue 生命周期（删容器不级联删 issue）。
+- **容器 drop 加 `dropped_reason` 列**（与 issue 对称）。
+
+**理由**：容器是 issue 之上最基础的结构，建模一次定全；3 态足够表达聚合容器生命周期，避免为无意义的 dev/test 状态增加复杂度。
+
+## D17. 轻量迁移：有序数组 + `PRAGMA user_version`，无迁移表
+
+**背景**：0.1.0 已发布（tag 0.1.0），0.2.0 是首个跨版本 schema 升级。需轻量迁移方案。
+
+**决策**：
+- 迁移框架改为**有序数组** `[(目标版本, SQL)]`，migrate() 从当前 `user_version` 逐版本循环执行；每个迁移 SQL 自带 `BEGIN/COMMIT` + 末尾 `PRAGMA user_version = N`，失败整体回滚。
+- **只用 `PRAGMA user_version`，不建 migration 表**。django 式"迁移表记录已应用"明确否掉——其价值（记录每条已应用、支持分支/回溯检测）在 <10 个迁移的线性场景下用不上，反而是表 + 每次 INSERT + 命名追踪的额外复杂度。若未来 schema 历史变非线性（需数据回填/分支）再增量加表。
+- **顺带解决并发首次建库竞争**（原观察项）：迁移失败后重读 user_version，若已达标视为另一进程完成，成功返回。
+
+**理由**：mint 单 crate、线性 schema 历史、每次迁移严格顺序推进；user_version 写操作在事务内，迁移中途失败整体回滚，无"半应用"态。轻量符合项目定位。
+
 ---
 
 ## 后续待定（暂未决策）
 
 - 去重算法细节（相似度阈值、多候选选择）——0.3.0 前
-- roadmap/plan 容器的字段与状态集——0.2.0 前
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
 - i18n 实现方式（gettext / 内建表 / 编译期）——1.0 前
