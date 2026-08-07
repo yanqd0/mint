@@ -3,8 +3,108 @@
 use crate::error::Error;
 use std::path::Path;
 
-/// 打开（必要时创建）SQLite 数据库。
+/// 数据库当前 schema 版本。
+const CURRENT_VERSION: i32 = 1;
+
+/// 打开（必要时创建）SQLite 数据库并迁移到最新版本。
 pub fn open(path: &Path) -> Result<rusqlite::Connection, Error> {
     let conn = rusqlite::Connection::open(path)?;
+    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+    migrate(&conn)?;
     Ok(conn)
+}
+
+/// 按 `PRAGMA user_version` 执行增量迁移。
+fn migrate(conn: &rusqlite::Connection) -> Result<(), Error> {
+    let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version < CURRENT_VERSION {
+        conn.execute_batch(
+            "BEGIN;
+            CREATE TABLE projects (
+              id          INTEGER PRIMARY KEY AUTOINCREMENT,
+              name        TEXT NOT NULL UNIQUE,
+              description TEXT,
+              git         TEXT,
+              abs_dir     TEXT,
+              created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE issues (
+              id          INTEGER PRIMARY KEY AUTOINCREMENT,
+              title       TEXT NOT NULL,
+              body        TEXT,
+              kind        TEXT NOT NULL DEFAULT 'problem'
+                          CHECK (kind IN ('problem','requirement')),
+              status      TEXT NOT NULL DEFAULT 'open'
+                          CHECK (status IN ('open','planned','dev','test','done','dropped')),
+              project_id  INTEGER NOT NULL REFERENCES projects(id),
+              test_cmd    TEXT,
+              created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE tags (
+              id          INTEGER PRIMARY KEY AUTOINCREMENT,
+              name        TEXT NOT NULL UNIQUE,
+              description TEXT,
+              created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE issue_tags (
+              issue_id    INTEGER NOT NULL REFERENCES issues(id),
+              tag_id      INTEGER NOT NULL REFERENCES tags(id),
+              created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+              PRIMARY KEY (issue_id, tag_id)
+            );
+
+            PRAGMA user_version = 1;
+            COMMIT;",
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 迁移幂等：重复打开不报错，4 表齐全，user_version 正确。
+    #[test]
+    fn migrate_creates_tables_and_sets_version() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        migrate(&conn).unwrap(); // 幂等
+
+        let version: i32 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 1);
+
+        let tables: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert_eq!(tables.len(), 4);
+        for t in ["projects", "issues", "tags", "issue_tags"] {
+            assert!(tables.iter().any(|n| n == t), "missing table {t}");
+        }
+    }
+
+    /// 外键约束生效（默认关闭，需 PRAGMA foreign_keys）。
+    #[test]
+    fn foreign_keys_enforced_when_enabled() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        migrate(&conn).unwrap();
+
+        let err = conn
+            .execute("INSERT INTO issues (title, project_id) VALUES ('x', 999)", [])
+            .unwrap_err();
+        assert!(err.to_string().contains("FOREIGN KEY"));
+    }
 }
