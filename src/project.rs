@@ -38,7 +38,7 @@ fn git_repo_name(cwd: &Path) -> Option<String> {
         return None;
     }
     // 取路径末段：git@host:user/repo.git | https://host/user/repo.git | file:///a/b/repo
-    let last = url.split('/').last()?;
+    let last = url.split('/').next_back()?;
     let name = last.strip_suffix(".git").unwrap_or(last);
     if name.is_empty() {
         None
