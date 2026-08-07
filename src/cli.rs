@@ -46,6 +46,27 @@ enum Commands {
     Reopen(TransArgs),
     /// Tag subcommands
     Tag(TagArgs),
+    /// Config subcommands
+    Config(ConfigArgs),
+}
+
+#[derive(clap::Args)]
+struct ConfigArgs {
+    #[command(subcommand)]
+    command: ConfigCmd,
+}
+
+#[derive(Subcommand)]
+enum ConfigCmd {
+    /// Show configuration (DB path)
+    Show(ConfigShowArgs),
+}
+
+#[derive(clap::Args)]
+struct ConfigShowArgs {
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(clap::Args)]
@@ -175,6 +196,9 @@ impl Cli {
             Commands::Reopen(t) => cmd_trans(&conn, t, Action::Reopen),
             Commands::Tag(t) => match &t.command {
                 TagCmd::List(l) => cmd_tag_list(&conn, l),
+            },
+            Commands::Config(c) => match &c.command {
+                ConfigCmd::Show(s) => cmd_config_show(&path, s),
             },
         }
     }
@@ -349,6 +373,21 @@ fn cmd_tag_list(conn: &rusqlite::Connection, l: &ListTagsArgs) -> Result<(), Err
             let desc = t.description.as_deref().unwrap_or("");
             println!("{:<16} {:>5} issues  {}", t.name, count, desc);
         }
+    }
+    Ok(())
+}
+
+/// config show：显示配置（DB 路径）。
+fn cmd_config_show(path: &std::path::Path, s: &ConfigShowArgs) -> Result<(), Error> {
+    if s.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "db_path": path,
+            }))?
+        );
+    } else {
+        println!("db_path: {}", path.display());
     }
     Ok(())
 }
