@@ -43,6 +43,27 @@ enum Commands {
     Drop(DropArgs),
     /// Reopen done/dropped -> open
     Reopen(TransArgs),
+    /// Tag subcommands
+    Tag(TagArgs),
+}
+
+#[derive(clap::Args)]
+struct TagArgs {
+    #[command(subcommand)]
+    command: TagCmd,
+}
+
+#[derive(Subcommand)]
+enum TagCmd {
+    /// List all tags (with issue counts)
+    List(ListTagsArgs),
+}
+
+#[derive(clap::Args)]
+struct ListTagsArgs {
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(clap::Args)]
@@ -151,6 +172,9 @@ impl Cli {
             Commands::Reset(t) => cmd_trans(&conn, t, Action::Reset),
             Commands::Drop(d) => cmd_drop(&conn, d),
             Commands::Reopen(t) => cmd_trans(&conn, t, Action::Reopen),
+            Commands::Tag(t) => match &t.command {
+                TagCmd::List(l) => cmd_tag_list(&conn, l),
+            },
         }
     }
 
@@ -337,6 +361,20 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
         }
         println!("  created: {}", issue.created_at);
         println!("  updated: {}", issue.updated_at);
+    }
+    Ok(())
+}
+
+/// tag list：列出所有 tag（含关联 issue 数）。
+fn cmd_tag_list(conn: &rusqlite::Connection, l: &ListTagsArgs) -> Result<(), Error> {
+    let tags = tag::list(conn)?;
+    if l.json {
+        println!("{}", serde_json::to_string(&tags)?);
+    } else {
+        for (t, count) in &tags {
+            let desc = t.description.as_deref().unwrap_or("");
+            println!("{:<16} {:>5} issues  {}", t.name, count, desc);
+        }
     }
     Ok(())
 }

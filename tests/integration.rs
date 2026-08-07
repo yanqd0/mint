@@ -128,6 +128,54 @@ fn close_requires_test_cmd() {
     assert!(state::close_requires_test_cmd(Action::Stage, None));
 }
 
+/// drop 写入 dropped_reason。
+#[test]
+fn drop_writes_reason() {
+    let (conn, _dir, pid) = setup();
+    let id = add_issue(&conn, pid, "drop me");
+    conn.execute(
+        "UPDATE issues SET status='dropped', dropped_reason='obsolete', updated_at=datetime('now') WHERE id=?1",
+        rusqlite::params![id],
+    )
+    .unwrap();
+    let (status, reason): (Status, Option<String>) = conn
+        .query_row(
+            "SELECT status, dropped_reason FROM issues WHERE id=?1",
+            rusqlite::params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(status, Status::Dropped);
+    assert_eq!(reason.as_deref(), Some("obsolete"));
+}
+
+/// reset 清空 test_cmd（打回重做需重新测）。
+#[test]
+fn reset_clears_test_cmd() {
+    let (conn, _dir, pid) = setup();
+    let id = add_issue(&conn, pid, "reset me");
+    conn.execute(
+        "UPDATE issues SET status='test', test_cmd='cargo test' WHERE id=?1",
+        rusqlite::params![id],
+    )
+    .unwrap();
+    // 模拟 transition 的 reset：status→open 且 test_cmd 置 NULL
+    conn.execute(
+        "UPDATE issues SET status='open', test_cmd=NULL, updated_at=datetime('now') WHERE id=?1",
+        rusqlite::params![id],
+    )
+    .unwrap();
+    let (status, test_cmd): (Status, Option<String>) = conn
+        .query_row(
+            "SELECT status, test_cmd FROM issues WHERE id=?1",
+            rusqlite::params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(status, Status::Open);
+    assert!(test_cmd.is_none());
+}
+
 /// 数据库迁移幂等 + 表齐全。
 #[test]
 fn migration_is_idempotent() {
