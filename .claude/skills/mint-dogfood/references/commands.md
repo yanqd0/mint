@@ -13,7 +13,7 @@
 
 | 命令 | 说明 |
 |---|---|
-| `add <TITLE> [--body <BODY>] [--kind problem\|requirement] [--project <NAME>] [--tag <name[:desc]>...] [--json]` | 新建 issue，status=open；project 自动检测（git 库名→dirname→`--project`→default）；tag 逗号分隔、可重复 |
+| `add <TITLE> [--body <BODY>] [--kind problem\|requirement] [--project <NAME>] [--tag <name[:desc]>...] [--json]` | 新建 issue，status=open；project 自动检测（`--project`→git 库名→dirname→default）；tag 逗号分隔、可重复 |
 | `list [--all] [--status <s>] [--tag <name>] [--project <name>] [--json]` | 默认只列 open/planned/dev/test；`--all` 含 done/dropped；按 id DESC |
 | `show <ID> [--json]` | 单条详情 |
 | `state plan\|start\|stage\|close\|reset\|drop\|reopen <ID> [--test-cmd <CMD>] [--reason <TEXT>] [--json]` | 状态转换；stage/close 用 `--test-cmd`；drop 用 `--reason` |
