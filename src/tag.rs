@@ -2,6 +2,7 @@
 
 use rusqlite::{Connection, OptionalExtension, params};
 
+use crate::db;
 use crate::error::Error;
 use crate::models::Tag;
 
@@ -30,20 +31,15 @@ pub fn ensure(conn: &Connection, name: &str, description: Option<&str>) -> Resul
     if let Some(id) = query_id(conn, name)? {
         return Ok(id);
     }
-    conn.execute(
-        "INSERT INTO tags (name, description) VALUES (?1, ?2)",
-        params![name, description],
-    )?;
+    conn.execute(db::TAG_INSERT, params![name, description])?;
     Ok(query_id(conn, name)?.expect("tag just inserted"))
 }
 
 /// 查询 tag id（不存在返回 None）。
 pub fn query_id(conn: &Connection, name: &str) -> Result<Option<i64>, Error> {
-    conn.query_row("SELECT id FROM tags WHERE name = ?1", params![name], |r| {
-        r.get(0)
-    })
-    .optional()
-    .map_err(Error::from)
+    conn.query_row(db::TAG_SELECT_ID, params![name], |r| r.get(0))
+        .optional()
+        .map_err(Error::from)
 }
 
 /// 为 issue 关联多个 tag（幂等：重复关联忽略）。
@@ -54,21 +50,14 @@ pub fn attach(
 ) -> Result<(), Error> {
     for (name, desc) in specs {
         let tag_id = ensure(conn, name, desc.as_deref())?;
-        conn.execute(
-            "INSERT OR IGNORE INTO issue_tags (issue_id, tag_id) VALUES (?1, ?2)",
-            params![issue_id, tag_id],
-        )?;
+        conn.execute(db::TAG_ATTACH, params![issue_id, tag_id])?;
     }
     Ok(())
 }
 
 /// 列出所有 tag（含关联 issue 数）。
 pub fn list(conn: &Connection) -> Result<Vec<(Tag, i64)>, Error> {
-    let mut stmt = conn.prepare(
-        "SELECT t.id, t.name, t.description, t.created_at, t.updated_at,
-                (SELECT COUNT(*) FROM issue_tags it WHERE it.tag_id = t.id)
-         FROM tags t ORDER BY t.name",
-    )?;
+    let mut stmt = conn.prepare(db::TAG_LIST)?;
     let rows = stmt.query_map([], |r| {
         let tag = Tag {
             id: r.get(0)?,
@@ -85,11 +74,7 @@ pub fn list(conn: &Connection) -> Result<Vec<(Tag, i64)>, Error> {
 
 /// 查询某 issue 的 tag 名列表（按 name 排序）。
 pub fn names_for_issue(conn: &Connection, issue_id: i64) -> Result<Vec<String>, Error> {
-    let mut stmt = conn.prepare(
-        "SELECT t.name FROM issue_tags it
-         JOIN tags t ON t.id = it.tag_id
-         WHERE it.issue_id = ?1 ORDER BY t.name",
-    )?;
+    let mut stmt = conn.prepare(db::TAG_NAMES_FOR_ISSUE)?;
     let rows = stmt.query_map(params![issue_id], |r| r.get(0))?;
     rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
 }

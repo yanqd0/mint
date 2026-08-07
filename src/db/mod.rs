@@ -4,6 +4,10 @@ use std::path::Path;
 
 use crate::error::Error;
 
+pub use sql::*;
+
+pub mod sql;
+
 /// 数据库当前 schema 版本。
 const CURRENT_VERSION: i32 = 1;
 
@@ -29,51 +33,7 @@ pub fn migrate_for_test(conn: &rusqlite::Connection) {
 fn migrate(conn: &rusqlite::Connection) -> Result<(), Error> {
     let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if version < CURRENT_VERSION {
-        conn.execute_batch(
-            "BEGIN;
-            CREATE TABLE projects (
-              id          INTEGER PRIMARY KEY AUTOINCREMENT,
-              name        TEXT NOT NULL UNIQUE,
-              description TEXT,
-              git         TEXT,
-              abs_dir     TEXT,
-              created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-              updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE issues (
-              id          INTEGER PRIMARY KEY AUTOINCREMENT,
-              title       TEXT NOT NULL,
-              body        TEXT,
-              kind        TEXT NOT NULL DEFAULT 'problem'
-                          CHECK (kind IN ('problem','requirement')),
-              status      TEXT NOT NULL DEFAULT 'open'
-                          CHECK (status IN ('open','planned','dev','test','done','dropped')),
-              project_id  INTEGER NOT NULL REFERENCES projects(id),
-              test_cmd    TEXT,
-              dropped_reason TEXT,
-              created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-              updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE tags (
-              id          INTEGER PRIMARY KEY AUTOINCREMENT,
-              name        TEXT NOT NULL UNIQUE,
-              description TEXT,
-              created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-              updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE issue_tags (
-              issue_id    INTEGER NOT NULL REFERENCES issues(id),
-              tag_id      INTEGER NOT NULL REFERENCES tags(id),
-              created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-              PRIMARY KEY (issue_id, tag_id)
-            );
-
-            PRAGMA user_version = 1;
-            COMMIT;",
-        )?;
+        conn.execute_batch(MIGRATION_001)?;
     }
     Ok(())
 }

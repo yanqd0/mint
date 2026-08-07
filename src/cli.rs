@@ -222,8 +222,7 @@ fn cmd_add(conn: &rusqlite::Connection, cwd: &std::path::Path, a: &AddArgs) -> R
     let test_cmd: Option<&str> = None;
 
     conn.execute(
-        "INSERT INTO issues (title, body, kind, status, project_id, test_cmd)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        db::ISSUE_INSERT,
         rusqlite::params![a.title, a.body, kind, status, pid, test_cmd],
     )?;
     let id = conn.last_insert_rowid();
@@ -248,59 +247,28 @@ fn cmd_add(conn: &rusqlite::Connection, cwd: &std::path::Path, a: &AddArgs) -> R
 }
 
 fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
-    let mut sql = String::from(
-        "SELECT i.id, i.title, i.body, i.kind, i.status, i.project_id,
-                p.name AS project, i.test_cmd, i.dropped_reason, i.created_at, i.updated_at
-         FROM issues i JOIN projects p ON p.id = i.project_id",
-    );
-    let mut conds: Vec<String> = Vec::new();
-    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+    let all: i64 = if l.all { 1 } else { 0 };
+    let status = l.status; // Option<Status>，impl ToSql（NULL=不过滤）
+    let tag: Option<&str> = l.tag.as_deref();
+    let project: Option<&str> = l.project.as_deref();
 
-    if !l.all && l.status.is_none() {
-        conds.push("i.status IN ('open','planned','dev','test')".into());
-    }
-    if let Some(s) = l.status {
-        conds.push("i.status = ?".into());
-        params.push(Box::new(s));
-    }
-    if let Some(t) = &l.tag {
-        conds.push(
-            "EXISTS (SELECT 1 FROM issue_tags it JOIN tags tg ON tg.id = it.tag_id
-                     WHERE it.issue_id = i.id AND tg.name = ?)"
-                .into(),
-        );
-        params.push(Box::new(t.clone()));
-    }
-    if let Some(p) = &l.project {
-        conds.push("p.name = ?".into());
-        params.push(Box::new(p.clone()));
-    }
-    if !conds.is_empty() {
-        sql.push_str(" WHERE ");
-        sql.push_str(&conds.join(" AND "));
-    }
-    sql.push_str(" ORDER BY i.id DESC");
-
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(
-        rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())),
-        |r| {
-            Ok(Issue {
-                id: r.get(0)?,
-                title: r.get(1)?,
-                body: r.get(2)?,
-                kind: r.get(3)?,
-                status: r.get(4)?,
-                project_id: r.get(5)?,
-                project: r.get(6)?,
-                test_cmd: r.get(7)?,
-                dropped_reason: r.get(8)?,
-                tags: Vec::new(),
-                created_at: r.get(9)?,
-                updated_at: r.get(10)?,
-            })
-        },
-    )?;
+    let mut stmt = conn.prepare(db::ISSUE_LIST)?;
+    let rows = stmt.query_map(rusqlite::params![all, status, tag, project], |r| {
+        Ok(Issue {
+            id: r.get(0)?,
+            title: r.get(1)?,
+            body: r.get(2)?,
+            kind: r.get(3)?,
+            status: r.get(4)?,
+            project_id: r.get(5)?,
+            project: r.get(6)?,
+            test_cmd: r.get(7)?,
+            dropped_reason: r.get(8)?,
+            tags: Vec::new(),
+            created_at: r.get(9)?,
+            updated_at: r.get(10)?,
+        })
+    })?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     // 填充 tags（每个 issue 一次查询，量小可接受）
@@ -319,29 +287,22 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
 fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
     let id = s.id;
     let issue = conn
-        .query_row(
-            "SELECT i.id, i.title, i.body, i.kind, i.status, i.project_id,
-                    p.name AS project, i.test_cmd, i.dropped_reason, i.created_at, i.updated_at
-             FROM issues i JOIN projects p ON p.id = i.project_id
-             WHERE i.id = ?1",
-            rusqlite::params![id],
-            |r| {
-                Ok(Issue {
-                    id: r.get(0)?,
-                    title: r.get(1)?,
-                    body: r.get(2)?,
-                    kind: r.get(3)?,
-                    status: r.get(4)?,
-                    project_id: r.get(5)?,
-                    project: r.get(6)?,
-                    test_cmd: r.get(7)?,
-                    dropped_reason: r.get(8)?,
-                    tags: Vec::new(),
-                    created_at: r.get(9)?,
-                    updated_at: r.get(10)?,
-                })
-            },
-        )
+        .query_row(db::ISSUE_SHOW, rusqlite::params![id], |r| {
+            Ok(Issue {
+                id: r.get(0)?,
+                title: r.get(1)?,
+                body: r.get(2)?,
+                kind: r.get(3)?,
+                status: r.get(4)?,
+                project_id: r.get(5)?,
+                project: r.get(6)?,
+                test_cmd: r.get(7)?,
+                dropped_reason: r.get(8)?,
+                tags: Vec::new(),
+                created_at: r.get(9)?,
+                updated_at: r.get(10)?,
+            })
+        })
         .map_err(|e| match e {
             rusqlite::Error::QueryReturnedNoRows => Error::Other(format!("issue #{id} not found")),
             other => Error::from(other),
@@ -420,11 +381,7 @@ fn transition(
     json: bool,
 ) -> Result<(), Error> {
     let current: Status = conn
-        .query_row(
-            "SELECT status FROM issues WHERE id = ?1",
-            rusqlite::params![id],
-            |r| r.get(0),
-        )
+        .query_row(db::ISSUE_SELECT_STATUS, rusqlite::params![id], |r| r.get(0))
         .map_err(|e| match e {
             rusqlite::Error::QueryReturnedNoRows => Error::Other(format!("issue #{id} not found")),
             other => Error::from(other),
@@ -448,11 +405,7 @@ fn transition(
     let reset = action == Action::Reset;
     let drop_reason: Option<&str> = if action == Action::Drop { reason } else { None };
     conn.execute(
-        "UPDATE issues SET status = ?1,
-                test_cmd = CASE WHEN ?4 THEN NULL ELSE COALESCE(?2, test_cmd) END,
-                dropped_reason = COALESCE(?5, dropped_reason),
-                updated_at = datetime('now')
-         WHERE id = ?3",
+        db::ISSUE_UPDATE_TRANSITION,
         rusqlite::params![target, test_cmd, id, reset, drop_reason],
     )?;
 

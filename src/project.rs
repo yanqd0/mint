@@ -5,6 +5,7 @@ use std::process::Command;
 
 use rusqlite::{Connection, params};
 
+use crate::db;
 use crate::error::Error;
 use crate::models::Project;
 
@@ -66,21 +67,14 @@ pub fn ensure(conn: &Connection, name: &str, cwd: &Path) -> Result<i64, Error> {
     let abs_dir = std::fs::canonicalize(cwd)
         .ok()
         .map(|p| p.to_string_lossy().into_owned());
-    conn.execute(
-        "INSERT INTO projects (name, git, abs_dir) VALUES (?1, ?2, ?3)",
-        params![name, git, abs_dir],
-    )?;
+    conn.execute(db::PROJECT_INSERT, params![name, git, abs_dir])?;
     query_id(conn, name)
 }
 
 /// 查询 project 的 id（不存在返回 None 语义的 Err 由调用方处理）。
 pub fn query_id(conn: &Connection, name: &str) -> Result<i64, Error> {
-    conn.query_row(
-        "SELECT id FROM projects WHERE name = ?1",
-        params![name],
-        |r| r.get(0),
-    )
-    .map_err(Error::from)
+    conn.query_row(db::PROJECT_SELECT_ID, params![name], |r| r.get(0))
+        .map_err(Error::from)
 }
 
 /// 查询 git remote url（检测用，非关键路径可失败）。
@@ -99,10 +93,7 @@ fn git_repo_url(cwd: &Path) -> Option<String> {
 
 /// 列出所有 project。
 pub fn list(conn: &Connection) -> Result<Vec<Project>, Error> {
-    let mut stmt = conn.prepare(
-        "SELECT id, name, description, git, abs_dir, created_at, updated_at
-         FROM projects ORDER BY name",
-    )?;
+    let mut stmt = conn.prepare(db::PROJECT_LIST)?;
     let rows = stmt.query_map([], |r| {
         Ok(Project {
             id: r.get(0)?,

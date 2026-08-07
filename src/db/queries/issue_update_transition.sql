@@ -1,0 +1,8 @@
+-- 状态转换：写 status、test_cmd、dropped_reason 与 updated_at。
+-- ?1: 目标 status, ?2: test_cmd（reset 时清空）, ?3: issue id,
+-- ?4: 是否 reset（TRUE 清空 test_cmd）, ?5: dropped_reason
+UPDATE issues SET status = ?1,
+test_cmd = CASE WHEN ?4 THEN NULL ELSE COALESCE(?2, test_cmd) END,
+dropped_reason = COALESCE(?5, dropped_reason),
+updated_at = datetime('now')
+WHERE id = ?3;
