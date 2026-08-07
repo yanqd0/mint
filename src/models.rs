@@ -120,6 +120,7 @@ pub struct Issue {
     pub project_id: i64,
     pub project: Option<String>,
     pub test_cmd: Option<String>,
+    pub dropped_reason: Option<String>,
     pub tags: Vec<String>,
     pub created_at: String,
     pub updated_at: String,

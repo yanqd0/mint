@@ -46,6 +46,7 @@ fn migrate(conn: &rusqlite::Connection) -> Result<(), Error> {
                           CHECK (status IN ('open','planned','dev','test','done','dropped')),
               project_id  INTEGER NOT NULL REFERENCES projects(id),
               test_cmd    TEXT,
+              dropped_reason TEXT,
               created_at  TEXT NOT NULL DEFAULT (datetime('now')),
               updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
             );

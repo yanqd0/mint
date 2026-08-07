@@ -208,7 +208,7 @@ fn cmd_add(conn: &rusqlite::Connection, cwd: &std::path::Path, a: &AddArgs) -> R
 fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
     let mut sql = String::from(
         "SELECT i.id, i.title, i.body, i.kind, i.status, i.project_id,
-                p.name AS project, i.test_cmd, i.created_at, i.updated_at
+                p.name AS project, i.test_cmd, i.dropped_reason, i.created_at, i.updated_at
          FROM issues i JOIN projects p ON p.id = i.project_id",
     );
     let mut conds: Vec<String> = Vec::new();
@@ -249,9 +249,10 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
             project_id: r.get(5)?,
             project: r.get(6)?,
             test_cmd: r.get(7)?,
+            dropped_reason: r.get(8)?,
             tags: Vec::new(),
-            created_at: r.get(8)?,
-            updated_at: r.get(9)?,
+            created_at: r.get(9)?,
+            updated_at: r.get(10)?,
         })
     })?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
@@ -284,7 +285,7 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
     let issue = conn
         .query_row(
             "SELECT i.id, i.title, i.body, i.kind, i.status, i.project_id,
-                    p.name AS project, i.test_cmd, i.created_at, i.updated_at
+                    p.name AS project, i.test_cmd, i.dropped_reason, i.created_at, i.updated_at
              FROM issues i JOIN projects p ON p.id = i.project_id
              WHERE i.id = ?1",
             rusqlite::params![id],
@@ -298,9 +299,10 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
                     project_id: r.get(5)?,
                     project: r.get(6)?,
                     test_cmd: r.get(7)?,
+                    dropped_reason: r.get(8)?,
                     tags: Vec::new(),
-                    created_at: r.get(8)?,
-                    updated_at: r.get(9)?,
+                    created_at: r.get(9)?,
+                    updated_at: r.get(10)?,
                 })
             },
         )
@@ -326,6 +328,9 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
         }
         if let Some(tc) = &issue.test_cmd {
             println!("  test:    {tc}");
+        }
+        if let Some(dr) = &issue.dropped_reason {
+            println!("  dropped: {dr}");
         }
         if !issue.tags.is_empty() {
             println!("  tags:    {}", issue.tags.join(", "));
@@ -357,12 +362,16 @@ fn cmd_drop(conn: &rusqlite::Connection, d: &DropArgs) -> Result<(), Error> {
 }
 
 /// 核心状态转换：读当前 -> 校验 -> 更新。
+///
+/// 语义规则：
+/// - `close` 必填 test_cmd；`reset` 打回 open 时清空 test_cmd（重做需重新测）。
+/// - `drop` 时 reason 写入 dropped_reason。
 fn transition(
     conn: &rusqlite::Connection,
     id: i64,
     action: Action,
     test_cmd: Option<&str>,
-    _reason: Option<&str>,
+    reason: Option<&str>,
     json: bool,
 ) -> Result<(), Error> {
     let current: Status = conn
@@ -387,10 +396,19 @@ fn transition(
         )));
     }
 
+    let reset = action == Action::Reset;
+    let drop_reason: Option<&str> = if action == Action::Drop {
+        reason
+    } else {
+        None
+    };
     conn.execute(
-        "UPDATE issues SET status = ?1, test_cmd = COALESCE(?2, test_cmd),
-                updated_at = datetime('now') WHERE id = ?3",
-        rusqlite::params![target, test_cmd, id],
+        "UPDATE issues SET status = ?1,
+                test_cmd = CASE WHEN ?4 THEN NULL ELSE COALESCE(?2, test_cmd) END,
+                dropped_reason = COALESCE(?5, dropped_reason),
+                updated_at = datetime('now')
+         WHERE id = ?3",
+        rusqlite::params![target, test_cmd, id, reset, drop_reason],
     )?;
 
     if json {

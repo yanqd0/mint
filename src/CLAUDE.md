@@ -37,5 +37,12 @@
 
 - 4 表：`projects` / `issues` / `tags` / `issue_tags`（migration `PRAGMA user_version=1`，见 `notes/DDD.md`）。
 - `issues`：`kind` 限 `problem|requirement`；`status` 限 `open|planned|dev|test|done|dropped`。
-- 状态转换写 `updated_at`；`close` 必填 `test_cmd`；**不做 `resolution`/`resolved_at`**。
+- 状态转换写 `updated_at`；`close` 必填 `test_cmd`；`drop` 写 `dropped_reason`；**不做 `resolution`/`resolved_at`**。
 - FTS5（0.3.0 实现）用 external content + 触发器同步 `issues_fts`；0.1.0 不建 FTS。
+
+### 迁移方案哲学
+
+- **跨版本必须有 migration**：`PRAGMA user_version` 驱动的增量迁移，**不可随意改既有 DDL**。
+- **同版本业务代码必须原地修改**：同一版本内 schema 改动直接改 v1 DDL，**不固化 migration**（未发布前本地测试空库可删除重建）。
+- **本地有数据的 db**：开发阶段需要临时 SQL 手动迁移（有数据不能删），不要依赖自动 migration。
+- 原则：migration 只服务于**已发布版本之间的升级**；未发布的 0.x 开发中，schema 变更直接改最新版 DDL + 手动同步本地测试库。
