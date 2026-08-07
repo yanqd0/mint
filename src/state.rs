@@ -74,7 +74,11 @@ mod tests {
         assert!(can_transition(Status::Dev, Action::Reset, Status::Open));
         assert!(can_transition(Status::Test, Action::Reset, Status::Open));
         assert!(can_transition(Status::Done, Action::Reopen, Status::Open));
-        assert!(can_transition(Status::Dropped, Action::Reopen, Status::Open));
+        assert!(can_transition(
+            Status::Dropped,
+            Action::Reopen,
+            Status::Open
+        ));
         assert!(can_transition(Status::Open, Action::Drop, Status::Dropped));
         assert!(can_transition(Status::Test, Action::Drop, Status::Dropped));
     }
@@ -85,9 +89,17 @@ mod tests {
         assert!(!can_transition(Status::Open, Action::Close, Status::Done));
         assert!(!can_transition(Status::Dev, Action::Close, Status::Done));
         assert!(!can_transition(Status::Open, Action::Start, Status::Dev));
-        assert!(!can_transition(Status::Planned, Action::Stage, Status::Test));
+        assert!(!can_transition(
+            Status::Planned,
+            Action::Stage,
+            Status::Test
+        ));
         assert!(!can_transition(Status::Done, Action::Reset, Status::Open));
-        assert!(!can_transition(Status::Dropped, Action::Reset, Status::Open));
+        assert!(!can_transition(
+            Status::Dropped,
+            Action::Reset,
+            Status::Open
+        ));
         assert!(!can_transition(Status::Open, Action::Reopen, Status::Open));
         // 目标状态不匹配
         assert!(!can_transition(Status::Open, Action::Plan, Status::Dev));

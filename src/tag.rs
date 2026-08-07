@@ -2,7 +2,7 @@
 
 use crate::error::Error;
 use crate::models::Tag;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 /// `--tag` 语法：`name` 或 `name:description`（冒号分隔）。
 /// 逗号分隔多个 tag。
@@ -46,7 +46,11 @@ pub fn query_id(conn: &Connection, name: &str) -> Result<Option<i64>, Error> {
 }
 
 /// 为 issue 关联多个 tag（幂等：重复关联忽略）。
-pub fn attach(conn: &Connection, issue_id: i64, specs: &[(String, Option<String>)]) -> Result<(), Error> {
+pub fn attach(
+    conn: &Connection,
+    issue_id: i64,
+    specs: &[(String, Option<String>)],
+) -> Result<(), Error> {
     for (name, desc) in specs {
         let tag_id = ensure(conn, name, desc.as_deref())?;
         conn.execute(
@@ -96,11 +100,8 @@ mod tests {
     fn setup() -> (Connection, i64) {
         let conn = Connection::open_in_memory().unwrap();
         crate::db::migrate_for_test(&conn);
-        conn.execute(
-            "INSERT INTO projects (name) VALUES ('p')",
-            [],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO projects (name) VALUES ('p')", [])
+            .unwrap();
         let pid: i64 = conn
             .query_row("SELECT id FROM projects WHERE name='p'", [], |r| r.get(0))
             .unwrap();
@@ -160,7 +161,12 @@ mod tests {
     #[test]
     fn names_for_issue_returns_sorted() {
         let (conn, iid) = setup();
-        attach(&conn, iid, &[("bug".to_string(), None), ("storage".to_string(), None)]).unwrap();
+        attach(
+            &conn,
+            iid,
+            &[("bug".to_string(), None), ("storage".to_string(), None)],
+        )
+        .unwrap();
         let names = names_for_issue(&conn, iid).unwrap();
         assert_eq!(names, vec!["bug", "storage"]);
     }

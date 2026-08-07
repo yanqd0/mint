@@ -13,7 +13,11 @@ pub fn format_list(issues: &[Issue]) -> String {
         };
         out.push_str(&format!(
             "#{:<4} {:<10} {:<14} {}{}\n",
-            i.id, i.kind_str(), i.status_str(), i.title, tag_str
+            i.id,
+            i.kind_str(),
+            i.status_str(),
+            i.title,
+            tag_str
         ));
     }
     out

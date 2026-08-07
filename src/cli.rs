@@ -264,7 +264,8 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
     if let Some(t) = &l.tag {
         conds.push(
             "EXISTS (SELECT 1 FROM issue_tags it JOIN tags tg ON tg.id = it.tag_id
-                     WHERE it.issue_id = i.id AND tg.name = ?)".into(),
+                     WHERE it.issue_id = i.id AND tg.name = ?)"
+                .into(),
         );
         params.push(Box::new(t.clone()));
     }
@@ -279,22 +280,25 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
     sql.push_str(" ORDER BY i.id DESC");
 
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())), |r| {
-        Ok(Issue {
-            id: r.get(0)?,
-            title: r.get(1)?,
-            body: r.get(2)?,
-            kind: r.get(3)?,
-            status: r.get(4)?,
-            project_id: r.get(5)?,
-            project: r.get(6)?,
-            test_cmd: r.get(7)?,
-            dropped_reason: r.get(8)?,
-            tags: Vec::new(),
-            created_at: r.get(9)?,
-            updated_at: r.get(10)?,
-        })
-    })?;
+    let rows = stmt.query_map(
+        rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())),
+        |r| {
+            Ok(Issue {
+                id: r.get(0)?,
+                title: r.get(1)?,
+                body: r.get(2)?,
+                kind: r.get(3)?,
+                status: r.get(4)?,
+                project_id: r.get(5)?,
+                project: r.get(6)?,
+                test_cmd: r.get(7)?,
+                dropped_reason: r.get(8)?,
+                tags: Vec::new(),
+                created_at: r.get(9)?,
+                updated_at: r.get(10)?,
+            })
+        },
+    )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     // 填充 tags（每个 issue 一次查询，量小可接受）
@@ -337,9 +341,7 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
             },
         )
         .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => {
-                Error::Other(format!("issue #{id} not found"))
-            }
+            rusqlite::Error::QueryReturnedNoRows => Error::Other(format!("issue #{id} not found")),
             other => Error::from(other),
         })?;
 
@@ -375,12 +377,26 @@ fn cmd_trans(conn: &rusqlite::Connection, t: &TransArgs, action: Action) -> Resu
 
 /// stage：dev→test，可选 --test-cmd。
 fn cmd_stage(conn: &rusqlite::Connection, s: &StageArgs) -> Result<(), Error> {
-    transition(conn, s.id, Action::Stage, s.test_cmd.as_deref(), None, s.json)
+    transition(
+        conn,
+        s.id,
+        Action::Stage,
+        s.test_cmd.as_deref(),
+        None,
+        s.json,
+    )
 }
 
 /// close：test→done，必填 --test-cmd。
 fn cmd_close(conn: &rusqlite::Connection, c: &CloseArgs) -> Result<(), Error> {
-    transition(conn, c.id, Action::Close, c.test_cmd.as_deref(), None, c.json)
+    transition(
+        conn,
+        c.id,
+        Action::Close,
+        c.test_cmd.as_deref(),
+        None,
+        c.json,
+    )
 }
 
 /// drop：任意状态→dropped，可选 --reason。
@@ -402,7 +418,11 @@ fn transition(
     json: bool,
 ) -> Result<(), Error> {
     let current: Status = conn
-        .query_row("SELECT status FROM issues WHERE id = ?1", rusqlite::params![id], |r| r.get(0))
+        .query_row(
+            "SELECT status FROM issues WHERE id = ?1",
+            rusqlite::params![id],
+            |r| r.get(0),
+        )
         .map_err(|e| match e {
             rusqlite::Error::QueryReturnedNoRows => Error::Other(format!("issue #{id} not found")),
             other => Error::from(other),
@@ -424,11 +444,7 @@ fn transition(
     }
 
     let reset = action == Action::Reset;
-    let drop_reason: Option<&str> = if action == Action::Drop {
-        reason
-    } else {
-        None
-    };
+    let drop_reason: Option<&str> = if action == Action::Drop { reason } else { None };
     conn.execute(
         "UPDATE issues SET status = ?1,
                 test_cmd = CASE WHEN ?4 THEN NULL ELSE COALESCE(?2, test_cmd) END,
@@ -450,4 +466,3 @@ fn transition(
     }
     Ok(())
 }
-

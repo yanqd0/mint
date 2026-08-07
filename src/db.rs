@@ -94,7 +94,9 @@ mod tests {
         assert_eq!(version, 1);
 
         let tables: Vec<String> = conn
-            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+            )
             .unwrap()
             .query_map([], |r| r.get(0))
             .unwrap()
@@ -114,7 +116,10 @@ mod tests {
         migrate(&conn).unwrap();
 
         let err = conn
-            .execute("INSERT INTO issues (title, project_id) VALUES ('x', 999)", [])
+            .execute(
+                "INSERT INTO issues (title, project_id) VALUES ('x', 999)",
+                [],
+            )
             .unwrap_err();
         assert!(err.to_string().contains("FOREIGN KEY"));
     }

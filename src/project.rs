@@ -2,7 +2,7 @@
 
 use crate::error::Error;
 use crate::models::Project;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::Path;
 use std::process::Command;
 
@@ -73,9 +73,11 @@ pub fn ensure(conn: &Connection, name: &str, cwd: &Path) -> Result<i64, Error> {
 
 /// 查询 project 的 id（不存在返回 None 语义的 Err 由调用方处理）。
 pub fn query_id(conn: &Connection, name: &str) -> Result<i64, Error> {
-    conn.query_row("SELECT id FROM projects WHERE name = ?1", params![name], |r| {
-        r.get(0)
-    })
+    conn.query_row(
+        "SELECT id FROM projects WHERE name = ?1",
+        params![name],
+        |r| r.get(0),
+    )
     .map_err(Error::from)
 }
 
@@ -122,7 +124,12 @@ mod tests {
     #[test]
     fn detect_falls_back_to_dirname() {
         let dir = TempDir::new().unwrap();
-        let expected = dir.path().file_name().unwrap().to_string_lossy().into_owned();
+        let expected = dir
+            .path()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
         assert_eq!(detect_name(dir.path(), None), expected);
     }
 
@@ -155,7 +162,11 @@ mod tests {
         assert_eq!(id1, id2);
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM projects WHERE name='testproj'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM projects WHERE name='testproj'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(count, 1);
     }

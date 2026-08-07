@@ -30,8 +30,12 @@ fn add_issue(conn: &rusqlite::Connection, pid: i64, title: &str) -> i64 {
 
 /// 读 issue 的 status。
 fn status_of(conn: &rusqlite::Connection, id: i64) -> Status {
-    conn.query_row("SELECT status FROM issues WHERE id = ?1", rusqlite::params![id], |r| r.get(0))
-        .unwrap()
+    conn.query_row(
+        "SELECT status FROM issues WHERE id = ?1",
+        rusqlite::params![id],
+        |r| r.get(0),
+    )
+    .unwrap()
 }
 
 /// 全链路：open→planned→dev→test→done。
@@ -122,7 +126,10 @@ fn tag_attach_and_query() {
 #[test]
 fn close_requires_test_cmd() {
     assert!(!state::close_requires_test_cmd(Action::Close, None));
-    assert!(state::close_requires_test_cmd(Action::Close, Some("cargo test")));
+    assert!(state::close_requires_test_cmd(
+        Action::Close,
+        Some("cargo test")
+    ));
     assert!(state::close_requires_test_cmd(Action::Close, Some("没测")));
     // 非 close 不强制
     assert!(state::close_requires_test_cmd(Action::Stage, None));
