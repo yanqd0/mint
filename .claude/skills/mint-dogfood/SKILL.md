@@ -38,6 +38,8 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
    kind 默认 `problem`（缺陷），需求用 `requirement`；`--tag` 支持 `name` 或 `name:description`、逗号分隔。
    记录 add 返回的 `id`，供后续状态操作引用。
    **克制登记**：只记"可执行、真会推动开发"的事项；事实/教训/决策类归属 mem-lite，不登记。
+   **mem-lite 关联**（可选增强）：若某条事实/教训对应本 issue，且 `which claude-mem-lite` 存在，
+   按 `references/mem-lite.md` 保存带 `issue#<id>` 与读取命令的 observation；mem-lite 缺失则跳过。
 
 3. **查看 / 查询（list / show）**：
    - 会话开箱需要上下文时：`$MINT list --json`，可按需加 `--all`（含 done/dropped）、
@@ -76,7 +78,8 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
 ## 约束
 
 - **不自动新建噪音 issue**：登记前必须查重；意图不明确（非显式"记一下/登记/开 issue"）时先确认。
-- **mint 管 issue（可执行待办），mem-lite 管记忆（事实/教训）**——两者不混，避免重复沉淀。
+- **mint 管 issue（可执行待办），mem-lite 管记忆（事实/教训）**——两者不混，避免重复沉淀；
+  双向关联（`issue#N` ↔ `memory#N`）与降级方案见 `references/mem-lite.md`。
 - `close` 缺 `--test-cmd` 会被 CLI 拒绝，报错信息即提示：用 `not-tested` 表示"跳过测试"。
 - 默认库是全局共享的 `~/.local/share/mint/mint.db`；验证性/演示性操作优先设
   `MINT_DB_PATH=<临时文件>` 避免污染真实库。
