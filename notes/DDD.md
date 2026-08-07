@@ -38,7 +38,7 @@ mint 的基本单位：一个可执行的问题（problem）或需求（requirem
 | `git` | remote url（检测来源） |
 | `abs_dir` | 首次注册时的绝对路径 |
 
-**检测优先级**（0.1.0 实现）：git 库名 → dirname → 自定义(`--project`) → 兜底 `default`。add 时自动注册到 projects 表。
+**检测优先级**（0.1.0 实现）：自定义(`--project`) → git 库名 → dirname → 兜底 `default`。add 时自动注册到 projects 表。
 
 ### Tag（标签）
 

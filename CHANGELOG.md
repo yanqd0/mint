@@ -5,7 +5,7 @@
 ### Features
 
 - 核心 issue 系统：基于 SQLite 的全局 issue 追踪 CLI，支持 add/list/show 与 6 态状态机（open/planned/dev/test/done/dropped）全命令推进。
-  - 4 表 schema（projects/issues/tags/issue_tags），project 自动检测（git 库名→dirname→显式→default）。
+  - 4 表 schema（projects/issues/tags/issue_tags），project 自动检测（显式→git 库名→dirname→default）。
   - tag 支持 `name:desc` 语法、自由注册与 issue 关联，`mint tag list` 供 agent 学习语义。
   - 用户侧输出全英文（i18n 基线）；`--json` 结构化输出。
 - 开发规范收编（dogfooding 基建）：use 语句四组分组规范、src/CLAUDE.md 检查清单、Stop hook 自动格式化、sqruff SQL 检查、SQL 抽至 src/db/*.sql 并参数化、CLI 级端到端 ST 测试、项目级 tester agent。

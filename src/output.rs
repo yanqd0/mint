@@ -14,8 +14,8 @@ pub fn format_list(issues: &[Issue]) -> String {
         out.push_str(&format!(
             "#{:<4} {:<10} {:<14} {}{}\n",
             i.id,
-            i.kind_str(),
-            i.status_str(),
+            i.kind.as_str(),
+            i.status.as_str(),
             i.title,
             tag_str
         ));
@@ -27,8 +27,8 @@ pub fn format_list(issues: &[Issue]) -> String {
 pub fn format_issue(i: &Issue) -> String {
     let mut out = String::new();
     out.push_str(&format!("#{} {}\n", i.id, i.title));
-    out.push_str(&format!("  status:  {}\n", i.status_str()));
-    out.push_str(&format!("  kind:    {}\n", i.kind_str()));
+    out.push_str(&format!("  status:  {}\n", i.status.as_str()));
+    out.push_str(&format!("  kind:    {}\n", i.kind.as_str()));
     out.push_str(&format!(
         "  project: {}\n",
         i.project.as_deref().unwrap_or("?")
@@ -48,13 +48,4 @@ pub fn format_issue(i: &Issue) -> String {
     out.push_str(&format!("  created: {}\n", i.created_at));
     out.push_str(&format!("  updated: {}\n", i.updated_at));
     out
-}
-
-impl Issue {
-    fn status_str(&self) -> String {
-        format!("{:?}", self.status).to_lowercase()
-    }
-    fn kind_str(&self) -> String {
-        format!("{:?}", self.kind).to_lowercase()
-    }
 }

@@ -11,7 +11,7 @@
 - **序列化**：`serde` + `serde_json`（`--json` 输出）。
 - **错误处理分层**：
   - 库层（`src/` 各模块）：`thiserror::Error` 派生枚举，`#[from]` 自动转换，顶层 `Error` 枚举含 `Other(String)`。
-  - 应用层（`main.rs`/CLI 分发）：`eyre`。
+  - 应用层（`main.rs`/CLI 分发）：直接传播库层 `Error`（不引入 eyre，保持轻量）。
 - **用户侧输出全英文**（i18n 前）：help/错误/`--json` 字段与数据值无中文；注释中文，标识符英文。
 
 ## 编码规范

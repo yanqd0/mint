@@ -12,7 +12,7 @@ use crate::models::Project;
 /// 兜底的全局默认 project。
 pub const DEFAULT_PROJECT: &str = "default";
 
-/// 解析 project 名：优先级 git 库名 → dirname → 显式 --project → default。
+/// 解析 project 名：优先级 显式 --project → git 库名 → dirname → default。
 ///
 /// 检测在 `cwd` 下进行；`explicit` 为 `--project` 显式指定（最高优先）。
 pub fn detect_name(cwd: &Path, explicit: Option<&str>) -> String {
@@ -26,20 +26,7 @@ pub fn detect_name(cwd: &Path, explicit: Option<&str>) -> String {
 
 /// 从 `git remote get-url origin` 提取库名（末段去 .git 后缀）。
 fn git_repo_name(cwd: &Path) -> Option<String> {
-    let out = Command::new("git")
-        .arg("remote")
-        .arg("get-url")
-        .arg("origin")
-        .current_dir(cwd)
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if url.is_empty() {
-        return None;
-    }
+    let url = git_repo_url(cwd)?;
     // 取路径末段：git@host:user/repo.git | https://host/user/repo.git | file:///a/b/repo
     let last = url.split('/').next_back()?;
     let name = last.strip_suffix(".git").unwrap_or(last);
