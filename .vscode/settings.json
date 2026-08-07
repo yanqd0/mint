@@ -1,0 +1,6 @@
+{
+    "files.autoSave": "onFocusChange",
+    "markdown.validate.enabled": true,
+    "rust-analyzer.check.command": "clippy",
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+}

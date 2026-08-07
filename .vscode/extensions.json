@@ -1,0 +1,11 @@
+{
+    "recommendations": [
+        "anthropic.claude-code",
+        "vadimcn.vscode-lldb",
+        "tamasfe.even-better-toml",
+        "shd101wyy.markdown-preview-enhanced",
+        "jscearcy.rust-doc-viewer",
+        "dustypomerleau.rust-syntax",
+        "rust-lang.rust-analyzer"
+    ]
+}
