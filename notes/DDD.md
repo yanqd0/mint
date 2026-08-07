@@ -20,6 +20,7 @@ mint 的基本单位：一个可执行的问题（problem）或需求（requirem
 | `status` | `open` \| `planned` \| `dev` \| `test` \| `done` \| `dropped` |
 | `project_id` | 外键 → `projects(id)` |
 | `test_cmd` | 测试命令/手法（close 必填）——记录"如何复现/复测" |
+| `dropped_reason` | drop 理由（`--reason`，可空） |
 | `created_at` | 创建时间 |
 | `updated_at` | 最近更新时间（每次状态转换写入） |
 
@@ -46,7 +47,7 @@ mint 的基本单位：一个可执行的问题（problem）或需求（requirem
 - `tags`：`name`(UNIQUE) + `description`
 - `issue_tags`：`(issue_id, tag_id)` 复合主键，仅 `created_at`
 
-CLI 内联 `--tag`（按 clap 框架能力，逗号/重复）；`mint tag list` 列出 name|description 供 agent 学习含义。**注意**：tag.rs 的 `list()` 已实现，但 CLI 子命令尚未接线（0.2.0 或补小 commit）。
+CLI 内联 `--tag`（按 clap 框架能力，逗号/重复）；`mint tag list` 列出 name|description + issue 计数供 agent 学习含义（0.1.0 已接线）。
 
 ### 状态机（6 态）
 

@@ -34,8 +34,6 @@
 - 数据落在 `$XDG_DATA_HOME/mint/mint.db`
 - 20 测试全绿；release 二进制 ~1.7MB
 
-**待接线**：`mint tag list`（tag.rs 的 `list()` 已实现，CLI 子命令未暴露）。
-
 ## 0.2.0 — 容器 + git 关联
 
 **目标**：issue 之上引入"容器"概念，串联开发链路。
