@@ -42,6 +42,9 @@ pub fn format_issue(i: &Issue) -> String {
     if let Some(dr) = &i.dropped_reason {
         out.push_str(&format!("  dropped: {dr}\n"));
     }
+    if let Some(sha) = &i.last_commit_id {
+        out.push_str(&format!("  commit:  {sha}\n"));
+    }
     if !i.tags.is_empty() {
         out.push_str(&format!("  tags:    {}\n", i.tags.join(", ")));
     }

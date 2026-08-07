@@ -7,6 +7,7 @@ pub mod cli;
 pub mod container;
 pub mod db;
 pub mod error;
+pub mod git;
 pub mod models;
 pub mod output;
 pub mod project;
