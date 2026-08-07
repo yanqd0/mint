@@ -1,6 +1,10 @@
+use clap::Parser;
+use mint_faa::cli::Cli;
+
 fn main() {
-    println!(
-        "mint {} (Minimal Issue & Needs Tracker)",
-        env!("CARGO_PKG_VERSION")
-    );
+    let cli = Cli::parse();
+    if let Err(e) = cli.run() {
+        eprintln!("mint: error: {e}");
+        std::process::exit(1);
+    }
 }
