@@ -4,6 +4,7 @@
 //! 所有业务模块在此汇总，`src/main.rs` 只做 clap 薄壳调用。
 
 pub mod cli;
+pub mod container;
 pub mod db;
 pub mod error;
 pub mod models;
