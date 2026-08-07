@@ -1,4 +1,5 @@
 -- 列表查询：4 个过滤维度全部参数化（NULL = 不启用该过滤）。
+-- 显示层：created_at/updated_at 转本地时区（存储仍为 UTC）。
 -- ?1: 是否列出所有状态（1=含 done/dropped，0=只列活跃）
 -- ?2: 状态过滤（NULL=不过滤）
 -- ?3: tag 名过滤（NULL=不过滤）
@@ -9,8 +10,8 @@ SELECT
     i.test_cmd,
     i.dropped_reason,
     i.last_commit_id,
-    i.created_at,
-    i.updated_at
+    datetime(i.created_at, 'localtime') AS created_at,
+    datetime(i.updated_at, 'localtime') AS updated_at
 FROM issues i
 JOIN projects p ON p.id = i.project_id
 WHERE

@@ -416,3 +416,107 @@ fn st_list_on_seeded_db_perf() {
         "list too slow: {elapsed:?}"
     );
 }
+
+/// 把 "YYYY-MM-DD HH:MM:SS"（UTC 视为天数）转分钟数，供时区差值断言。
+fn to_minutes(s: &str) -> i64 {
+    // 解析 "YYYY-MM-DD HH:MM:SS"
+    let date: Vec<&str> = s.split(' ').collect();
+    let d: Vec<&str> = date[0].split('-').collect();
+    let t: Vec<&str> = date[1].split(':').collect();
+    let y: i64 = d[0].parse().unwrap();
+    let m: i64 = d[1].parse().unwrap();
+    let day: i64 = d[2].parse().unwrap();
+    let h: i64 = t[0].parse().unwrap();
+    let min: i64 = t[1].parse().unwrap();
+    // Hinnant days_from_civil：公历日序（1970-01-01 = 0）
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146097 + doe - 719468;
+    days * 24 * 60 + h * 60 + min
+}
+
+/// 时区显示：TZ=UTC vs TZ=Asia/Shanghai 的 created_at 差 8h（存储仍是 UTC）。
+#[test]
+fn st_timestamps_local_under_tz() {
+    let (_dir, db) = empty_db();
+    // 用 lib API 建库 + 注册 project + add issue，避免依赖 TZ（datetime('now') 恒 UTC）
+    {
+        let conn = mint_faa::db::open(std::path::Path::new(&db)).unwrap();
+        mint_faa::project::ensure(&conn, "tz", std::path::Path::new("/tmp")).unwrap();
+        conn.execute(
+            "INSERT INTO issues (title, project_id) VALUES ('tz', 1)",
+            [],
+        )
+        .unwrap();
+    }
+
+    // 两种 TZ 下 show 的 created_at
+    let out_utc = mint(&db)
+        .env("TZ", "UTC")
+        .args(["show", "1", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v_utc: Value = serde_json::from_slice(&out_utc).unwrap();
+    let created_utc = v_utc["created_at"].as_str().unwrap().to_string();
+
+    let out_sh = mint(&db)
+        .env("TZ", "Asia/Shanghai")
+        .args(["show", "1", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v_sh: Value = serde_json::from_slice(&out_sh).unwrap();
+    let created_sh = v_sh["created_at"].as_str().unwrap().to_string();
+
+    let diff = to_minutes(&created_sh) - to_minutes(&created_utc);
+    assert_eq!(
+        diff,
+        8 * 60,
+        "Asia/Shanghai 应比 UTC 晚 8h: {created_utc} vs {created_sh}"
+    );
+}
+
+/// 时区回归：updated_at（UPDATE 写路径）同样差 8h。
+#[test]
+fn st_timestamps_stored_utc_unchanged() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "u");
+    // 推进一个状态触发 updated_at 写入
+    run_json(&db, &["state", "plan", &id.to_string(), "--json"]);
+
+    let v_utc: Value = serde_json::from_slice(
+        &mint(&db)
+            .env("TZ", "UTC")
+            .args(["show", &id.to_string(), "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+    let upd_utc = v_utc["updated_at"].as_str().unwrap().to_string();
+
+    let v_sh: Value = serde_json::from_slice(
+        &mint(&db)
+            .env("TZ", "Asia/Shanghai")
+            .args(["show", &id.to_string(), "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+    let upd_sh = v_sh["updated_at"].as_str().unwrap().to_string();
+
+    let diff = to_minutes(&upd_sh) - to_minutes(&upd_utc);
+    assert_eq!(diff, 8 * 60, "updated_at 也应差 8h: {upd_utc} vs {upd_sh}");
+}
