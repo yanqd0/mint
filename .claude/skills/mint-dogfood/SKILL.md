@@ -62,6 +62,17 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
    向用户简报 `#<id>: <title> → <status>`。一条完整链路（如新 bug 从 add 到 close）
    可逐步推进、每步验证，用户明确要求"直接走完"时再连续执行。
 
+## 多 issue plan 的执行模式（同一 plan 多任务统一测试）
+
+当用户把一个 plan 拆成多个 issue（如"开发规范收编"拆成 3 个合并 issue）时：
+
+- **登记**：一次登记多个 issue，标题带序号前缀（如 `① 开发规范收编`），body 引用同一份 plan 文档；登记前先 `list --json` 查重。
+- **推进**：按依赖顺序分批推进，每个 issue 独立走 `open→planned→dev→test`，**不必逐个 close**。
+- **统一测试**：全部到 `test` 后，一次性跑统一测试命令（fmt/clippy/测试全链路），全绿后再统一 `close`。
+- **close 的 test_cmd**：填统一测试命令，如：
+  `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- **理由**：同一 plan 的改动相互耦合，逐个 close 的重复测试成本高于统一测试；统一 close 前确保最后一批改动也覆盖测试。
+
 ## 约束
 
 - **不自动新建噪音 issue**：登记前必须查重；意图不明确（非显式"记一下/登记/开 issue"）时先确认。
