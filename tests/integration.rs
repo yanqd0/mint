@@ -1,0 +1,143 @@
+//! 集成测试：用临时 SQLite 文件测端到端数据流。
+//!
+//! 注意：测试使用 `tempfile`，禁绝对路径；断言不依赖环境。
+
+use mint_faa::db;
+use mint_faa::models::Status;
+use mint_faa::project;
+use mint_faa::state::{self, Action};
+use mint_faa::tag;
+use tempfile::TempDir;
+
+/// 建库 + 注册项目，返回 (连接, TempDir, 项目 id)。
+/// TempDir 必须随返回存活——否则数据库文件被删除，连接指向只读空库。
+fn setup() -> (rusqlite::Connection, TempDir, i64) {
+    let dir = TempDir::new().unwrap();
+    let conn = db::open(&dir.path().join("test.db")).unwrap();
+    let pid = project::ensure(&conn, "testproj", dir.path()).unwrap();
+    (conn, dir, pid)
+}
+
+/// add 一个 issue，返回 id。
+fn add_issue(conn: &rusqlite::Connection, pid: i64, title: &str) -> i64 {
+    conn.execute(
+        "INSERT INTO issues (title, kind, status, project_id) VALUES (?1, 'problem', 'open', ?2)",
+        rusqlite::params![title, pid],
+    )
+    .unwrap();
+    conn.last_insert_rowid()
+}
+
+/// 读 issue 的 status。
+fn status_of(conn: &rusqlite::Connection, id: i64) -> Status {
+    conn.query_row("SELECT status FROM issues WHERE id = ?1", rusqlite::params![id], |r| r.get(0))
+        .unwrap()
+}
+
+/// 全链路：open→planned→dev→test→done。
+#[test]
+fn full_workflow_passes() {
+    let (conn, _dir, pid) = setup();
+    let id = add_issue(&conn, pid, "workflow");
+
+    // 逐步推进
+    for (action, test_cmd) in [
+        (Action::Plan, None),
+        (Action::Start, None),
+        (Action::Stage, Some("cargo test")),
+        (Action::Close, Some("cargo test")),
+    ] {
+        let cur = status_of(&conn, id);
+        let target = state::target_of(action);
+        assert!(state::can_transition(cur, action, target), "{cur}→{target}");
+        assert!(state::close_requires_test_cmd(action, test_cmd));
+        conn.execute(
+            "UPDATE issues SET status=?1, test_cmd=COALESCE(?2,test_cmd), updated_at=datetime('now') WHERE id=?3",
+            rusqlite::params![target, test_cmd, id],
+        )
+        .unwrap();
+    }
+
+    assert_eq!(status_of(&conn, id), Status::Done);
+}
+
+/// 非法转换被 state 层拒绝（open 直接 close）。
+#[test]
+fn illegal_direct_close_rejected() {
+    let (conn, _dir, pid) = setup();
+    let id = add_issue(&conn, pid, "illegal");
+    let cur = status_of(&conn, id);
+    assert!(!state::can_transition(cur, Action::Close, Status::Done));
+}
+
+/// project 自动注册：同名幂等，不同名新增。
+#[test]
+fn project_auto_register_and_idempotent() {
+    let dir = TempDir::new().unwrap();
+    let conn = db::open(&dir.path().join("p.db")).unwrap();
+
+    let a = project::ensure(&conn, "alpha", dir.path()).unwrap();
+    let b = project::ensure(&conn, "alpha", dir.path()).unwrap();
+    assert_eq!(a, b, "同名重复 ensure 应返回同一 id");
+
+    let c = project::ensure(&conn, "beta", dir.path()).unwrap();
+    assert!(c != a, "不同名应注册新项目");
+
+    let names: Vec<String> = conn
+        .prepare("SELECT name FROM projects ORDER BY name")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert_eq!(names, vec!["alpha", "beta"]);
+}
+
+/// tag 关联 + 过滤：attach 幂等、names_for_issue 正确。
+#[test]
+fn tag_attach_and_query() {
+    let (conn, _dir, pid) = setup();
+    let id = add_issue(&conn, pid, "tagged");
+
+    let specs = tag::parse_specs(&["bug:缺陷".to_string(), "storage".to_string()]);
+    tag::attach(&conn, id, &specs).unwrap();
+    tag::attach(&conn, id, &specs).unwrap(); // 幂等
+
+    let names = tag::names_for_issue(&conn, id).unwrap();
+    assert_eq!(names, vec!["bug", "storage"]);
+
+    // 只有 1 条关联（幂等生效）
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM issue_tags", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 2);
+
+    // tag list 带计数
+    let tags = tag::list(&conn).unwrap();
+    assert_eq!(tags.len(), 2);
+    assert!(tags.iter().all(|(_, c)| *c == 1));
+}
+
+/// test_cmd 必填：close 无 test_cmd 校验失败；'没测' 通过。
+#[test]
+fn close_requires_test_cmd() {
+    assert!(!state::close_requires_test_cmd(Action::Close, None));
+    assert!(state::close_requires_test_cmd(Action::Close, Some("cargo test")));
+    assert!(state::close_requires_test_cmd(Action::Close, Some("没测")));
+    // 非 close 不强制
+    assert!(state::close_requires_test_cmd(Action::Stage, None));
+}
+
+/// 数据库迁移幂等 + 表齐全。
+#[test]
+fn migration_is_idempotent() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("m.db");
+    let conn = db::open(&path).unwrap();
+    drop(conn);
+    let conn = db::open(&path).unwrap(); // 再次打开，迁移应幂等
+    let version: i32 = conn
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 1);
+}
