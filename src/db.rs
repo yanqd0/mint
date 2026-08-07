@@ -7,7 +7,13 @@ use std::path::Path;
 const CURRENT_VERSION: i32 = 1;
 
 /// 打开（必要时创建）SQLite 数据库并迁移到最新版本。
+/// 父目录不存在时自动创建（首次运行的真实场景）。
 pub fn open(path: &Path) -> Result<rusqlite::Connection, Error> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
     let conn = rusqlite::Connection::open(path)?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     migrate(&conn)?;
