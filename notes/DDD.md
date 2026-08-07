@@ -79,7 +79,7 @@ stateDiagram-v2
 | dev → test | `stage` | `--test-cmd` 填测试命令 |
 | test → done | `close` | **`--test-cmd` 必填**；测试全绿才推进 |
 | planned/dev/test → open | `reset` | 打回重做 |
-| done/dropped → open | `reopen` | 重开 |
+| done/dropped → open | `reopen` | 重开；清空 `dropped_reason`（旧周期字段不再有意义） |
 | 任意 → dropped | `drop` | 可附 `--reason` |
 
 **CLI 形态**：状态动作全部在 `mint state` 命名空间下：`mint state plan <id>` / `mint state close <id> --test-cmd '...'` / `mint state drop <id> --reason '...'`。顶层命令仅 add/list/show/state/tag（`state` 释放了 `plan` 顶层名给 0.2.0 的 plan 容器）。**无配置文件**：配置走 CLI 参数 + 环境变量（统一 `MINT_` 前缀，如 `MINT_DB_PATH`）。

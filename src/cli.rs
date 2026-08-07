@@ -175,10 +175,10 @@ impl Cli {
     pub fn run(&self) -> Result<(), Error> {
         let cwd = std::env::current_dir()?;
         let path = self.db_path();
-        let conn = db::open(&path)?;
+        let mut conn = db::open(&path)?;
 
         match &self.command {
-            Commands::Add(a) => cmd_add(&conn, &cwd, a),
+            Commands::Add(a) => cmd_add(&mut conn, &cwd, a),
             Commands::List(l) => cmd_list(&conn, l),
             Commands::Show(s) => cmd_show(&conn, s),
             Commands::State(st) => match &st.command {
@@ -213,7 +213,11 @@ impl Cli {
     }
 }
 
-fn cmd_add(conn: &rusqlite::Connection, cwd: &std::path::Path, a: &AddArgs) -> Result<(), Error> {
+fn cmd_add(
+    conn: &mut rusqlite::Connection,
+    cwd: &std::path::Path,
+    a: &AddArgs,
+) -> Result<(), Error> {
     if a.title.trim().is_empty() {
         return Err(Error::Other("title must not be empty".to_string()));
     }
@@ -221,22 +225,26 @@ fn cmd_add(conn: &rusqlite::Connection, cwd: &std::path::Path, a: &AddArgs) -> R
         return Err(Error::Other("--project must not be empty".to_string()));
     }
     let pname = project::detect_name(cwd, a.project.as_deref());
-    let pid = project::ensure(conn, &pname, cwd)?;
 
     let kind = a.kind;
     let status = Status::Open;
     let test_cmd: Option<&str> = None;
 
-    conn.execute(
+    // 事务包裹：project 注册 + issue 插入 + tag 关联原子提交，中断不留孤儿行
+    let tx = conn.transaction()?;
+    let pid = project::ensure(&tx, &pname, cwd)?;
+
+    tx.execute(
         db::ISSUE_INSERT,
         rusqlite::params![a.title, a.body, kind, status, pid, test_cmd],
     )?;
-    let id = conn.last_insert_rowid();
+    let id = tx.last_insert_rowid();
 
     let specs = tag::parse_specs(&a.tag);
     if !specs.is_empty() {
-        tag::attach(conn, id, &specs)?;
+        tag::attach(&tx, id, &specs)?;
     }
+    tx.commit()?;
 
     if a.json {
         println!(
@@ -404,10 +412,11 @@ fn transition(
     }
 
     let reset = action == Action::Reset;
+    let reopen = action == Action::Reopen;
     let drop_reason: Option<&str> = if action == Action::Drop { reason } else { None };
     conn.execute(
         db::ISSUE_UPDATE_TRANSITION,
-        rusqlite::params![target, test_cmd, id, reset, drop_reason],
+        rusqlite::params![target, test_cmd, id, reset, drop_reason, reopen],
     )?;
 
     if json {

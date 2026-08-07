@@ -212,6 +212,30 @@ fn st_state_flow_full_chain() {
     assert_eq!(v["test_cmd"], "cargo test");
 }
 
+/// reopen 清空 dropped_reason（重开后旧周期字段不再有意义）。
+#[test]
+fn st_reopen_clears_dropped_reason() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "reopen-me");
+    run_json(
+        &db,
+        &[
+            "state",
+            "drop",
+            &id.to_string(),
+            "--reason",
+            "obsolete",
+            "--json",
+        ],
+    );
+    let v = run_json(&db, &["show", &id.to_string(), "--json"]);
+    assert_eq!(v["dropped_reason"], "obsolete");
+    run_json(&db, &["state", "reopen", &id.to_string(), "--json"]);
+    let v = run_json(&db, &["show", &id.to_string(), "--json"]);
+    assert_eq!(v["status"], "open");
+    assert_eq!(v["dropped_reason"], serde_json::Value::Null);
+}
+
 /// 显式 --project 自动注册。
 #[test]
 fn st_project_autodetect_explicit() {

@@ -18,7 +18,9 @@ pub fn open(path: &Path) -> Result<rusqlite::Connection, Error> {
         std::fs::create_dir_all(parent)?;
     }
     let conn = rusqlite::Connection::open(path)?;
-    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+    // 多进程（多 agent）并发写：busy_timeout 让写锁竞争等待而非立即报 database is locked
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
     migrate(&conn)?;
     Ok(conn)
 }
