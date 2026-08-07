@@ -4,9 +4,12 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+use rusqlite::OptionalExtension;
+
 use crate::container::{self, ContainerKind};
 use crate::db;
 use crate::error::Error;
+use crate::git;
 use crate::models::{Issue, Kind, Status};
 use crate::output;
 use crate::project;
@@ -42,6 +45,8 @@ enum Commands {
     Roadmap(RoadmapArgs),
     /// Plan container subcommands
     Plan(PlanArgs),
+    /// Record the last commit that addressed an issue
+    Commit(CommitArgs),
 }
 
 #[derive(clap::Args)]
@@ -98,6 +103,12 @@ enum RoadmapCmd {
     Link(ContainerLinkArgs),
     /// Unlink an issue from a roadmap
     Unlink(ContainerLinkArgs),
+    /// Close a roadmap (open -> done)
+    Close(ContainerStatusArgs),
+    /// Drop a roadmap (any -> dropped)
+    Drop(ContainerDropArgs),
+    /// Reopen a roadmap (done/dropped -> open)
+    Reopen(ContainerStatusArgs),
 }
 
 #[derive(clap::Args)]
@@ -118,6 +129,12 @@ enum PlanCmd {
     Link(ContainerLinkArgs),
     /// Unlink an issue from a plan
     Unlink(ContainerLinkArgs),
+    /// Close a plan (open -> done)
+    Close(ContainerStatusArgs),
+    /// Drop a plan (any -> dropped)
+    Drop(ContainerDropArgs),
+    /// Reopen a plan (done/dropped -> open)
+    Reopen(ContainerStatusArgs),
 }
 
 #[derive(clap::Args)]
@@ -150,6 +167,36 @@ struct ContainerIdArgs {
 struct ContainerLinkArgs {
     id: i64,
     issue_id: i64,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct CommitArgs {
+    id: i64,
+    /// Explicit commit SHA (default: current HEAD)
+    #[arg(long)]
+    sha: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct ContainerStatusArgs {
+    id: i64,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct ContainerDropArgs {
+    id: i64,
+    /// Optional reason
+    #[arg(long)]
+    reason: Option<String>,
     /// Output as JSON
     #[arg(long)]
     json: bool,
@@ -283,6 +330,7 @@ impl Cli {
                 ContainerKind::Plan,
                 &ContainerCmdDispatch::from(&p.command),
             ),
+            Commands::Commit(c) => cmd_commit(&conn, &cwd, c),
         }
     }
 
@@ -369,9 +417,10 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
             project: r.get(6)?,
             test_cmd: r.get(7)?,
             dropped_reason: r.get(8)?,
+            last_commit_id: r.get(9)?,
             tags: Vec::new(),
-            created_at: r.get(9)?,
-            updated_at: r.get(10)?,
+            created_at: r.get(10)?,
+            updated_at: r.get(11)?,
         })
     })?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
@@ -403,9 +452,10 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
                 project: r.get(6)?,
                 test_cmd: r.get(7)?,
                 dropped_reason: r.get(8)?,
+                last_commit_id: r.get(9)?,
                 tags: Vec::new(),
-                created_at: r.get(9)?,
-                updated_at: r.get(10)?,
+                created_at: r.get(10)?,
+                updated_at: r.get(11)?,
             })
         })
         .map_err(|e| match e {
@@ -450,6 +500,30 @@ fn cmd_container(
         ContainerCmdDispatch::Show(a) => cmd_container_show(conn, kind, a),
         ContainerCmdDispatch::Link(a) => cmd_container_link(conn, kind, a, true),
         ContainerCmdDispatch::Unlink(a) => cmd_container_link(conn, kind, a, false),
+        ContainerCmdDispatch::Close(a) => cmd_container_transition(
+            conn,
+            kind,
+            a.id,
+            container::ContainerAction::Close,
+            None,
+            a.json,
+        ),
+        ContainerCmdDispatch::Drop(a) => cmd_container_transition(
+            conn,
+            kind,
+            a.id,
+            container::ContainerAction::Drop,
+            a.reason.as_deref(),
+            a.json,
+        ),
+        ContainerCmdDispatch::Reopen(a) => cmd_container_transition(
+            conn,
+            kind,
+            a.id,
+            container::ContainerAction::Reopen,
+            None,
+            a.json,
+        ),
     }
 }
 
@@ -460,6 +534,9 @@ enum ContainerCmdDispatch<'a> {
     Show(&'a ContainerIdArgs),
     Link(&'a ContainerLinkArgs),
     Unlink(&'a ContainerLinkArgs),
+    Close(&'a ContainerStatusArgs),
+    Drop(&'a ContainerDropArgs),
+    Reopen(&'a ContainerStatusArgs),
 }
 
 impl<'a> From<&'a RoadmapCmd> for ContainerCmdDispatch<'a> {
@@ -470,6 +547,9 @@ impl<'a> From<&'a RoadmapCmd> for ContainerCmdDispatch<'a> {
             RoadmapCmd::Show(a) => ContainerCmdDispatch::Show(a),
             RoadmapCmd::Link(a) => ContainerCmdDispatch::Link(a),
             RoadmapCmd::Unlink(a) => ContainerCmdDispatch::Unlink(a),
+            RoadmapCmd::Close(a) => ContainerCmdDispatch::Close(a),
+            RoadmapCmd::Drop(a) => ContainerCmdDispatch::Drop(a),
+            RoadmapCmd::Reopen(a) => ContainerCmdDispatch::Reopen(a),
         }
     }
 }
@@ -482,6 +562,9 @@ impl<'a> From<&'a PlanCmd> for ContainerCmdDispatch<'a> {
             PlanCmd::Show(a) => ContainerCmdDispatch::Show(a),
             PlanCmd::Link(a) => ContainerCmdDispatch::Link(a),
             PlanCmd::Unlink(a) => ContainerCmdDispatch::Unlink(a),
+            PlanCmd::Close(a) => ContainerCmdDispatch::Close(a),
+            PlanCmd::Drop(a) => ContainerCmdDispatch::Drop(a),
+            PlanCmd::Reopen(a) => ContainerCmdDispatch::Reopen(a),
         }
     }
 }
@@ -593,12 +676,74 @@ fn cmd_container_link(
     Ok(())
 }
 
+/// 容器状态转换（close/drop/reopen）。
+fn cmd_container_transition(
+    conn: &rusqlite::Connection,
+    kind: ContainerKind,
+    id: i64,
+    action: container::ContainerAction,
+    reason: Option<&str>,
+    json: bool,
+) -> Result<(), Error> {
+    let (from, to) = container::transition(conn, kind, id, action, reason)?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({"id": id, "from": from, "to": to}))?
+        );
+    } else {
+        println!("{} #{id}: {} -> {}", kind_noun(kind), from, to);
+    }
+    Ok(())
+}
+
 /// 容器名词（错误文案用）。
 fn kind_noun(kind: ContainerKind) -> &'static str {
     match kind {
         ContainerKind::Roadmap => "roadmap",
         ContainerKind::Plan => "plan",
     }
+}
+
+/// commit：记录 issue 的最后关联 commit（覆盖旧值，--sha 优先，否则读 HEAD）。
+fn cmd_commit(
+    conn: &rusqlite::Connection,
+    cwd: &std::path::Path,
+    c: &CommitArgs,
+) -> Result<(), Error> {
+    // 校验 issue 存在
+    let exists: Option<String> = conn
+        .query_row(db::ISSUE_SELECT_STATUS, rusqlite::params![c.id], |r| {
+            r.get(0)
+        })
+        .optional()
+        .map_err(Error::from)?;
+    if exists.is_none() {
+        return Err(Error::Other(format!("issue #{} not found", c.id)));
+    }
+
+    let sha: String = match &c.sha {
+        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
+        _ => git::head_sha(cwd).ok_or_else(|| {
+            Error::Other(
+                "not a git repository (use --sha to record a commit explicitly)".to_string(),
+            )
+        })?,
+    };
+
+    conn.execute(db::ISSUE_UPDATE_LAST_COMMIT, rusqlite::params![sha, c.id])?;
+
+    if c.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "id": c.id, "last_commit_id": sha,
+            }))?
+        );
+    } else {
+        println!("issue #{}: recorded commit {}", c.id, sha);
+    }
+    Ok(())
 }
 
 /// 执行无额外参数的状态转换（plan/start/reset/reopen）。
