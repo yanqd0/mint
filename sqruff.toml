@@ -1,0 +1,7 @@
+# sqruff 配置：SQL 格式化与 lint（mint 开发期工具，服务于项目自身）。
+# 用法：`sqruff lint src/db` / `sqruff fix src/db`；提交前检查见 src/CLAUDE.md。
+
+dialect = "sqlite"
+
+# 扫描范围：SQL 全部集中在 src/db/ 下
+paths = ["src/db/**/*.sql"]
