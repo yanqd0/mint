@@ -1,7 +1,8 @@
 //! SQLite 连接与迁移。
 
-use crate::error::Error;
 use std::path::Path;
+
+use crate::error::Error;
 
 /// 数据库当前 schema 版本。
 const CURRENT_VERSION: i32 = 1;

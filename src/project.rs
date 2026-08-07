@@ -1,10 +1,12 @@
 //! project 检测（git 库名 → dirname → --project → default）与自动注册。
 
-use crate::error::Error;
-use crate::models::Project;
-use rusqlite::{Connection, params};
 use std::path::Path;
 use std::process::Command;
+
+use rusqlite::{Connection, params};
+
+use crate::error::Error;
+use crate::models::Project;
 
 /// 兜底的全局默认 project。
 pub const DEFAULT_PROJECT: &str = "default";

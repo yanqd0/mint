@@ -1,8 +1,9 @@
 //! tag 注册、去重与 issue 关联。
 
+use rusqlite::{Connection, OptionalExtension, params};
+
 use crate::error::Error;
 use crate::models::Tag;
-use rusqlite::{Connection, OptionalExtension, params};
 
 /// `--tag` 语法：`name` 或 `name:description`（冒号分隔）。
 /// 逗号分隔多个 tag。

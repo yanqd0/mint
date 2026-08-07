@@ -1,4 +1,5 @@
 use clap::Parser;
+
 use mint_faa::cli::Cli;
 
 fn main() {

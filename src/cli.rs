@@ -1,5 +1,9 @@
 //! clap 子命令定义与分发。
 
+use std::path::PathBuf;
+
+use clap::{Parser, Subcommand};
+
 use crate::db;
 use crate::error::Error;
 use crate::models::{Issue, Kind, Status};
@@ -7,8 +11,6 @@ use crate::output;
 use crate::project;
 use crate::state::{self, Action};
 use crate::tag;
-use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 
 /// 全局 SQLite issue 系统：mint-faa（命令 `mint`）。
 #[derive(Parser)]

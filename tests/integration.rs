@@ -2,12 +2,13 @@
 //!
 //! 注意：测试使用 `tempfile`，禁绝对路径；断言不依赖环境。
 
+use tempfile::TempDir;
+
 use mint_faa::db;
 use mint_faa::models::Status;
 use mint_faa::project;
 use mint_faa::state::{self, Action};
 use mint_faa::tag;
-use tempfile::TempDir;
 
 /// 建库 + 注册项目，返回 (连接, TempDir, 项目 id)。
 /// TempDir 必须随返回存活——否则数据库文件被删除，连接指向只读空库。
