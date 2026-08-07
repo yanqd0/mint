@@ -330,6 +330,58 @@ fn st_roadmap_link_missing_ids() {
     assert!(stderr.contains("issue #999 not found"), "stderr: {stderr}");
 }
 
+/// plan 状态流程：create → link → close(done) → reopen → drop，共享状态机。
+#[test]
+fn st_plan_crud_and_status() {
+    let (_dir, db) = empty_db();
+    let iid = add_issue(&db, "x");
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    run_json(&db, &["plan", "link", "1", &iid.to_string(), "--json"]);
+
+    let v = run_json(&db, &["plan", "close", "1", "--json"]);
+    assert_eq!(v["to"], "done");
+    run_json(&db, &["plan", "reopen", "1", "--json"]);
+    let v = run_json(
+        &db,
+        &["plan", "drop", "1", "--reason", "superseded", "--json"],
+    );
+    assert_eq!(v["to"], "dropped");
+    let v = run_json(&db, &["plan", "show", "1", "--json"]);
+    assert_eq!(v["status"], "dropped");
+    assert_eq!(v["dropped_reason"], "superseded");
+}
+
+/// commit --sha 记录 last_commit_id，show 展示。
+#[test]
+fn st_commit_records_sha() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "c");
+    let v = run_json(
+        &db,
+        &["commit", &id.to_string(), "--sha", "abc123", "--json"],
+    );
+    assert_eq!(v["last_commit_id"], "abc123");
+    let v = run_json(&db, &["show", &id.to_string(), "--json"]);
+    assert_eq!(v["last_commit_id"], "abc123");
+}
+
+/// 非 git 目录 commit 无 --sha → 报错。
+#[test]
+fn st_commit_head_requires_git() {
+    let (dir, db) = empty_db();
+    let id = add_issue(&db, "c");
+    let stderr = mint(&db)
+        .current_dir(dir.path())
+        .args(["commit", &id.to_string()])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let stderr = String::from_utf8_lossy(&stderr).to_string();
+    assert!(stderr.contains("not a git repository"), "stderr: {stderr}");
+}
+
 /// 性能：seed 200 条后 list --json 应 < 2000ms（宽松 smoke 值，debug 未优化）。
 ///
 /// arrange 用 lib API seed（避免 200 次子进程），act 用 CLI 二进制——被测对象是
