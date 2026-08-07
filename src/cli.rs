@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+use crate::container::{self, ContainerKind};
 use crate::db;
 use crate::error::Error;
 use crate::models::{Issue, Kind, Status};
@@ -37,6 +38,10 @@ enum Commands {
     State(StateArgs),
     /// Tag subcommands
     Tag(TagArgs),
+    /// Roadmap container subcommands
+    Roadmap(RoadmapArgs),
+    /// Plan container subcommands
+    Plan(PlanArgs),
 }
 
 #[derive(clap::Args)]
@@ -73,6 +78,81 @@ struct TagArgs {
 enum TagCmd {
     /// List all tags (with issue counts)
     List(ListTagsArgs),
+}
+
+#[derive(clap::Args)]
+struct RoadmapArgs {
+    #[command(subcommand)]
+    command: RoadmapCmd,
+}
+
+#[derive(Subcommand)]
+enum RoadmapCmd {
+    /// Create a roadmap
+    Create(ContainerCreateArgs),
+    /// List roadmaps (with issue counts)
+    List(ListContainersArgs),
+    /// Show a roadmap's details and its issues
+    Show(ContainerIdArgs),
+    /// Link an issue to a roadmap
+    Link(ContainerLinkArgs),
+    /// Unlink an issue from a roadmap
+    Unlink(ContainerLinkArgs),
+}
+
+#[derive(clap::Args)]
+struct PlanArgs {
+    #[command(subcommand)]
+    command: PlanCmd,
+}
+
+#[derive(Subcommand)]
+enum PlanCmd {
+    /// Create a plan
+    Create(ContainerCreateArgs),
+    /// List plans (with issue counts)
+    List(ListContainersArgs),
+    /// Show a plan's details and its issues
+    Show(ContainerIdArgs),
+    /// Link an issue to a plan
+    Link(ContainerLinkArgs),
+    /// Unlink an issue from a plan
+    Unlink(ContainerLinkArgs),
+}
+
+#[derive(clap::Args)]
+struct ContainerCreateArgs {
+    title: String,
+    /// Optional description
+    #[arg(long)]
+    description: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct ListContainersArgs {
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct ContainerIdArgs {
+    id: i64,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct ContainerLinkArgs {
+    id: i64,
+    issue_id: i64,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(clap::Args)]
@@ -193,6 +273,16 @@ impl Cli {
             Commands::Tag(t) => match &t.command {
                 TagCmd::List(l) => cmd_tag_list(&conn, l),
             },
+            Commands::Roadmap(r) => cmd_container(
+                &conn,
+                ContainerKind::Roadmap,
+                &ContainerCmdDispatch::from(&r.command),
+            ),
+            Commands::Plan(p) => cmd_container(
+                &conn,
+                ContainerKind::Plan,
+                &ContainerCmdDispatch::from(&p.command),
+            ),
         }
     }
 
@@ -346,6 +436,169 @@ fn cmd_tag_list(conn: &rusqlite::Connection, l: &ListTagsArgs) -> Result<(), Err
         }
     }
     Ok(())
+}
+
+/// 容器命令分发（roadmap/plan 同构，共享 container 模块）。
+fn cmd_container(
+    conn: &rusqlite::Connection,
+    kind: ContainerKind,
+    cmd: &ContainerCmdDispatch,
+) -> Result<(), Error> {
+    match cmd {
+        ContainerCmdDispatch::Create(a) => cmd_container_create(conn, kind, a),
+        ContainerCmdDispatch::List(a) => cmd_container_list(conn, kind, a),
+        ContainerCmdDispatch::Show(a) => cmd_container_show(conn, kind, a),
+        ContainerCmdDispatch::Link(a) => cmd_container_link(conn, kind, a, true),
+        ContainerCmdDispatch::Unlink(a) => cmd_container_link(conn, kind, a, false),
+    }
+}
+
+/// 容器命令的统一描述（RoadmapCmd/PlanCmd 各自转换到它）。
+enum ContainerCmdDispatch<'a> {
+    Create(&'a ContainerCreateArgs),
+    List(&'a ListContainersArgs),
+    Show(&'a ContainerIdArgs),
+    Link(&'a ContainerLinkArgs),
+    Unlink(&'a ContainerLinkArgs),
+}
+
+impl<'a> From<&'a RoadmapCmd> for ContainerCmdDispatch<'a> {
+    fn from(c: &'a RoadmapCmd) -> Self {
+        match c {
+            RoadmapCmd::Create(a) => ContainerCmdDispatch::Create(a),
+            RoadmapCmd::List(a) => ContainerCmdDispatch::List(a),
+            RoadmapCmd::Show(a) => ContainerCmdDispatch::Show(a),
+            RoadmapCmd::Link(a) => ContainerCmdDispatch::Link(a),
+            RoadmapCmd::Unlink(a) => ContainerCmdDispatch::Unlink(a),
+        }
+    }
+}
+
+impl<'a> From<&'a PlanCmd> for ContainerCmdDispatch<'a> {
+    fn from(c: &'a PlanCmd) -> Self {
+        match c {
+            PlanCmd::Create(a) => ContainerCmdDispatch::Create(a),
+            PlanCmd::List(a) => ContainerCmdDispatch::List(a),
+            PlanCmd::Show(a) => ContainerCmdDispatch::Show(a),
+            PlanCmd::Link(a) => ContainerCmdDispatch::Link(a),
+            PlanCmd::Unlink(a) => ContainerCmdDispatch::Unlink(a),
+        }
+    }
+}
+
+/// create：新建容器，title 非空校验。
+fn cmd_container_create(
+    conn: &rusqlite::Connection,
+    kind: ContainerKind,
+    a: &ContainerCreateArgs,
+) -> Result<(), Error> {
+    if a.title.trim().is_empty() {
+        return Err(Error::Other("title must not be empty".to_string()));
+    }
+    let id = container::create(conn, kind, a.title.trim(), a.description.as_deref())?;
+    if a.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "id": id, "title": a.title, "status": "open",
+            }))?
+        );
+    } else {
+        println!("Created {} #{id} ({})", kind_noun(kind), a.title);
+    }
+    Ok(())
+}
+
+/// list：列出全部容器（含 issue 计数）。
+fn cmd_container_list(
+    conn: &rusqlite::Connection,
+    kind: ContainerKind,
+    a: &ListContainersArgs,
+) -> Result<(), Error> {
+    let items = container::list(conn, kind)?;
+    if a.json {
+        let json: Vec<serde_json::Value> = items
+            .iter()
+            .map(|(c, count)| {
+                serde_json::json!({
+                    "id": c.id, "title": c.title, "description": c.description,
+                    "status": c.status, "dropped_reason": c.dropped_reason,
+                    "issue_count": count, "created_at": c.created_at, "updated_at": c.updated_at,
+                })
+            })
+            .collect();
+        println!("{}", serde_json::to_string(&json)?);
+    } else {
+        print!("{}", output::format_container_list(&items));
+    }
+    Ok(())
+}
+
+/// show：容器详情 + 其下 issue。
+fn cmd_container_show(
+    conn: &rusqlite::Connection,
+    kind: ContainerKind,
+    a: &ContainerIdArgs,
+) -> Result<(), Error> {
+    let c = container::get(conn, kind, a.id)?
+        .ok_or_else(|| Error::Other(format!("{} #{} not found", kind_noun(kind), a.id)))?;
+    let issues = container::issues_for(conn, kind, a.id)?;
+    if a.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "id": c.id, "title": c.title, "description": c.description,
+                "status": c.status, "dropped_reason": c.dropped_reason,
+                "issues": issues, "created_at": c.created_at, "updated_at": c.updated_at,
+            }))?
+        );
+    } else {
+        print!("{}", output::format_container_show(&c, &issues));
+    }
+    Ok(())
+}
+
+/// link/unlink：关联或解除 issue。
+fn cmd_container_link(
+    conn: &rusqlite::Connection,
+    kind: ContainerKind,
+    a: &ContainerLinkArgs,
+    is_link: bool,
+) -> Result<(), Error> {
+    if is_link {
+        container::link(conn, kind, a.id, a.issue_id)?;
+    } else {
+        container::unlink(conn, kind, a.id, a.issue_id)?;
+    }
+    if a.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({"id": a.id, "issue_id": a.issue_id}))?
+        );
+    } else if is_link {
+        println!(
+            "linked issue #{} to {} #{}",
+            a.issue_id,
+            kind_noun(kind),
+            a.id
+        );
+    } else {
+        println!(
+            "unlinked issue #{} from {} #{}",
+            a.issue_id,
+            kind_noun(kind),
+            a.id
+        );
+    }
+    Ok(())
+}
+
+/// 容器名词（错误文案用）。
+fn kind_noun(kind: ContainerKind) -> &'static str {
+    match kind {
+        ContainerKind::Roadmap => "roadmap",
+        ContainerKind::Plan => "plan",
+    }
 }
 
 /// 执行无额外参数的状态转换（plan/start/reset/reopen）。

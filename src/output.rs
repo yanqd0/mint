@@ -1,6 +1,6 @@
 //! 人类可读输出（--json 由 serde 直接序列化，不经此处）。
 
-use crate::models::Issue;
+use crate::models::{Container, Issue, IssueSummary};
 
 /// 渲染 issue 列表（人类可读，每行一个）。
 pub fn format_list(issues: &[Issue]) -> String {
@@ -47,5 +47,47 @@ pub fn format_issue(i: &Issue) -> String {
     }
     out.push_str(&format!("  created: {}\n", i.created_at));
     out.push_str(&format!("  updated: {}\n", i.updated_at));
+    out
+}
+
+/// 渲染容器列表（人类可读，每行一个，含 issue 计数）。
+pub fn format_container_list(items: &[(Container, i64)]) -> String {
+    let mut out = String::new();
+    for (c, count) in items {
+        out.push_str(&format!(
+            "#{:<4} {:<10} {:<8} {}{} issues\n",
+            c.id,
+            c.status.as_str(),
+            count,
+            c.title,
+            if *count == 1 { "" } else { "s" }
+        ));
+    }
+    out
+}
+
+/// 渲染容器详情（人类可读，多行缩进）+ 其下 issue 列表。
+pub fn format_container_show(c: &Container, issues: &[IssueSummary]) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("#{} {}\n", c.id, c.title));
+    out.push_str(&format!("  status:  {}\n", c.status.as_str()));
+    if let Some(d) = &c.description {
+        out.push_str(&format!("  desc:    {d}\n"));
+    }
+    if let Some(dr) = &c.dropped_reason {
+        out.push_str(&format!("  dropped: {dr}\n"));
+    }
+    out.push_str(&format!("  issues:  {}\n", issues.len()));
+    for i in issues {
+        out.push_str(&format!(
+            "    #{:<4} {:<10} {:<14} {}\n",
+            i.id,
+            i.kind.as_str(),
+            i.status.as_str(),
+            i.title
+        ));
+    }
+    out.push_str(&format!("  created: {}\n", c.created_at));
+    out.push_str(&format!("  updated: {}\n", c.updated_at));
     out
 }

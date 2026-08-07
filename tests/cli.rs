@@ -276,6 +276,60 @@ fn st_project_autodetect_explicit() {
     assert_eq!(v["project"], "mint");
 }
 
+/// roadmap crud：create 2 个、list 带计数、show 聚合其下 issue。
+#[test]
+fn st_roadmap_crud() {
+    let (_dir, db) = empty_db();
+    let v = run_json(
+        &db,
+        &["roadmap", "create", "r1", "--description", "d", "--json"],
+    );
+    assert_eq!(v["status"], "open");
+    run_json(&db, &["roadmap", "create", "r2", "--json"]);
+
+    let v = run_json(&db, &["roadmap", "list", "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 2);
+    assert_eq!(v[0]["issue_count"], 0);
+
+    // link 两个 issue 后 show 聚合
+    let i1 = add_issue(&db, "a");
+    let i2 = add_issue(&db, "b");
+    run_json(&db, &["roadmap", "link", "1", &i1.to_string(), "--json"]);
+    run_json(&db, &["roadmap", "link", "1", &i2.to_string(), "--json"]);
+    let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
+    assert_eq!(v["issues"].as_array().unwrap().len(), 2);
+}
+
+/// roadmap link/unlink 幂等：重复 link 仍 1 条；unlink 归零。
+#[test]
+fn st_roadmap_link_unlink_idempotent() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "x");
+    run_json(&db, &["roadmap", "create", "r", "--json"]);
+    run_json(&db, &["roadmap", "link", "1", &id.to_string(), "--json"]);
+    run_json(&db, &["roadmap", "link", "1", &id.to_string(), "--json"]); // 幂等
+    let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
+    assert_eq!(v["issues"].as_array().unwrap().len(), 1);
+    run_json(&db, &["roadmap", "unlink", "1", &id.to_string(), "--json"]);
+    let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
+    assert_eq!(v["issues"].as_array().unwrap().len(), 0);
+}
+
+/// link 不存在的 roadmap/issue → 干净报错。
+#[test]
+fn st_roadmap_link_missing_ids() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "x");
+    let stderr = run_fail(&db, &["roadmap", "link", "999", &id.to_string()]);
+    assert!(
+        stderr.contains("roadmap #999 not found"),
+        "stderr: {stderr}"
+    );
+    run_json(&db, &["roadmap", "create", "r", "--json"]);
+    let stderr = run_fail(&db, &["roadmap", "link", "1", "999"]);
+    assert!(stderr.contains("issue #999 not found"), "stderr: {stderr}");
+}
+
 /// 性能：seed 200 条后 list --json 应 < 2000ms（宽松 smoke 值，debug 未优化）。
 ///
 /// arrange 用 lib API seed（避免 200 次子进程），act 用 CLI 二进制——被测对象是
