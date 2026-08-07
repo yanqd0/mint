@@ -3,6 +3,7 @@
 use crate::db;
 use crate::error::Error;
 use crate::models::{Issue, Kind, Status};
+use crate::output;
 use crate::project;
 use crate::state::{self, Action};
 use crate::tag;
@@ -289,17 +290,7 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
     if l.json {
         println!("{}", serde_json::to_string(&issues)?);
     } else {
-        for i in &issues {
-            let tag_str = if i.tags.is_empty() {
-                String::new()
-            } else {
-                format!(" [{}]", i.tags.join(","))
-            };
-            println!(
-                "#{:<4} {:<10} {:<14} {}{}",
-                i.id, i.kind_str(), i.status_str(), i.title, tag_str
-            );
-        }
+        print!("{}", output::format_list(&issues));
     }
     Ok(())
 }
@@ -343,24 +334,7 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
     if s.json {
         println!("{}", serde_json::to_string(&issue)?);
     } else {
-        println!("#{} {}", issue.id, issue.title);
-        println!("  status:  {}", issue.status_str());
-        println!("  kind:    {}", issue.kind_str());
-        println!("  project: {}", issue.project.as_deref().unwrap_or("?"));
-        if let Some(b) = &issue.body {
-            println!("  body:    {b}");
-        }
-        if let Some(tc) = &issue.test_cmd {
-            println!("  test:    {tc}");
-        }
-        if let Some(dr) = &issue.dropped_reason {
-            println!("  dropped: {dr}");
-        }
-        if !issue.tags.is_empty() {
-            println!("  tags:    {}", issue.tags.join(", "));
-        }
-        println!("  created: {}", issue.created_at);
-        println!("  updated: {}", issue.updated_at);
+        print!("{}", output::format_issue(&issue));
     }
     Ok(())
 }
@@ -462,11 +436,3 @@ fn transition(
     Ok(())
 }
 
-impl Issue {
-    fn status_str(&self) -> String {
-        format!("{:?}", self.status).to_lowercase()
-    }
-    fn kind_str(&self) -> String {
-        format!("{:?}", self.kind).to_lowercase()
-    }
-}
