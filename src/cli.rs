@@ -30,6 +30,22 @@ enum Commands {
     List(ListArgs),
     /// Show an issue's details
     Show(ShowArgs),
+    /// State transitions
+    State(StateArgs),
+    /// Tag subcommands
+    Tag(TagArgs),
+    /// Config subcommands
+    Config(ConfigArgs),
+}
+
+#[derive(clap::Args)]
+struct StateArgs {
+    #[command(subcommand)]
+    command: StateCmd,
+}
+
+#[derive(Subcommand)]
+enum StateCmd {
     /// Advance open -> planned
     Plan(TransArgs),
     /// Advance planned -> dev
@@ -44,10 +60,6 @@ enum Commands {
     Drop(DropArgs),
     /// Reopen done/dropped -> open
     Reopen(TransArgs),
-    /// Tag subcommands
-    Tag(TagArgs),
-    /// Config subcommands
-    Config(ConfigArgs),
 }
 
 #[derive(clap::Args)]
@@ -187,13 +199,15 @@ impl Cli {
             Commands::Add(a) => cmd_add(&conn, &cwd, a),
             Commands::List(l) => cmd_list(&conn, l),
             Commands::Show(s) => cmd_show(&conn, s),
-            Commands::Plan(t) => cmd_trans(&conn, t, Action::Plan),
-            Commands::Start(t) => cmd_trans(&conn, t, Action::Start),
-            Commands::Stage(s) => cmd_stage(&conn, s),
-            Commands::Close(c) => cmd_close(&conn, c),
-            Commands::Reset(t) => cmd_trans(&conn, t, Action::Reset),
-            Commands::Drop(d) => cmd_drop(&conn, d),
-            Commands::Reopen(t) => cmd_trans(&conn, t, Action::Reopen),
+            Commands::State(st) => match &st.command {
+                StateCmd::Plan(t) => cmd_trans(&conn, t, Action::Plan),
+                StateCmd::Start(t) => cmd_trans(&conn, t, Action::Start),
+                StateCmd::Stage(s) => cmd_stage(&conn, s),
+                StateCmd::Close(c) => cmd_close(&conn, c),
+                StateCmd::Reset(t) => cmd_trans(&conn, t, Action::Reset),
+                StateCmd::Drop(d) => cmd_drop(&conn, d),
+                StateCmd::Reopen(t) => cmd_trans(&conn, t, Action::Reopen),
+            },
             Commands::Tag(t) => match &t.command {
                 TagCmd::List(l) => cmd_tag_list(&conn, l),
             },
