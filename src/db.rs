@@ -14,6 +14,12 @@ pub fn open(path: &Path) -> Result<rusqlite::Connection, Error> {
     Ok(conn)
 }
 
+/// 测试辅助：对内存连接执行迁移。
+#[cfg(test)]
+pub fn migrate_for_test(conn: &rusqlite::Connection) {
+    migrate(conn).expect("migrate failed");
+}
+
 /// 按 `PRAGMA user_version` 执行增量迁移。
 fn migrate(conn: &rusqlite::Connection) -> Result<(), Error> {
     let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
