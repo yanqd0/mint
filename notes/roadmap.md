@@ -28,7 +28,7 @@
 - 4 表：projects / issues / tags / issue_tags（migration v1）
 - 6 态状态机：`open/planned/dev/test/done/dropped`，全命令 plan/start/stage/close/reset/drop/reopen
   - `test` 语义 = testing；close 废弃 resolution（看 commit message）；test_cmd 必填（跳过测试填 `not-tested`）
-- project 检测：git 库名 → dirname → `--project` → 兜底 `default`，自动注册
+- project 检测：`--project` → git 库名 → dirname → 兜底 `default`，自动注册
 - tag：独立表 + 关联表，自由创建 + description
 - CLI：add/list/show + 状态命令 + `--json`；用户侧输出全英文
 - 数据落在 `$XDG_DATA_HOME/mint/mint.db`

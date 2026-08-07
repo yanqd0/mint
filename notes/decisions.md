@@ -81,7 +81,7 @@
 
 **背景**：全局多项目共享单一库，来源识别。
 
-**决策**：add 时按 git 库名 → dirname → `--project`（自定义）→ 兜底 `default` 解析，自动注册到 projects 表。
+**决策**：add 时按 `--project`（自定义）→ git 库名 → dirname → 兜底 `default` 解析，自动注册到 projects 表。
 
 **理由**：贴合基于 git 的开发场景；`default` 兜底保证无 git 上下文也可用；自动注册免人工维护项目清单。
 

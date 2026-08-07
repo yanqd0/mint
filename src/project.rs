@@ -1,4 +1,4 @@
-//! project 检测（git 库名 → dirname → --project → default）与自动注册。
+//! project 检测（--project 显式 → git 库名 → dirname → default）与自动注册。
 
 use std::path::Path;
 use std::process::Command;

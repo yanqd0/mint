@@ -230,8 +230,9 @@ fn cmd_add(
     let status = Status::Open;
     let test_cmd: Option<&str> = None;
 
-    // 事务包裹：project 注册 + issue 插入 + tag 关联原子提交，中断不留孤儿行
-    let tx = conn.transaction()?;
+    // 事务包裹：project 注册 + issue 插入 + tag 关联原子提交，中断不留孤儿行。
+    // 用 BEGIN IMMEDIATE：事务起点即持写锁，避免 WAL 下 DEFERRED 的 BUSY_SNAPSHOT 间隙。
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let pid = project::ensure(&tx, &pname, cwd)?;
 
     tx.execute(

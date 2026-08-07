@@ -132,6 +132,38 @@ fn st_transition_illegal_rejected() {
     assert!(stderr.contains("invalid transition"), "stderr: {stderr}");
 }
 
+/// 非法 close（无 test-cmd）报 invalid transition 而非 close requires（校验顺序回归）。
+#[test]
+fn st_illegal_close_without_test_cmd_reports_invalid_transition() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "no-cmd");
+    let stderr = run_fail(&db, &["state", "close", &id.to_string()]);
+    assert!(
+        stderr.contains("invalid transition"),
+        "应报 invalid transition，实际: {stderr}"
+    );
+    assert!(
+        !stderr.contains("close requires --test-cmd"),
+        "不应被 test_cmd 错误掩盖，实际: {stderr}"
+    );
+}
+
+/// 空 title / 空 --project 被拒绝。
+#[test]
+fn st_add_rejects_empty_title_and_project() {
+    let (_dir, db) = empty_db();
+    let stderr = run_fail(&db, &["add", ""]);
+    assert!(
+        stderr.contains("title must not be empty"),
+        "stderr: {stderr}"
+    );
+    let stderr = run_fail(&db, &["add", "ok", "--project", ""]);
+    assert!(
+        stderr.contains("--project must not be empty"),
+        "stderr: {stderr}"
+    );
+}
+
 /// close 必填 --test-cmd。
 #[test]
 fn st_close_requires_test_cmd() {
