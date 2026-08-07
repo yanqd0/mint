@@ -51,7 +51,7 @@ sqruff lint src/db                           # SQL 检查（需已安装 sqruff�
 
 ## 报告格式（token 最小化）
 
-- **全过**：一行 `OK（UT 14 + IT 8 + ST 10；clippy 零警告）`；未跑层级前标 `-`（如 `-sqruff：未安装`）。
+- **全过**：一行 `OK（UT {n} + IT {n} + ST {n}；clippy 零警告）`，计数以 `cargo test` 实际输出为准；未跑层级前标 `-`（如 `-sqruff：未安装`）。
 - **失败**：按根因归类 `<文件:行号> — 一句话描述` + `expected/actual` + `→ 建议：一句修复方向`。
 
 ## 约束

@@ -6,39 +6,43 @@
 """
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path.cwd()
+# 优先用 Claude Code 注入的项目目录；回退当前工作目录。
+PROJECT_ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", Path.cwd()))
 
 
 def has_cargo_toml() -> bool:
     return (PROJECT_ROOT / "Cargo.toml").exists()
 
 
+def _run(cmd: list[str], timeout: int) -> bool:
+    """运行命令并返回是否成功；cargo 缺失/超时降级为失败而非崩溃。"""
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        print(f"[rust_format] 执行失败: {' '.join(cmd)}", file=sys.stderr)
+        return False
+
+
 def fmt_check() -> bool:
     """Run cargo fmt --check. Returns True if already formatted."""
-    result = subprocess.run(
-        ["cargo", "fmt", "--check"],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    return result.returncode == 0
+    return _run(["cargo", "fmt", "--check"], timeout=30)
 
 
 def fmt_all() -> bool:
     """Run cargo fmt --all. Returns True on success."""
-    result = subprocess.run(
-        ["cargo", "fmt", "--all"],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    return result.returncode == 0
+    return _run(["cargo", "fmt", "--all"], timeout=60)
 
 
 def main():
