@@ -109,6 +109,20 @@ fn st_list_default_filters_active() {
     assert_eq!(v.as_array().unwrap().len(), 1);
 }
 
+/// 显式 --status done 不叠加活跃过滤（参数化模板的微妙分支）。
+#[test]
+fn st_list_status_done_bypasses_active_filter() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "to-close");
+    advance_to_done(&db, id);
+    // 不带 --all 也应列出 done（?2 IS NOT NULL 绕过活跃过滤）
+    let v = run_json(&db, &["list", "--status", "done", "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 1);
+    // 带 --all 结果不变
+    let v = run_json(&db, &["list", "--status", "done", "--all", "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 1);
+}
+
 /// 非法转换被拒绝（open 直接 close）。
 #[test]
 fn st_transition_illegal_rejected() {
@@ -180,7 +194,8 @@ fn st_json_output_shape() {
     for key in ["id", "title", "project", "kind", "status"] {
         assert!(v.get(key).is_some(), "add 缺字段 {key}: {v}");
     }
-    let v = run_json(&db, &["state", "plan", "1", "--json"]);
+    let id = v["id"].as_i64().expect("add 应返回 id");
+    let v = run_json(&db, &["state", "plan", &id.to_string(), "--json"]);
     for key in ["id", "from", "to"] {
         assert!(v.get(key).is_some(), "state 缺字段 {key}: {v}");
     }
@@ -217,9 +232,15 @@ fn st_list_on_seeded_db_perf() {
         let pid = mint_faa::project::ensure(&conn, "perf", dir.path()).unwrap();
         for i in 0..200 {
             conn.execute(
-                "INSERT INTO issues (title, kind, status, project_id)
-                 VALUES (?1, 'problem', 'open', ?2)",
-                rusqlite::params![format!("seed {i}"), pid],
+                mint_faa::db::ISSUE_INSERT,
+                rusqlite::params![
+                    format!("seed {i}"),
+                    None::<String>,
+                    "problem",
+                    "open",
+                    pid,
+                    None::<String>
+                ],
             )
             .unwrap();
         }
