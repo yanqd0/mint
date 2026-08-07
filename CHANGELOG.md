@@ -17,6 +17,10 @@
 - 修复首次运行数据库父目录不存在时创建失败的问题。
 - 修复 clippy 提示的 DoubleEndedIterator 用法。
 - 修复 Stop hook 依赖工作目录、cargo 异常无降级的问题。
+- 修复 reopen 后残留 `dropped_reason`（重开后旧周期字段不再有意义）。
+- 修复生产代码 `expect` 违规、project 注册吞掉真实错误、close 校验顺序掩盖 invalid transition。
+- 修复 `--tag "a:"` 产出畸形 tag 名；新增 title/`--project` 空值校验。
+- 并发健壮性：cmd_add 事务原子提交（BEGIN IMMEDIATE）、project/tag 注册幂等、busy_timeout + WAL。
 
 ### Others
 
