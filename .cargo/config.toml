@@ -1,0 +1,53 @@
+# ========== 环境变量 ==========
+[env]
+# 覆盖率 *.profraw 收集到 target/profraw/（覆盖用户级 /tmp 默认值）。
+# cargo test 直接生效；cargo tarpaulin 需通过 shell 环境变量手动传入。
+LLVM_PROFILE_FILE = { value = "target/profraw/%p-%m.profraw", relative = true }
+
+# ========== 网络 ==========
+[net]
+# 使用系统 git 克隆依赖，充分利用 git 代理/镜像配置
+git-fetch-with-cli = true
+
+# ========== 编译构建 ==========
+[build]
+# 增量编译
+incremental = true
+# 全局 rustflags：对所有 target 和 profile 生效
+rustflags = [
+    # v0 符号修饰：更小、确定性、利于 LTO
+    "-C", "symbol-mangling-version=v0",
+]
+
+# ========== 编译优化配置 ==========
+
+[profile.release]
+opt-level = "s"          # 平衡 size/speed 优化
+strip = true             # 去除调试符号
+debug = false            # 不生成 debug 信息（如需堆栈回溯改为 "limited"）
+lto = true               # 链接时优化
+codegen-units = 1        # 单代码生成单元，最大化优化
+panic = "abort"          # panic 直接 abort，不生成 unwinding 代码
+
+[profile.dev]
+opt-level = 0            # 快速编译
+debug = true             # 保留调试信息
+strip = false            # 保留符号
+
+[profile.test]
+opt-level = 0
+debug = true
+strip = false
+
+# ========== 各平台 target 配置 ==========
+
+# --- Linux x86_64（主要开发/部署平台）---
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = [
+    # 使用 mold 高速链接器，速度提升 3-5 倍。
+    # 如无法安装 mold（apt install mold），注释下一行回退默认 ld。
+    "-C", "link-arg=-fuse-ld=mold",
+    # 压缩 debug 段
+    "-C", "link-arg=-Wl,--compress-debug-sections=zlib",
+]
