@@ -9,7 +9,8 @@ mint = **M**inimal **I**ssue & **N**eeds **T**racker。一个全局、单机、S
 ## 硬约束
 
 - **命令名 `mint`**，包名（crates.io 发布名）**`mint-faa`**——二者不同，勿混用。
-- **全局单一 SQLite**：数据在 `$XDG_DATA_HOME/mint/mint.db`（`ISSUES_DB_PATH` 可覆盖），不建插件缓存目录（避免被插件更新覆盖）。
+- **全局单一 SQLite**：数据在 `$XDG_DATA_HOME/mint/mint.db`（`MINT_DB_PATH` 可覆盖），不建插件缓存目录（避免被插件更新覆盖）。
+- **轻量级、无配置文件**：配置走 CLI 参数 + 环境变量；环境变量统一 `MINT_` 前缀。
 - **单机、无守护进程**：每次调用即 CLI 进程，毫秒级启动。
 - **project 是标签而非隔离边界**：单一全局库，跨项目经 `refs` 互引。
 - **dogfooding**：用 mint 管理 mint 自己的开发 issue。

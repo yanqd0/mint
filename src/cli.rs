@@ -13,9 +13,10 @@ use std::path::PathBuf;
 /// 全局 SQLite issue 系统：mint-faa（命令 `mint`）。
 #[derive(Parser)]
 #[command(name = "mint", version, about = "Minimal Issue & Needs Tracker")]
+// 环境变量统一使用 MINT_ 前缀（轻量级项目不设配置文件，配置走 CLI 参数 + 环境变量）。
 pub struct Cli {
     /// Override DB path (default: $XDG_DATA_HOME/mint/mint.db)
-    #[arg(long, global = true, env = "ISSUES_DB_PATH")]
+    #[arg(long, global = true, env = "MINT_DB_PATH")]
     db: Option<PathBuf>,
 
     #[command(subcommand)]
@@ -34,8 +35,6 @@ enum Commands {
     State(StateArgs),
     /// Tag subcommands
     Tag(TagArgs),
-    /// Config subcommands
-    Config(ConfigArgs),
 }
 
 #[derive(clap::Args)]
@@ -60,25 +59,6 @@ enum StateCmd {
     Drop(DropArgs),
     /// Reopen done/dropped -> open
     Reopen(TransArgs),
-}
-
-#[derive(clap::Args)]
-struct ConfigArgs {
-    #[command(subcommand)]
-    command: ConfigCmd,
-}
-
-#[derive(Subcommand)]
-enum ConfigCmd {
-    /// Show configuration (DB path)
-    Show(ConfigShowArgs),
-}
-
-#[derive(clap::Args)]
-struct ConfigShowArgs {
-    /// Output as JSON
-    #[arg(long)]
-    json: bool,
 }
 
 #[derive(clap::Args)]
@@ -211,13 +191,10 @@ impl Cli {
             Commands::Tag(t) => match &t.command {
                 TagCmd::List(l) => cmd_tag_list(&conn, l),
             },
-            Commands::Config(c) => match &c.command {
-                ConfigCmd::Show(s) => cmd_config_show(&path, s),
-            },
         }
     }
 
-    /// 数据库路径：ISSUES_DB_PATH > $XDG_DATA_HOME/mint/mint.db
+    /// 数据库路径：MINT_DB_PATH > $XDG_DATA_HOME/mint/mint.db
     fn db_path(&self) -> PathBuf {
         if let Some(p) = &self.db {
             return p.clone();
@@ -387,21 +364,6 @@ fn cmd_tag_list(conn: &rusqlite::Connection, l: &ListTagsArgs) -> Result<(), Err
             let desc = t.description.as_deref().unwrap_or("");
             println!("{:<16} {:>5} issues  {}", t.name, count, desc);
         }
-    }
-    Ok(())
-}
-
-/// config show：显示配置（DB 路径）。
-fn cmd_config_show(path: &std::path::Path, s: &ConfigShowArgs) -> Result<(), Error> {
-    if s.json {
-        println!(
-            "{}",
-            serde_json::to_string(&serde_json::json!({
-                "db_path": path,
-            }))?
-        );
-    } else {
-        println!("db_path: {}", path.display());
     }
     Ok(())
 }

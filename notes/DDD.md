@@ -82,7 +82,7 @@ stateDiagram-v2
 | done/dropped → open | `reopen` | 重开 |
 | 任意 → dropped | `drop` | 可附 `--reason` |
 
-**CLI 形态**：状态动作全部在 `mint state` 命名空间下：`mint state plan <id>` / `mint state close <id> --test-cmd '...'` / `mint state drop <id> --reason '...'`。顶层命令仅 add/list/show/state/tag/config（`state` 释放了 `plan` 顶层名给 0.2.0 的 plan 容器）。
+**CLI 形态**：状态动作全部在 `mint state` 命名空间下：`mint state plan <id>` / `mint state close <id> --test-cmd '...'` / `mint state drop <id> --reason '...'`。顶层命令仅 add/list/show/state/tag（`state` 释放了 `plan` 顶层名给 0.2.0 的 plan 容器）。**无配置文件**：配置走 CLI 参数 + 环境变量（统一 `MINT_` 前缀，如 `MINT_DB_PATH`）。
 
 **无 dev→done 捷径**：跳过测试也要 `stage` 到 `test`，close 时 test_cmd 填 `not-tested`（用户侧英文值；中文语境下可写作"没测"）。此规则需写入未来 adapter 提示词。
 

@@ -59,7 +59,9 @@ cargo clippy --all-targets   # static analysis (aim for zero warnings)
 ## Data
 
 On first run, mint creates its database at `$XDG_DATA_HOME/mint/mint.db`
-(override with the `ISSUES_DB_PATH` environment variable or `--db`).
+(override with the `MINT_DB_PATH` environment variable or `--db`).
+
+Configuration is kept minimal — no config files. All environment variables use the `MINT_` prefix.
 
 ## Commit convention
 
