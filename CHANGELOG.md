@@ -12,17 +12,22 @@
 - issue links：`mint link create/remove/list`，`related`/`solves`/`duplicates` 带类型多对多（schema v3，单向存 + 反向派生），show 内嵌 links。
 - 时区显示修复：存储 UTC、显示转本地时区（`datetime(col,'localtime')`）。
 - `--all/-a` 短别名：所有 list 命令统一（默认隐藏 dropped/done，`-a` 全量）。
+- mint delete 顶层命令：危险操作收敛到统一入口（`mint delete issue|plan|roadmap <id>`），删除 SQL 为完整事务、先解绑关联再删、与派生状态同步原子。
 
 ### Bug Fixes
 
 - 修复旧 v2 库升级时容器表不更新：002 原地改 DDL 致跳迁移，改为 004 增量迁移重建（DROP 重建，0.2.0 未发布、容器表全空无数据丢失）。
 - 修复显示时间未转本地时区的问题。
+- 修复容器列表单复数误加在标题后（"标题s issues"），计数单复数移到 issue 后。
 
 ### Others
 
-- 迁移框架重构：migration 有序数组驱动 `PRAGMA user_version` 增量升级，替代单文件全量重建。
-- 文档：DDD.md 容器重写（5 态派生 + 层级 + version/body）、decisions.md D16-D20、mint-dogfood skill 命令表与约定更新、src/CLAUDE.md 数据模型 8 表约束。
-- 端到端 ST：issue links、plan 状态流程、state commit、--all/-a。
+- 迁移合并：4 个 migration 合并为 1 个（001 最终 schema，user_version 重定基线 1），清升级专属 UT。
+- 测试体系：UT 全面参数化（rstest：状态机全矩阵/枚举往返/格式化字段组合）、cargo-llvm-cov 覆盖率实测（85%→91%）、ST 补粗粒度 migration 与容器派生边界。
+- SQL 规范：剥离至 src/db/CLAUDE.md（组织约定/简易规范/迁移哲学）、sqruff_format Stop hook（只格式化改动文件）、全面整改布局（SELECT 列每行一列）。
+- issue label 全局改名：`tag`→`label`（tags/issue_tags→labels/issue_labels、`--tag`→`--label`、`mint tag`→`mint label`），与 git tag / roadmap version 语义区分。
+- mint-dogfood skill 重构为流程注入：描述性参数 + flow reference 多流程（bug/requirement/review/todo/planning/conditions/session）+ 新 session 接管模式。
+- 开发规范：commit 自洽原则、RENAME 外键陷阱、INSERT OR IGNORE 注意、参数化优先约定写入 src/CLAUDE.md。
 - 版本号 bump 至 0.2.0-alpha.1。
 
 ## 0.1.0
