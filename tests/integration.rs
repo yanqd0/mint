@@ -49,7 +49,7 @@ fn full_workflow_passes() {
     for (action, test_cmd) in [
         (Action::Plan, None),
         (Action::Start, None),
-        (Action::Stage, Some("cargo test")),
+        (Action::Commit, Some("cargo test")),
         (Action::Close, Some("cargo test")),
     ] {
         let cur = status_of(&conn, id);
@@ -133,7 +133,7 @@ fn close_requires_test_cmd() {
     ));
     assert!(state::close_requires_test_cmd(Action::Close, Some("没测")));
     // 非 close 不强制
-    assert!(state::close_requires_test_cmd(Action::Stage, None));
+    assert!(state::close_requires_test_cmd(Action::Commit, None));
 }
 
 /// drop 写入 dropped_reason。

@@ -46,8 +46,6 @@ enum Commands {
     Roadmap(RoadmapArgs),
     /// Plan container subcommands
     Plan(PlanArgs),
-    /// Record the last commit that addressed an issue
-    Commit(CommitArgs),
     /// Issue link subcommands
     Link(LinkArgs),
 }
@@ -64,8 +62,8 @@ enum StateCmd {
     Plan(TransArgs),
     /// Advance planned -> dev
     Start(TransArgs),
-    /// Advance dev -> test (enter testing)
-    Stage(StageArgs),
+    /// Advance dev -> test (commit code, requires --sha)
+    Commit(CommitArgs),
     /// Close test -> done (requires --test-cmd)
     Close(CloseArgs),
     /// Rework: planned/dev/test -> open
@@ -178,9 +176,12 @@ struct ContainerLinkArgs {
 #[derive(clap::Args)]
 struct CommitArgs {
     id: i64,
-    /// Explicit commit SHA (default: current HEAD)
+    /// Commit SHA (default: current HEAD; required in non-git dirs)
     #[arg(long)]
     sha: Option<String>,
+    /// Optional test command (informational)
+    #[arg(long)]
+    test_cmd: Option<String>,
     /// Output as JSON
     #[arg(long)]
     json: bool,
@@ -270,17 +271,6 @@ struct TransArgs {
 }
 
 #[derive(clap::Args)]
-struct StageArgs {
-    id: i64,
-    /// Test command used to reproduce/verify (e.g. 'cargo test')
-    #[arg(long)]
-    test_cmd: Option<String>,
-    /// Output as JSON
-    #[arg(long)]
-    json: bool,
-}
-
-#[derive(clap::Args)]
 struct CloseArgs {
     id: i64,
     /// Test command used to reproduce/verify (required; 'not-tested' if skipped)
@@ -363,7 +353,7 @@ impl Cli {
             Commands::State(st) => match &st.command {
                 StateCmd::Plan(t) => cmd_trans(&conn, t, Action::Plan),
                 StateCmd::Start(t) => cmd_trans(&conn, t, Action::Start),
-                StateCmd::Stage(s) => cmd_stage(&conn, s),
+                StateCmd::Commit(c) => cmd_commit(&conn, &cwd, c),
                 StateCmd::Close(c) => cmd_close(&conn, c),
                 StateCmd::Reset(t) => cmd_trans(&conn, t, Action::Reset),
                 StateCmd::Drop(d) => cmd_drop(&conn, d),
@@ -382,7 +372,6 @@ impl Cli {
                 ContainerKind::Plan,
                 &ContainerCmdDispatch::from(&p.command),
             ),
-            Commands::Commit(c) => cmd_commit(&conn, &cwd, c),
             Commands::Link(l) => cmd_link(&conn, &l.command),
         }
     }
@@ -762,46 +751,6 @@ fn kind_noun(kind: ContainerKind) -> &'static str {
 }
 
 /// commit：记录 issue 的最后关联 commit（覆盖旧值，--sha 优先，否则读 HEAD）。
-fn cmd_commit(
-    conn: &rusqlite::Connection,
-    cwd: &std::path::Path,
-    c: &CommitArgs,
-) -> Result<(), Error> {
-    // 校验 issue 存在
-    let exists: Option<String> = conn
-        .query_row(db::ISSUE_SELECT_STATUS, rusqlite::params![c.id], |r| {
-            r.get(0)
-        })
-        .optional()
-        .map_err(Error::from)?;
-    if exists.is_none() {
-        return Err(Error::Other(format!("issue #{} not found", c.id)));
-    }
-
-    let sha: String = match &c.sha {
-        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
-        _ => git::head_sha(cwd).ok_or_else(|| {
-            Error::Other(
-                "not a git repository (use --sha to record a commit explicitly)".to_string(),
-            )
-        })?,
-    };
-
-    conn.execute(db::ISSUE_UPDATE_LAST_COMMIT, rusqlite::params![sha, c.id])?;
-
-    if c.json {
-        println!(
-            "{}",
-            serde_json::to_string(&serde_json::json!({
-                "id": c.id, "last_commit_id": sha,
-            }))?
-        );
-    } else {
-        println!("issue #{}: recorded commit {}", c.id, sha);
-    }
-    Ok(())
-}
-
 /// link 子命令分发。
 fn cmd_link(conn: &rusqlite::Connection, cmd: &LinkCmd) -> Result<(), Error> {
     match cmd {
@@ -871,13 +820,34 @@ fn cmd_link_list(conn: &rusqlite::Connection, a: &LinkListArgs) -> Result<(), Er
 
 /// 执行无额外参数的状态转换（plan/start/reset/reopen）。
 fn cmd_trans(conn: &rusqlite::Connection, t: &TransArgs, action: Action) -> Result<(), Error> {
-    transition(conn, t.id, action, None, None, t.json)
+    transition(conn, t.id, action, None, None, None, t.json)
 }
 
 /// stage：dev→test，可选 --test-cmd（空白归一为 None，避免写入空串）。
-fn cmd_stage(conn: &rusqlite::Connection, s: &StageArgs) -> Result<(), Error> {
-    let test_cmd = s.test_cmd.as_deref().filter(|c| !c.trim().is_empty());
-    transition(conn, s.id, Action::Stage, test_cmd, None, s.json)
+/// commit：dev→test，必填 --sha（写 last_commit_id），--sha 默认读当前 HEAD。
+fn cmd_commit(
+    conn: &rusqlite::Connection,
+    cwd: &std::path::Path,
+    c: &CommitArgs,
+) -> Result<(), Error> {
+    let sha: String = match &c.sha {
+        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
+        _ => git::head_sha(cwd).ok_or_else(|| {
+            Error::Other(
+                "not a git repository (use --sha to record a commit explicitly)".to_string(),
+            )
+        })?,
+    };
+    let test_cmd = c.test_cmd.as_deref().filter(|s| !s.trim().is_empty());
+    transition(
+        conn,
+        c.id,
+        Action::Commit,
+        test_cmd,
+        None,
+        Some(&sha),
+        c.json,
+    )
 }
 
 /// close：test→done，必填 --test-cmd。
@@ -888,13 +858,22 @@ fn cmd_close(conn: &rusqlite::Connection, c: &CloseArgs) -> Result<(), Error> {
         Action::Close,
         c.test_cmd.as_deref(),
         None,
+        None,
         c.json,
     )
 }
 
 /// drop：任意状态→dropped，可选 --reason。
 fn cmd_drop(conn: &rusqlite::Connection, d: &DropArgs) -> Result<(), Error> {
-    transition(conn, d.id, Action::Drop, None, d.reason.as_deref(), d.json)
+    transition(
+        conn,
+        d.id,
+        Action::Drop,
+        None,
+        d.reason.as_deref(),
+        None,
+        d.json,
+    )
 }
 
 /// 核心状态转换：读当前 -> 校验 -> 更新。
@@ -908,6 +887,7 @@ fn transition(
     action: Action,
     test_cmd: Option<&str>,
     reason: Option<&str>,
+    commit_sha: Option<&str>,
     json: bool,
 ) -> Result<(), Error> {
     let current: Status = conn
@@ -938,16 +918,15 @@ fn transition(
     let drop_reason: Option<&str> = if action == Action::Drop { reason } else { None };
     conn.execute(
         db::ISSUE_UPDATE_TRANSITION,
-        rusqlite::params![target, test_cmd, id, reset, drop_reason, reopen],
+        rusqlite::params![target, test_cmd, id, reset, drop_reason, reopen, commit_sha],
     )?;
 
     if json {
-        println!(
-            "{}",
-            serde_json::to_string(&serde_json::json!({
-                "id": id, "from": current, "to": target,
-            }))?
-        );
+        let mut v = serde_json::json!({"id": id, "from": current, "to": target});
+        if let Some(sha) = commit_sha {
+            v["last_commit_id"] = serde_json::Value::String(sha.to_string());
+        }
+        println!("{}", serde_json::to_string(&v)?);
     } else {
         println!("issue #{id}: {} -> {}", current, target);
     }

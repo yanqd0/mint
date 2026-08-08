@@ -10,7 +10,7 @@ use crate::models::Status;
 pub enum Action {
     Plan,
     Start,
-    Stage,
+    Commit,
     Close,
     Reset,
     Drop,
@@ -27,7 +27,7 @@ fn from_allowed(current: Status, action: Action) -> bool {
     match action {
         Action::Plan => current == Status::Open,
         Action::Start => current == Status::Planned,
-        Action::Stage => current == Status::Dev,
+        Action::Commit => current == Status::Dev,
         Action::Close => current == Status::Test,
         // reset：活跃链路状态（planned/dev/test）打回 open
         Action::Reset => matches!(current, Status::Planned | Status::Dev | Status::Test),
@@ -43,7 +43,7 @@ pub fn target_of(action: Action) -> Status {
     match action {
         Action::Plan => Status::Planned,
         Action::Start => Status::Dev,
-        Action::Stage => Status::Test,
+        Action::Commit => Status::Test,
         Action::Close => Status::Done,
         Action::Reset => Status::Open,
         Action::Drop => Status::Dropped,
@@ -68,7 +68,7 @@ mod tests {
     fn legal_transitions_pass() {
         assert!(can_transition(Status::Open, Action::Plan, Status::Planned));
         assert!(can_transition(Status::Planned, Action::Start, Status::Dev));
-        assert!(can_transition(Status::Dev, Action::Stage, Status::Test));
+        assert!(can_transition(Status::Dev, Action::Commit, Status::Test));
         assert!(can_transition(Status::Test, Action::Close, Status::Done));
         assert!(can_transition(Status::Planned, Action::Reset, Status::Open));
         assert!(can_transition(Status::Dev, Action::Reset, Status::Open));
@@ -91,7 +91,7 @@ mod tests {
         assert!(!can_transition(Status::Open, Action::Start, Status::Dev));
         assert!(!can_transition(
             Status::Planned,
-            Action::Stage,
+            Action::Commit,
             Status::Test
         ));
         assert!(!can_transition(Status::Done, Action::Reset, Status::Open));
@@ -112,6 +112,6 @@ mod tests {
         assert!(!close_requires_test_cmd(Action::Close, Some("  ")));
         assert!(close_requires_test_cmd(Action::Close, Some("cargo test")));
         assert!(close_requires_test_cmd(Action::Close, Some("没测")));
-        assert!(close_requires_test_cmd(Action::Stage, None)); // 非 close 不强制
+        assert!(close_requires_test_cmd(Action::Commit, None)); // 非 close 不强制
     }
 }

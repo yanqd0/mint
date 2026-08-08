@@ -12,7 +12,6 @@ pub const ISSUE_LIST: &str = include_str!("queries/issue_list.sql");
 pub const ISSUE_SHOW: &str = include_str!("queries/issue_show.sql");
 pub const ISSUE_SELECT_STATUS: &str = include_str!("queries/issue_select_status.sql");
 pub const ISSUE_UPDATE_TRANSITION: &str = include_str!("queries/issue_update_transition.sql");
-pub const ISSUE_UPDATE_LAST_COMMIT: &str = include_str!("queries/issue_update_last_commit.sql");
 
 pub const ISSUE_LINK_EXISTS: &str = include_str!("queries/issue_link_exists.sql");
 pub const ISSUE_LINK_INSERT: &str = include_str!("queries/issue_link_insert.sql");
