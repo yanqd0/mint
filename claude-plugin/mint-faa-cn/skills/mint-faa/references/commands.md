@@ -1,4 +1,4 @@
-# mint 命令速查（0.2.0-alpha）
+# mint 命令速查（0.3.0）
 
 所有命令支持 `--json`。全局参数 `--db <PATH>`（或环境变量 `MINT_DB_PATH`）覆盖默认库。
 
@@ -16,6 +16,8 @@
 | `add <TITLE> [--body <BODY>] [--kind problem\|requirement] [--project <NAME>] [--label <name[:desc]>...] [--json]` | 新建 issue，status=open；project 自动检测（`--project`→git 库名→dirname→default）；label 逗号分隔、可重复 |
 | `list [--all\|-a] [--status <s>] [--label <name>] [--project <name>] [--json]` | 默认只列 open/planned/dev/test；`--all`/`-a` 含 done/dropped；按 id DESC |
 | `show <ID> [--json]` | 单条详情（含 last_commit_id/plan_id/links） |
+| `search <QUERY> [--project <NAME>] [--label <NAME>] [--status <S>] [--json]` | 全文搜索（FTS5 trigram，查询 ≥3 字符；默认全状态，按相关度 rank） |
+| `edit <ID> [--title <T>] [--body <B>] [--json]` | 更新 title/body（COALESCE 保留未提供字段，body 空串可清空；title/body 变更触发 FTS 同步） |
 | `state plan\|start\|commit\|close\|reset\|drop\|reopen <ID> [--sha <SHA>] [--test-cmd <CMD>] [--reason <TEXT>] [--json]` | issue 状态转换；commit 必填 --sha（记 last_commit_id）；close 必填 --test-cmd |
 | `label list [--all\|-a] [--json]` | 列全部 label（含关联 issue 计数），供 agent 学习 label 语义 |
 | `roadmap create <TITLE> --version <V> [--body <BODY>] [--json]` | 建 roadmap（必填 version，如 0.1.0） |

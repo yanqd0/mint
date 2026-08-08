@@ -10,6 +10,7 @@ All commands support `--json` (agent-friendly output). Global `--db <PATH>` (or
 | `mint search <QUERY> [--project <NAME>] [--label <NAME>] [--status <S>]` | Full-text search (FTS5 trigram, query ≥3 chars). |
 | `mint list [--all\|-a] [--status <S>] [--label <NAME>] [--project <NAME>]` | List issues. Active (open/planned/dev/test) by default; `--all` includes done/dropped. |
 | `mint show <ID>` | Issue details (labels, links, commit, hit_count). |
+| `mint edit <ID> [--title <T>] [--body <B>]` | Update title/body (COALESCE keeps unprovided fields; empty body clears; FTS sync). |
 | `mint state plan\|start\|commit\|close\|reset\|drop\|reopen <ID> [--sha <SHA>] [--test-cmd <CMD>] [--reason <TEXT>]` | State transitions. `commit` requires `--sha`; `close` requires `--test-cmd`. |
 | `mint label list [--all]` | List labels (with issue counts). |
 | `mint roadmap create <TITLE> --version <V> \| list \| show <ID>` | Roadmap containers. |
