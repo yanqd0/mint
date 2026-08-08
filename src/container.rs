@@ -353,6 +353,7 @@ fn container_statuses_from(
 mod tests {
     use super::*;
     use crate::db;
+    use rstest::rstest;
 
     fn setup() -> (Connection, i64) {
         let conn = db::open(std::path::Path::new(":memory:")).unwrap();
@@ -380,24 +381,23 @@ mod tests {
         .unwrap();
     }
 
-    /// derive_status 全分支。
-    #[test]
-    fn derive_status_rules() {
-        use DeriveState::{Active, Done, Dropped, Open};
-        assert_eq!(derive_status(&[]), ContainerStatus::Open);
-        assert_eq!(derive_status(&[Open, Open]), ContainerStatus::Open);
-        assert_eq!(derive_status(&[Active]), ContainerStatus::Running);
-        assert_eq!(derive_status(&[Active, Done]), ContainerStatus::Running);
-        assert_eq!(derive_status(&[Done, Done]), ContainerStatus::Done);
-        assert_eq!(derive_status(&[Dropped, Dropped]), ContainerStatus::Dropped);
-        assert_eq!(derive_status(&[Done, Dropped]), ContainerStatus::Partial);
-        // 有非 open 未全 done/dropped → running（曾运行）
-        assert_eq!(derive_status(&[Open, Done]), ContainerStatus::Running);
-        assert_eq!(derive_status(&[Open, Dropped]), ContainerStatus::Running);
-        assert_eq!(
-            derive_status(&[Open, Done, Dropped]),
-            ContainerStatus::Running
-        );
+    /// derive_status 全分支参数化：子项状态组合 → 容器状态。
+    #[rstest]
+    #[case(&[], ContainerStatus::Open)]
+    #[case(&[DeriveState::Open, DeriveState::Open], ContainerStatus::Open)]
+    #[case(&[DeriveState::Active], ContainerStatus::Running)]
+    #[case(&[DeriveState::Active, DeriveState::Done], ContainerStatus::Running)]
+    #[case(&[DeriveState::Done, DeriveState::Done], ContainerStatus::Done)]
+    #[case(&[DeriveState::Dropped, DeriveState::Dropped], ContainerStatus::Dropped)]
+    #[case(&[DeriveState::Done, DeriveState::Dropped], ContainerStatus::Partial)]
+    #[case(&[DeriveState::Open, DeriveState::Done], ContainerStatus::Running)]
+    #[case(&[DeriveState::Open, DeriveState::Dropped], ContainerStatus::Running)]
+    #[case(
+        &[DeriveState::Open, DeriveState::Done, DeriveState::Dropped],
+        ContainerStatus::Running
+    )]
+    fn derive_status_cases(#[case] states: &[DeriveState], #[case] expected: ContainerStatus) {
+        assert_eq!(derive_status(states), expected);
     }
 
     /// roadmap create 必填 version。

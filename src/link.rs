@@ -105,6 +105,7 @@ fn link_exists(conn: &Connection, from: i64, ty: LinkType, to: i64) -> Result<bo
 mod tests {
     use super::*;
     use crate::db;
+    use rstest::rstest;
 
     fn setup() -> (Connection, i64, i64) {
         let conn = db::open(std::path::Path::new(":memory:")).unwrap();
@@ -132,29 +133,35 @@ mod tests {
         (conn, a, b)
     }
 
-    /// create 后 links_for 出向/入向正确（solves → solved-by）。
-    #[test]
-    fn create_links_for_roundtrip() {
+    /// create 后 links_for 出向/入向正确（类型参数化：rel 与反向 rel）。
+    #[rstest]
+    #[case(LinkType::Related, "related", "related")]
+    #[case(LinkType::Solves, "solves", "solved-by")]
+    #[case(LinkType::Duplicates, "duplicates", "duplicated-by")]
+    fn create_links_for_roundtrip(#[case] ty: LinkType, #[case] rel: &str, #[case] reverse: &str) {
         let (conn, a, b) = setup();
-        create(&conn, a, LinkType::Solves, b).unwrap();
+        create(&conn, a, ty, b).unwrap();
 
         let la = links_for(&conn, a).unwrap();
         assert_eq!(la.len(), 1);
         assert_eq!(la[0].other_id, b);
-        assert_eq!(la[0].rel, "solves");
+        assert_eq!(la[0].rel, rel);
 
         let lb = links_for(&conn, b).unwrap();
         assert_eq!(lb.len(), 1);
         assert_eq!(lb[0].other_id, a);
-        assert_eq!(lb[0].rel, "solved-by");
+        assert_eq!(lb[0].rel, reverse);
     }
 
-    /// 同向重复幂等：仅 1 行。
-    #[test]
-    fn create_same_direction_idempotent() {
+    /// 同向重复幂等（类型参数化）：仅 1 行。
+    #[rstest]
+    #[case(LinkType::Related)]
+    #[case(LinkType::Solves)]
+    #[case(LinkType::Duplicates)]
+    fn create_same_direction_idempotent(#[case] ty: LinkType) {
         let (conn, a, b) = setup();
-        create(&conn, a, LinkType::Related, b).unwrap();
-        create(&conn, a, LinkType::Related, b).unwrap();
+        create(&conn, a, ty, b).unwrap();
+        create(&conn, a, ty, b).unwrap();
         let cnt: i64 = conn
             .query_row("SELECT COUNT(*) FROM issue_links", [], |r| r.get(0))
             .unwrap();
@@ -173,21 +180,14 @@ mod tests {
         assert_eq!(cnt, 1);
     }
 
-    /// solves 反向冲突报错。
-    #[test]
-    fn create_reverse_solves_conflict() {
+    /// 反向冲突报错（solves/duplicates 有向类型反向互斥）。
+    #[rstest]
+    #[case(LinkType::Solves)]
+    #[case(LinkType::Duplicates)]
+    fn create_reverse_directional_conflict(#[case] ty: LinkType) {
         let (conn, a, b) = setup();
-        create(&conn, a, LinkType::Solves, b).unwrap();
-        let err = create(&conn, b, LinkType::Solves, a).unwrap_err();
-        assert!(err.to_string().contains("already linked"), "err: {err}");
-    }
-
-    /// duplicates 反向冲突报错。
-    #[test]
-    fn create_reverse_duplicates_conflict() {
-        let (conn, a, b) = setup();
-        create(&conn, a, LinkType::Duplicates, b).unwrap();
-        let err = create(&conn, b, LinkType::Duplicates, a).unwrap_err();
+        create(&conn, a, ty, b).unwrap();
+        let err = create(&conn, b, ty, a).unwrap_err();
         assert!(err.to_string().contains("already linked"), "err: {err}");
     }
 

@@ -100,36 +100,63 @@ pub fn list(conn: &Connection) -> Result<Vec<Project>, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
     use tempfile::TempDir;
 
-    /// dirname 兜底：无 git 时取目录名。
-    #[test]
-    fn detect_falls_back_to_dirname() {
+    /// 检测链参数化：显式 --project 优先于一切；无 git 时 dirname 兜底。
+    #[rstest]
+    #[case::explicit_custom(Some("custom"))]
+    #[case::explicit_default(Some("default"))]
+    #[case::dirname_fallback(None)]
+    fn detect_name_chain(#[case] explicit: Option<&str>) {
         let dir = TempDir::new().unwrap();
-        let expected = dir
-            .path()
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .into_owned();
-        assert_eq!(detect_name(dir.path(), None), expected);
+        let name = detect_name(dir.path(), explicit);
+        match explicit {
+            Some(e) => assert_eq!(name, e),
+            None => {
+                let base = dir
+                    .path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
+                assert_eq!(name, base, "dirname 兜底应取目录名");
+            }
+        }
     }
 
-    /// 显式 --project 最高优先。
+    /// git 库名：有 remote origin 时取库名（去 .git 后缀），优先于 dirname。
     #[test]
-    fn detect_explicit_overrides() {
+    fn detect_uses_git_repo_name() {
+        // git 缺失时跳过（CI 极简镜像/未装 git 环境），不 panic 拖垮套件。
+        if std::process::Command::new("git")
+            .arg("--version")
+            .status()
+            .is_err()
+        {
+            eprintln!("skip: git not found");
+            return;
+        }
         let dir = TempDir::new().unwrap();
-        assert_eq!(detect_name(dir.path(), Some("custom")), "custom");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .status()
+                .unwrap()
+        };
+        assert!(git(&["init", "-q"]).success());
+        assert!(git(&["remote", "add", "origin", "git@github.com:yanqd0/mint.git"]).success());
+        assert_eq!(detect_name(dir.path(), None), "mint");
+        // git 名末段 `.git` 后缀去除
+        assert!(git(&["remote", "set-url", "origin", "https://host/user/repo.git"]).success());
+        assert_eq!(detect_name(dir.path(), None), "repo");
     }
 
-    /// 无任何上下文时兜底 default。
+    /// 兜底 default：无 basename 且无 git（根目录）。
     #[test]
     fn detect_default_when_no_context() {
-        // 空的 tempdir，无 .git
-        let dir = TempDir::new().unwrap();
-        // git_repo_name 失败 → dirname 兜底（tempdir 有名字），此处仅验证 detect 不 panic
-        let name = detect_name(dir.path(), None);
-        assert!(!name.is_empty());
+        assert_eq!(detect_name(Path::new("/"), None), DEFAULT_PROJECT);
     }
 
     /// 自动注册 + 幂等：重复 ensure 返回同一 id。

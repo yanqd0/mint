@@ -85,6 +85,7 @@ pub fn names_for_issue(conn: &Connection, issue_id: i64) -> Result<Vec<String>, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     fn setup() -> (Connection, i64) {
         let conn = Connection::open_in_memory().unwrap();
@@ -105,27 +106,23 @@ mod tests {
         (conn, iid)
     }
 
-    /// 语法解析：name 与 name:desc 与逗号分隔。
-    #[test]
-    fn parse_specs_handles_name_and_desc() {
-        let raw = vec!["storage,bug:缺陷".to_string(), "ui".to_string()];
-        let specs = parse_specs(&raw);
-        assert_eq!(
-            specs,
-            vec![
-                ("storage".to_string(), None),
-                ("bug".to_string(), Some("缺陷".to_string())),
-                ("ui".to_string(), None),
-            ]
-        );
-    }
-
-    /// 边界：冒号段任一侧为空（"a:"/":desc"）不产出畸形 tag。
-    #[test]
-    fn parse_specs_drops_malformed_colon() {
-        let raw = vec!["a:".to_string(), ":desc".to_string(), "ok".to_string()];
-        let specs = parse_specs(&raw);
-        assert_eq!(specs, vec![("ok".to_string(), None)]);
+    /// 语法解析参数化：name / name:desc / 逗号分隔 / 畸形冒号段 / 空输入。
+    #[rstest]
+    #[case::name_only(vec!["ui".to_string()], vec![("ui".to_string(), None)])]
+    #[case::name_with_desc(vec!["bug:缺陷".to_string()], vec![("bug".to_string(), Some("缺陷".to_string()))])]
+    #[case::multiple(vec!["storage".to_string(), "bug:缺陷".to_string(), "ui".to_string()],
+        vec![
+            ("storage".to_string(), None),
+            ("bug".to_string(), Some("缺陷".to_string())),
+            ("ui".to_string(), None),
+        ])]
+    #[case::malformed_colon(vec!["a:".to_string(), ":desc".to_string(), "ok".to_string()], vec![("ok".to_string(), None)])]
+    #[case::empty(vec![], vec![])]
+    fn parse_specs_cases(
+        #[case] raw: Vec<String>,
+        #[case] expected: Vec<(String, Option<String>)>,
+    ) {
+        assert_eq!(parse_specs(&raw), expected);
     }
 
     /// 新 tag 自动注册，重复 ensure 复用同一 id。

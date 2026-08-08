@@ -62,56 +62,88 @@ pub fn close_requires_test_cmd(action: Action, test_cmd: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    /// 合法转换：每步推进通过。
-    #[test]
-    fn legal_transitions_pass() {
-        assert!(can_transition(Status::Open, Action::Plan, Status::Planned));
-        assert!(can_transition(Status::Planned, Action::Start, Status::Dev));
-        assert!(can_transition(Status::Dev, Action::Commit, Status::Test));
-        assert!(can_transition(Status::Test, Action::Close, Status::Done));
-        assert!(can_transition(Status::Planned, Action::Reset, Status::Open));
-        assert!(can_transition(Status::Dev, Action::Reset, Status::Open));
-        assert!(can_transition(Status::Test, Action::Reset, Status::Open));
-        assert!(can_transition(Status::Done, Action::Reopen, Status::Open));
-        assert!(can_transition(
-            Status::Dropped,
-            Action::Reopen,
-            Status::Open
-        ));
-        assert!(can_transition(Status::Open, Action::Drop, Status::Dropped));
-        assert!(can_transition(Status::Test, Action::Drop, Status::Dropped));
-    }
-
-    /// 非法转换拒绝：open 直接 close（无 dev→done 捷径）、reset 不能动 done/dropped。
-    #[test]
-    fn illegal_transitions_rejected() {
-        assert!(!can_transition(Status::Open, Action::Close, Status::Done));
-        assert!(!can_transition(Status::Dev, Action::Close, Status::Done));
-        assert!(!can_transition(Status::Open, Action::Start, Status::Dev));
-        assert!(!can_transition(
+    /// 穷举 (status, action) 全矩阵（6×7=42 组合），对**硬编码期望表**断言——
+    /// 期望表独立于实现，能发现 `from_allowed` 的语义错误（非同义反复）。
+    #[rstest]
+    fn transition_matrix_all_combos(
+        #[values(
+            Status::Open,
             Status::Planned,
+            Status::Dev,
+            Status::Test,
+            Status::Done,
+            Status::Dropped
+        )]
+        current: Status,
+        #[values(
+            Action::Plan,
+            Action::Start,
             Action::Commit,
-            Status::Test
-        ));
-        assert!(!can_transition(Status::Done, Action::Reset, Status::Open));
-        assert!(!can_transition(
-            Status::Dropped,
+            Action::Close,
             Action::Reset,
-            Status::Open
-        ));
-        assert!(!can_transition(Status::Open, Action::Reopen, Status::Open));
-        // 目标状态不匹配
-        assert!(!can_transition(Status::Open, Action::Plan, Status::Dev));
+            Action::Drop,
+            Action::Reopen
+        )]
+        action: Action,
+    ) {
+        // 期望表：from_allowed 的语义（reset 限活跃三态、reopen 限 done/dropped、drop 任意）。
+        let allowed = matches!(
+            (current, action),
+            (Status::Open, Action::Plan)
+                | (Status::Planned, Action::Start)
+                | (Status::Dev, Action::Commit)
+                | (Status::Test, Action::Close)
+                | (Status::Planned | Status::Dev | Status::Test, Action::Reset)
+                | (_, Action::Drop)
+                | (Status::Done | Status::Dropped, Action::Reopen)
+        );
+        assert_eq!(
+            can_transition(current, action, target_of(action)),
+            allowed,
+            "组合不符: {current:?} × {action:?}"
+        );
     }
 
-    /// close 必须带 test_cmd；跳过测试填"没测"可通过。
-    #[test]
-    fn close_requires_test_cmd_rule() {
-        assert!(!close_requires_test_cmd(Action::Close, None));
-        assert!(!close_requires_test_cmd(Action::Close, Some("  ")));
-        assert!(close_requires_test_cmd(Action::Close, Some("cargo test")));
-        assert!(close_requires_test_cmd(Action::Close, Some("没测")));
-        assert!(close_requires_test_cmd(Action::Commit, None)); // 非 close 不强制
+    /// target_of：每个 action 的目标状态。
+    #[rstest]
+    #[case(Action::Plan, Status::Planned)]
+    #[case(Action::Start, Status::Dev)]
+    #[case(Action::Commit, Status::Test)]
+    #[case(Action::Close, Status::Done)]
+    #[case(Action::Reset, Status::Open)]
+    #[case(Action::Drop, Status::Dropped)]
+    #[case(Action::Reopen, Status::Open)]
+    fn target_of_cases(#[case] action: Action, #[case] expected: Status) {
+        assert_eq!(target_of(action), expected);
+    }
+
+    /// 目标状态不匹配 target_of 时一律拒绝。
+    #[rstest]
+    #[case(Status::Open, Action::Plan, Status::Dev)]
+    #[case(Status::Test, Action::Close, Status::Open)]
+    #[case(Status::Done, Action::Reopen, Status::Planned)]
+    fn wrong_target_rejected(
+        #[case] current: Status,
+        #[case] action: Action,
+        #[case] wrong: Status,
+    ) {
+        assert!(!can_transition(current, action, wrong));
+    }
+
+    /// close 必须带 test_cmd；跳过测试填"没测"可通过；非 close 不强制。
+    #[rstest]
+    #[case(Action::Close, None, false)]
+    #[case(Action::Close, Some("  "), false)]
+    #[case(Action::Close, Some("cargo test"), true)]
+    #[case(Action::Close, Some("没测"), true)]
+    #[case(Action::Commit, None, true)]
+    fn close_test_cmd_rule(
+        #[case] action: Action,
+        #[case] test_cmd: Option<&str>,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(close_requires_test_cmd(action, test_cmd), expected);
     }
 }

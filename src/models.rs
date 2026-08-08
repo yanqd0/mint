@@ -282,47 +282,134 @@ pub struct IssueSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    /// LinkType 的 as_str/reverse/Display。
-    #[test]
-    fn link_type_str_and_reverse() {
-        assert_eq!(LinkType::Related.as_str(), "related");
-        assert_eq!(LinkType::Solves.as_str(), "solves");
-        assert_eq!(LinkType::Duplicates.as_str(), "duplicates");
-
-        assert_eq!(LinkType::Related.reverse(), "related");
-        assert_eq!(LinkType::Solves.reverse(), "solved-by");
-        assert_eq!(LinkType::Duplicates.reverse(), "duplicated-by");
-
-        assert_eq!(LinkType::Solves.to_string(), "solves");
-    }
-
-    /// LinkType 的 rusqlite ToSql/FromSql 往返。
-    #[test]
-    fn link_type_sql_roundtrip() {
-        for (ty, s) in [
-            (LinkType::Related, "related"),
-            (LinkType::Solves, "solves"),
-            (LinkType::Duplicates, "duplicates"),
-        ] {
-            let conn = rusqlite::Connection::open_in_memory().unwrap();
-            conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();
-            conn.execute("INSERT INTO t VALUES (?1)", [ty]).unwrap();
-            let got: LinkType = conn.query_row("SELECT x FROM t", [], |r| r.get(0)).unwrap();
-            assert_eq!(got, ty);
-            assert_eq!(s, ty.as_str());
-        }
-    }
-
-    /// 非法 LinkType 值报错。
-    #[test]
-    fn link_type_invalid_value_errors() {
+    /// Status：as_str / Display / ToSql-FromSql 往返。
+    #[rstest]
+    #[case(Status::Open, "open")]
+    #[case(Status::Planned, "planned")]
+    #[case(Status::Dev, "dev")]
+    #[case(Status::Test, "test")]
+    #[case(Status::Done, "done")]
+    #[case(Status::Dropped, "dropped")]
+    fn status_str_and_roundtrip(#[case] s: Status, #[case] text: &str) {
+        assert_eq!(s.as_str(), text);
+        assert_eq!(s.to_string(), text);
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();
-        conn.execute("INSERT INTO t VALUES ('bogus')", []).unwrap();
+        conn.execute("INSERT INTO t VALUES (?1)", [s]).unwrap();
+        let got: Status = conn.query_row("SELECT x FROM t", [], |r| r.get(0)).unwrap();
+        assert_eq!(got, s);
+    }
+
+    /// Kind：as_str / Display / 往返。
+    #[rstest]
+    #[case(Kind::Problem, "problem")]
+    #[case(Kind::Requirement, "requirement")]
+    fn kind_str_and_roundtrip(#[case] k: Kind, #[case] text: &str) {
+        assert_eq!(k.as_str(), text);
+        assert_eq!(k.to_string(), text);
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();
+        conn.execute("INSERT INTO t VALUES (?1)", [k]).unwrap();
+        let got: Kind = conn.query_row("SELECT x FROM t", [], |r| r.get(0)).unwrap();
+        assert_eq!(got, k);
+    }
+
+    /// LinkType：as_str / reverse / Display / 往返。
+    #[rstest]
+    #[case(LinkType::Related, "related", "related")]
+    #[case(LinkType::Solves, "solves", "solved-by")]
+    #[case(LinkType::Duplicates, "duplicates", "duplicated-by")]
+    fn link_type_str_reverse_roundtrip(
+        #[case] ty: LinkType,
+        #[case] text: &str,
+        #[case] rev: &str,
+    ) {
+        assert_eq!(ty.as_str(), text);
+        assert_eq!(ty.to_string(), text);
+        assert_eq!(ty.reverse(), rev);
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();
+        conn.execute("INSERT INTO t VALUES (?1)", [ty]).unwrap();
+        let got: LinkType = conn.query_row("SELECT x FROM t", [], |r| r.get(0)).unwrap();
+        assert_eq!(got, ty);
+    }
+
+    /// ContainerStatus：as_str / Display / 往返。
+    #[rstest]
+    #[case(ContainerStatus::Open, "open")]
+    #[case(ContainerStatus::Running, "running")]
+    #[case(ContainerStatus::Partial, "partial")]
+    #[case(ContainerStatus::Dropped, "dropped")]
+    #[case(ContainerStatus::Done, "done")]
+    fn container_status_str_and_roundtrip(#[case] s: ContainerStatus, #[case] text: &str) {
+        assert_eq!(s.as_str(), text);
+        assert_eq!(s.to_string(), text);
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();
+        conn.execute("INSERT INTO t VALUES (?1)", [s]).unwrap();
+        let got: ContainerStatus = conn.query_row("SELECT x FROM t", [], |r| r.get(0)).unwrap();
+        assert_eq!(got, s);
+    }
+
+    /// 非法 Status 值 FromSql 报错（含大小写敏感）。
+    #[rstest]
+    #[case("bogus")]
+    #[case("OPEN")]
+    #[case("")]
+    fn status_invalid_errors(#[case] val: &str) {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();
+        conn.execute("INSERT INTO t VALUES (?1)", [val]).unwrap();
+        let err = conn
+            .query_row::<Status, _, _>("SELECT x FROM t", [], |r| r.get(0))
+            .unwrap_err();
+        assert!(err.to_string().contains("invalid status"), "{err}");
+    }
+
+    /// 非法 Kind 值 FromSql 报错。
+    #[rstest]
+    #[case("bogus")]
+    #[case("Problem")]
+    fn kind_invalid_errors(#[case] val: &str) {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();
+        conn.execute("INSERT INTO t VALUES (?1)", [val]).unwrap();
+        let err = conn
+            .query_row::<Kind, _, _>("SELECT x FROM t", [], |r| r.get(0))
+            .unwrap_err();
+        assert!(err.to_string().contains("invalid kind"), "{err}");
+    }
+
+    /// 非法 LinkType 值 FromSql 报错。
+    #[rstest]
+    #[case("bogus")]
+    #[case("solved-by")] // 反向字符串不落库
+    fn link_type_invalid_errors(#[case] val: &str) {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();
+        conn.execute("INSERT INTO t VALUES (?1)", [val]).unwrap();
         let err = conn
             .query_row::<LinkType, _, _>("SELECT x FROM t", [], |r| r.get(0))
             .unwrap_err();
-        assert!(err.to_string().contains("invalid link type"));
+        assert!(err.to_string().contains("invalid link type"), "{err}");
+    }
+
+    /// 非法 ContainerStatus 值 FromSql 报错。
+    #[rstest]
+    #[case("bogus")]
+    #[case("RUNNING")]
+    fn container_status_invalid_errors(#[case] val: &str) {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();
+        conn.execute("INSERT INTO t VALUES (?1)", [val]).unwrap();
+        let err = conn
+            .query_row::<ContainerStatus, _, _>("SELECT x FROM t", [], |r| r.get(0))
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("invalid container status"),
+            "{err}"
+        );
     }
 }
