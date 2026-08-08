@@ -32,6 +32,24 @@ Accepts an optional positional `<description>` argument summarizing intent. When
 4. **Multi-step plans**: For cross-module / multi-step work — first create a mint plan (under a roadmap/milestone) + split related issues,
    then execute; advance each issue through the state machine to done (associate the corresponding commit).
 
+## During Implementation (MANDATORY — must execute for every code change)
+
+> The rules below MUST NOT be skipped due to CC plan mode or any other workflow step. Skipping means "not taken over" — the next session MUST backfill.
+
+1. **After CC plan mode approval, the first action is NOT writing code**:
+   - Attach the corresponding mint plan issue to its mint plan (`mint plan attach <plan_id> <issue_id>`)
+   - Create issues for each independent phase (kind=requirement, label `<version>,dev-clean`), attach to mint plan via `mint plan attach`
+2. **For each logical change (one or more commits)**:
+   - `mint issue state plan <id>` (schedule)
+   - `mint issue state start <id>` (start development)
+   - Edit code → commit
+   - `mint issue state commit <id> --sha $(git rev-parse HEAD)` (associate commit)
+   - When an issue has multiple commits, run `state commit` for EACH commit (only the last SHA is stored, but the workflow requires each one)
+3. **After all commits for an issue are complete**:
+   - `mint issue state close <id> --test-cmd "cargo test"` (or `not-tested`)
+4. **After all issues in a phase are closed**, the plan auto-derives to done (no manual plan close needed).
+5. **After each phase, run `mint list` to verify issue statuses under the current plan are correct**.
+
 ## Takeover Mode (no arguments)
 
 When called without `<description>`, enters takeover mode to replace initial thinking:

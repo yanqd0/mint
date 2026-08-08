@@ -32,6 +32,24 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 4. **方案执行**（跨模块/多步骤方案）：按「方案执行登记」——第一步先建 mint plan（挂 roadmap/milestone）+ 拆相关 issue，
    再执行方案；每个 issue 走状态机到 done（关联对应 commit）。
 
+## 实现中（强制性——每次修改代码必须执行）
+
+> 以下规则不因 CC plan mode / 任何其他流程步骤而跳过。违反视为"未接管"，下次 session 必须补登记。
+
+1. **CC plan mode 审批通过后，第一件事不是写代码**：
+   - 将 CC plan 对应的 mint plan issue 挂入已有 mint plan（如 `mint plan attach <plan_id> <issue_id>`）
+   - 为每个独立 phase 建 issue（kind=requirement，label `<版本>,dev-clean`），`mint plan attach` 挂入
+2. **每完成一个逻辑变更（对应一次或多次 commit）**：
+   - `mint issue state plan <id>`（排入计划）
+   - `mint issue state start <id>`（开始开发）
+   - 修改代码 → commit
+   - `mint issue state commit <id> --sha $(git rev-parse HEAD)`（关联 commit）
+   - 同一 issue 有多个 commit 时，**每次 commit 都执行一次 `state commit`**（只记最后一个 SHA，但流程上每次都要走）
+3. **issue 对应的全部 commit 完成后**：
+   - `mint issue state close <id> --test-cmd "cargo test"`（或 `not-tested`）
+4. **一个 phase 的全部 issue close 后**，plan 自动派生为 done（无需手动关 plan）。
+5. **每完成一个 phase，必须 `mint list` 确认当前计划下 issue 状态正确**。
+
 ## 接管模式（无参数调用）
 
 无 `<description>` 参数时进入接管模式，代替用户初始化思考：
