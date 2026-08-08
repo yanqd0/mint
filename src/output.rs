@@ -46,7 +46,7 @@ pub fn format_issue(i: &Issue) -> String {
         out.push_str(&format!("  commit:  {sha}\n"));
     }
     if !i.labels.is_empty() {
-        out.push_str(&format!("  labels:    {}\n", i.labels.join(", ")));
+        out.push_str(&format!("  labels:  {}\n", i.labels.join(", ")));
     }
     if !i.links.is_empty() {
         out.push_str(&format!("  links:    {}\n", i.links.len()));
@@ -253,7 +253,7 @@ mod tests {
             &["dev"],
             vec![mk_link(2, "other", "related")],
         ),
-        &["body:", "test:    cargo test", "dropped: why", "commit:  abc123", "labels:    dev", "links:"],
+        &["body:", "test:    cargo test", "dropped: why", "commit:  abc123", "labels:  dev", "links:"],
         &[],
     )]
     #[case::partial(

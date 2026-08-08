@@ -26,8 +26,8 @@ WHERE
     AND (
         ?3 IS NULL OR EXISTS (
         SELECT 1 FROM issue_labels it
-        JOIN labels tg ON tg.id = it.label_id
-        WHERE it.issue_id = i.id AND tg.name = ?3
+        JOIN labels lb ON lb.id = it.label_id
+        WHERE it.issue_id = i.id AND lb.name = ?3
         )
     )
     AND (?4 IS NULL OR p.name = ?4)
