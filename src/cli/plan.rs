@@ -38,11 +38,11 @@ pub fn dispatch(conn: &Connection, cmd: &super::PlanCmd) -> Result<(), Error> {
         super::PlanCmd::Create(a) => cmd_plan_create(conn, a),
         super::PlanCmd::List(a) => cmd_container_list(conn, ContainerKind::Plan, a),
         super::PlanCmd::Show(a) => cmd_container_show(conn, ContainerKind::Plan, a),
-        super::PlanCmd::Issue(a) => {
+        super::PlanCmd::Attach(a) => {
             container::set_issue_plan(conn, a.issue_id, a.id)?;
             print_issue_link_json(a.id, a.issue_id, "attached", a.json)
         }
-        super::PlanCmd::DetachIssue(a) => {
+        super::PlanCmd::Detach(a) => {
             container::unset_issue_plan(conn, a.issue_id)?;
             print_issue_link_json(a.id, a.issue_id, "detached", a.json)
         }

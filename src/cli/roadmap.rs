@@ -40,11 +40,11 @@ pub fn dispatch(conn: &Connection, cmd: &super::RoadmapCmd) -> Result<(), Error>
         super::RoadmapCmd::Create(a) => cmd_roadmap_create(conn, a),
         super::RoadmapCmd::List(a) => cmd_container_list(conn, ContainerKind::Roadmap, a),
         super::RoadmapCmd::Show(a) => cmd_container_show(conn, ContainerKind::Roadmap, a),
-        super::RoadmapCmd::Issue(a) => {
+        super::RoadmapCmd::Attach(a) => {
             container::link_direct(conn, a.id, a.issue_id)?;
             print_issue_link_json(a.id, a.issue_id, "attached", a.json)
         }
-        super::RoadmapCmd::DetachIssue(a) => {
+        super::RoadmapCmd::Detach(a) => {
             container::unlink_direct(conn, a.id, a.issue_id)?;
             print_issue_link_json(a.id, a.issue_id, "detached", a.json)
         }

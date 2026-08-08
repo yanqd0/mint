@@ -658,8 +658,8 @@ fn st_roadmap_crud() {
     // 直接挂两个 issue 后 show 聚合
     let i1 = add_issue(&db, "a");
     let i2 = add_issue(&db, "b");
-    run_json(&db, &["roadmap", "issue", "1", &i1.to_string(), "--json"]);
-    run_json(&db, &["roadmap", "issue", "1", &i2.to_string(), "--json"]);
+    run_json(&db, &["roadmap", "attach", "1", &i1.to_string(), "--json"]);
+    run_json(&db, &["roadmap", "attach", "1", &i2.to_string(), "--json"]);
     let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 2);
 }
@@ -673,12 +673,12 @@ fn st_roadmap_issue_detach() {
         &db,
         &["roadmap", "create", "r", "--version", "0.1.0", "--json"],
     );
-    run_json(&db, &["roadmap", "issue", "1", &id.to_string(), "--json"]);
+    run_json(&db, &["roadmap", "attach", "1", &id.to_string(), "--json"]);
     let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 1);
     run_json(
         &db,
-        &["roadmap", "detach-issue", "1", &id.to_string(), "--json"],
+        &["roadmap", "detach", "1", &id.to_string(), "--json"],
     );
     let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 0);
@@ -695,7 +695,7 @@ fn st_roadmap_create_requires_version_and_missing() {
         &["roadmap", "create", "r", "--version", "0.1.0", "--json"],
     );
     let id = add_issue(&db, "x");
-    let stderr = run_fail(&db, &["roadmap", "issue", "999", &id.to_string()]);
+    let stderr = run_fail(&db, &["roadmap", "attach", "999", &id.to_string()]);
     assert!(
         stderr.contains("roadmap #999 not found"),
         "stderr: {stderr}"
@@ -708,7 +708,7 @@ fn st_plan_create_link_derived() {
     let (_dir, db) = empty_db();
     let iid = add_issue(&db, "x");
     run_json(&db, &["plan", "create", "p", "--json"]);
-    run_json(&db, &["plan", "issue", "1", &iid.to_string(), "--json"]);
+    run_json(&db, &["plan", "attach", "1", &iid.to_string(), "--json"]);
 
     // open（issue 未推进）
     let v = run_json(&db, &["plan", "show", "1", "--json"]);
@@ -1129,8 +1129,8 @@ fn st_container_derived_mixed_boundaries() {
     run_json(&db, &["plan", "create", "p", "--json"]);
     let i1 = add_issue(&db, "a");
     let i2 = add_issue(&db, "b");
-    run_json(&db, &["plan", "issue", "1", &i1.to_string(), "--json"]);
-    run_json(&db, &["plan", "issue", "1", &i2.to_string(), "--json"]);
+    run_json(&db, &["plan", "attach", "1", &i1.to_string(), "--json"]);
+    run_json(&db, &["plan", "attach", "1", &i2.to_string(), "--json"]);
 
     // 全 open → open
     let v = run_json(&db, &["plan", "show", "1", "--json"]);
@@ -1178,7 +1178,7 @@ fn st_delete_plan_detaches() {
     let (_dir, db) = empty_db();
     run_json(&db, &["plan", "create", "p", "--json"]);
     let i = add_issue(&db, "x");
-    run_json(&db, &["plan", "issue", "1", &i.to_string(), "--json"]);
+    run_json(&db, &["plan", "attach", "1", &i.to_string(), "--json"]);
     run_json(&db, &["delete", "plan", "1", "--json"]);
     let v = run_json(&db, &["show", &i.to_string(), "--json"]);
     assert_eq!(v["plan_id"], serde_json::Value::Null);
@@ -1195,7 +1195,7 @@ fn st_delete_roadmap_detaches() {
         &["roadmap", "create", "r", "--version", "0.1.0", "--json"],
     );
     let i = add_issue(&db, "x");
-    run_json(&db, &["roadmap", "issue", "1", &i.to_string(), "--json"]);
+    run_json(&db, &["roadmap", "attach", "1", &i.to_string(), "--json"]);
     run_json(&db, &["delete", "roadmap", "1", "--json"]);
     let stderr = run_fail(&db, &["roadmap", "show", "1"]);
     assert!(stderr.contains("not found"), "stderr: {stderr}");

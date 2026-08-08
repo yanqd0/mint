@@ -167,9 +167,9 @@ pub enum RoadmapCmd {
     /// Show a roadmap's details and its issues
     Show(ContainerIdArgs),
     /// Attach an issue directly to a roadmap (must not belong to a plan)
-    Issue(RoadmapIssueArgs),
+    Attach(RoadmapIssueArgs),
     /// Detach an issue from a roadmap
-    DetachIssue(RoadmapIssueArgs),
+    Detach(RoadmapIssueArgs),
 }
 
 #[derive(clap::Args)]
@@ -187,9 +187,9 @@ pub enum PlanCmd {
     /// Show a plan's details and its issues
     Show(ContainerIdArgs),
     /// Move an issue into this plan
-    Issue(PlanIssueArgs),
+    Attach(PlanIssueArgs),
     /// Remove an issue from this plan
-    DetachIssue(PlanIssueArgs),
+    Detach(PlanIssueArgs),
 }
 
 #[derive(clap::Args)]
