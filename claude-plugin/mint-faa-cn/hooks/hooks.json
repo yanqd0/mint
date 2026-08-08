@@ -1,0 +1,26 @@
+{
+  "PostToolUseFailure": [
+    {
+      "matcher": "Bash|Write|Edit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/inject_signal.py",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "SessionStart": [
+    {
+      "matcher": "startup|resume|clear|compact",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/inject_context.sh",
+          "timeout": 10
+        }
+      ]
+    }
+  ]
+}

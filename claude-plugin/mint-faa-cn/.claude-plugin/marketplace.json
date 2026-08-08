@@ -1,0 +1,18 @@
+{
+  "name": "mint-faa-cn",
+  "owner": {
+    "name": "yanqd0"
+  },
+  "metadata": {
+    "description": "mint issue 追踪（中文）— Claude Code skill 用 mint CLI 管理 issue 与流程。",
+    "version": "0.3.0"
+  },
+  "plugins": [
+    {
+      "name": "mint-faa-cn",
+      "source": "../",
+      "description": "mint issue 追踪（中文）。",
+      "version": "0.3.0"
+    }
+  ]
+}
