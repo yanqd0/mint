@@ -7,7 +7,7 @@ description: >-
   把某个 issue 推进到 plan/start/commit/close/reset/drop/reopen / 开始做/测试/关闭/放弃
   某件事 / 本次改动值得记一条 / 规划下一个版本 / 路线图 / roadmap / 拆解执行计划 /
   plan / 里程碑 / 排期 / 版本规划 / 执行一个方案 / 方案计划 / 按计划实施"等意图时自动触发；也支持手动 /mint-dogfood。
-  基于 0.2.0 现有命令（add/list/show/state/tag/roadmap/plan/link，无 dedup/FTS——登记前先 list 查重标题防噪音）。
+  基于 0.2.0 现有命令（add/list/show/state/label/roadmap/plan/link，无 dedup/FTS——登记前先 list 查重标题防噪音）。
   数据落全局 SQLite（~/.local/share/mint/mint.db，MINT_DB_PATH 可覆盖）。
   本技能是 0.3.0 Claude Code 适配器（capture/context/dedup）的早期实验。
 allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mint:*) Bash(cargo:run) Bash(which:*) Bash(test:*) Bash(ls:*) Bash(git:*) Read AskUserQuestion
@@ -15,7 +15,7 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
 
 用 mint CLI 管理 mint 项目自身的开发 issue：探测调用链 → 登记/查询 → 推进 6 态状态机 → 验证落库。
 
-可接收动作参数 `<action>` 与载荷（`<title>`、`<id>`、`<body>`、`<kind>`、`<tag>` 等），形如：
+可接收动作参数 `<action>` 与载荷（`<title>`、`<id>`、`<body>`、`<kind>`、`<label>` 等），形如：
 `/mint-dogfood add "标题" --kind requirement`、`/mint-dogfood list --all`、
 `/mint-dogfood commit 3 --sha <SHA>`、`/mint-dogfood close 3 --test-cmd "cargo test"`、
 `/mint-dogfood drop 3 --reason "obsolete"`。
@@ -43,27 +43,27 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
    - **方案执行登记**：当对话在**执行一个方案/计划**（plan mode 产出的 `.claude/plans/*.md` 方案，
      或用户显式给出的多步骤开发任务）时，**第一步先登记**再动手——
      `$MINT plan create "<方案标题>" --body "<方案摘要>" --roadmap <RM_ID>`（方案归属的版本 roadmap），
-     按方案子任务逐个 `$MINT add`（kind=requirement，tag `<版本>,dev-clean`）并 `plan issue` 挂入；
+     按方案子任务逐个 `$MINT add`（kind=requirement，label `<版本>,dev-clean`）并 `plan issue` 挂入；
      随后执行方案，每个 issue 完成时走状态机到 done（关联对应 commit）。
    - **登记 issue（add）**：先查重——运行 `$MINT list --json`（默认列 open/planned/dev/test）取标题，
      与拟登记标题做模糊匹配：
      - 存在未关闭的近似标题 → **不新建**，报告"已存在 #id"，建议 `show <id>` 查看或 `state plan <id>` 推进；
-     - 确认无重复 → `$MINT add "<title>" --body "<body>" [--kind problem|requirement] [--tag "name:desc,name2"] --json`。
-     kind 默认 `problem`（缺陷），需求用 `requirement`；`--tag` 支持 `name` 或 `name:description`、逗号分隔。
+     - 确认无重复 → `$MINT add "<title>" --body "<body>" [--kind problem|requirement] [--label "name:desc,name2"] --json`。
+     kind 默认 `problem`（缺陷），需求用 `requirement`；`--label` 支持 `name` 或 `name:description`、逗号分隔。
      记录 add 返回的 `id`，供后续状态操作引用。
      **克制登记**：只记"可执行、真会推动开发"的事项；事实/教训/决策类归属 mem-lite，不登记。
      **审查/复查报告观察项**：收到 code-reviewer/security-auditor/tester 报告时，其中的
-     非阻塞观察项、技术债、已知限制也应登记为 issue（`kind=problem`，tag `dev-clean:技术债`），
+     非阻塞观察项、技术债、已知限制也应登记为 issue（`kind=problem`，label `dev-clean:技术债`），
      并标注来源（如"security-auditor 复审观察"）与排期。审查报告"未发现"不登记。
      **mem-lite 关联**（可选增强）：若某条事实/教训对应本 issue，且 `which claude-mem-lite` 存在，
      按 `references/mem-lite.md` 保存带 `issue#<id>` 与读取命令的 observation；mem-lite 缺失则跳过。
 
 3. **查看 / 查询（list / show）**：
    - 会话开箱需要上下文时：`$MINT list --json`，可按需加 `--all`/`-a`（含 done/dropped）、
-     `--status <open|planned|dev|test|done|dropped>`、`--tag <name>`、`--project <name>` 过滤；
+     `--status <open|planned|dev|test|done|dropped>`、`--label <name>`、`--project <name>` 过滤；
    - 容器：`roadmap list` / `plan list`（默认只显非 done，`--all`/`-a` 全列）、`show`；
    - 看单条细节：`$MINT show <id> --json`。
-   `--json` 字段：`id/title/body/kind/status/project_id/project/test_cmd/dropped_reason/last_commit_id/plan_id/tags/links/created_at/updated_at`。
+   `--json` 字段：`id/title/body/kind/status/project_id/project/test_cmd/dropped_reason/last_commit_id/plan_id/labels/links/created_at/updated_at`。
 
 4. **推进状态机（state）**：先 `Read` `references/state-machine.md` 获取完整转换表与硬约束，
    再执行 `$MINT state <action> <id> [--sha <SHA>] [--test-cmd <CMD>] [--reason <TEXT>] --json`，

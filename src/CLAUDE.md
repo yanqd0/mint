@@ -50,7 +50,7 @@ use crate::models::{Issue, Kind, Status};
 use crate::output;
 use crate::project;
 use crate::state::{self, Action};
-use crate::tag;
+use crate::label;
 ```
 
 ## 提交前检查清单
@@ -76,13 +76,13 @@ use crate::tag;
 - **必测项**：
   - 状态机合法性（非法转换拒绝，如 `open→done` 直接 close）。
   - project 检测（`--project` → git 库名 → dirname → default；mock git 场景）。
-  - tag 注册去重（新 tag 自动注册、重复不重复插、issue 关联）。
+  - label 注册去重（新 label 自动注册、重复不重复插、issue 关联）。
   - close 的 test_cmd 必填约束（跳过测试填"没测"可通过）。
 - 每个模块的测试随实现同 commit 提交（TDD 或实现后补均可，测试必须通过）。
 
 ## 数据模型约束
 
-- 8 表：`projects` / `issues` / `tags` / `issue_tags` / `roadmaps` / `plans` / `roadmap_direct_issues` / `issue_links`（migration 有序数组驱动 `PRAGMA user_version`，当前 v4，见 `notes/DDD.md`）。
+- 8 表：`projects` / `issues` / `labels` / `issue_labels` / `roadmaps` / `plans` / `roadmap_direct_issues` / `issue_links`（migration 有序数组驱动 `PRAGMA user_version`，当前 v4，见 `notes/DDD.md`）。
 - `issues`：`kind` 限 `problem|requirement`；`status` 限 `open|planned|dev|test|done|dropped`；`last_commit_id` 记最后关联 commit；`plan_id` 外键 → plans（一对多）。
 - 容器（`roadmaps`/`plans`）：`status` 限 `open|running|partial|dropped|done`（5 态派生，写后同步，CLI 只读）；roadmaps 有 `version`(UNIQUE) + `body`；plans 有 `body` + `roadmap_id`。
 - `roadmap_direct_issues`：复合主键 `(roadmap_id,issue_id)`；issue 二选一（属 plan 后不能直接挂 roadmap）。

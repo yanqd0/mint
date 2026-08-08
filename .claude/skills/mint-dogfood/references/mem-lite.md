@@ -26,7 +26,7 @@ claude-mem-lite save "<内容>（关联 issue#<id>；读取: <MINT> show <id> --
 ## 从 mem-lite 读取 mint 内容
 
 1. `mem_search <query>` 命中 observation，读到其中的 `issue#<N>`。
-2. 运行 `<MINT> show <N> --json`，取回该 issue 完整 JSON（字段：`id/title/body/kind/status/project/test_cmd/dropped_reason/tags/created_at/updated_at`）。
+2. 运行 `<MINT> show <N> --json`，取回该 issue 完整 JSON（字段：`id/title/body/kind/status/project/test_cmd/dropped_reason/labels/created_at/updated_at`）。
 3. 需要历史/全量时 `<MINT> list --all --json`。
 
 ## mem-lite 不存在时（降级）

@@ -40,14 +40,14 @@ mint 的基本单位：一个可执行的问题（problem）或需求（requirem
 
 **检测优先级**（0.1.0 实现）：自定义(`--project`) → git 库名 → dirname → 兜底 `default`。add 时自动注册到 projects 表。
 
-### Tag（标签）
+### Label（标签）
 
 自由创建的分类标记，便于快速分类查询。独立表 + 关联表（规范化，可索引）。
 
-- `tags`：`name`(UNIQUE) + `description`
-- `issue_tags`：`(issue_id, tag_id)` 复合主键，仅 `created_at`
+- `labels`：`name`(UNIQUE) + `description`
+- `issue_labels`：`(issue_id, label_id)` 复合主键，仅 `created_at`
 
-CLI 内联 `--tag`（按 clap 框架能力，逗号/重复）；`mint tag list` 列出 name|description + issue 计数供 agent 学习含义（0.1.0 已接线）。
+CLI 内联 `--label`（按 clap 框架能力，逗号/重复）；`mint label list` 列出 name|description + issue 计数供 agent 学习含义（0.1.0 已接线）。
 
 ### Container（容器）
 
@@ -139,7 +139,7 @@ stateDiagram-v2
 | done/dropped → open | `reopen` | 重开；清空 `dropped_reason`（旧周期字段不再有意义） |
 | 任意 → dropped | `drop` | 可附 `--reason` |
 
-**CLI 形态**：状态动作全部在 `mint state` 命名空间下：`mint state plan <id>` / `mint state close <id> --test-cmd '...'` / `mint state drop <id> --reason '...'`。顶层命令仅 add/list/show/state/tag（`state` 释放了 `plan` 顶层名给 0.2.0 的 plan 容器）。**无配置文件**：配置走 CLI 参数 + 环境变量（统一 `MINT_` 前缀，如 `MINT_DB_PATH`）。
+**CLI 形态**：状态动作全部在 `mint state` 命名空间下：`mint state plan <id>` / `mint state close <id> --test-cmd '...'` / `mint state drop <id> --reason '...'`。顶层命令仅 add/list/show/state/label（`state` 释放了 `plan` 顶层名给 0.2.0 的 plan 容器）。**无配置文件**：配置走 CLI 参数 + 环境变量（统一 `MINT_` 前缀，如 `MINT_DB_PATH`）。
 
 **无 dev→done 捷径**：跳过测试也要 `commit` 到 `test`，close 时 test_cmd 填 `not-tested`（用户侧英文值；中文语境下可写作"没测"）。此规则已写入 mint-dogfood skill 的 state-machine.md。
 

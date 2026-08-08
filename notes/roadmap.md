@@ -26,11 +26,11 @@
 **目标**：实现带完整开发链路状态机的 issue 系统 CLI，在手工提示词下接管 mint 项目自己的 issue（mint 管 mint）。
 
 **已交付**：
-- 4 表：projects / issues / tags / issue_tags（migration v1）
+- 4 表：projects / issues / labels / issue_labels（migration v1）
 - 6 态状态机：`open/planned/dev/test/done/dropped`，全命令 plan/start/stage/close/reset/drop/reopen
   - `test` 语义 = testing；close 废弃 resolution（看 commit message）；test_cmd 必填（跳过测试填 `not-tested`）
 - project 检测：`--project` → git 库名 → dirname → 兜底 `default`，自动注册
-- tag：独立表 + 关联表，自由创建 + description
+- label：独立表 + 关联表，自由创建 + description
 - CLI：add/list/show + 状态命令 + `--json`；用户侧输出全英文
 - 数据落在 `$XDG_DATA_HOME/mint/mint.db`
 - 20 测试全绿；release 二进制 ~1.7MB
@@ -74,7 +74,7 @@
 **目标**：人工友好的浏览界面，作为 CLI 的补充。
 
 **范围**：`mint tui`（ratatui）：
-- 只读浏览：列出/筛选 issue（按状态/tag）
+- 只读浏览：列出/筛选 issue（按状态/label）
 - 查看详情
 - 快捷键状态操作：plan/start/stage/close/reset/drop/reopen
 - **不做**内联编辑/新建表单（编辑归 CLI）

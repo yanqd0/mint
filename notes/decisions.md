@@ -69,13 +69,13 @@
 
 **理由**：用户侧英文是国际发布基线，i18n 前避免中英混杂；notes/ 面向 AI 协作，中文表达设计意图更精确。i18n + docs 排独立版本（1.0 之前）。
 
-## D9. tag 独立表 + 关联表
+## D9. label 独立表 + 关联表
 
-**背景**：tag 建模，兼顾"单表为主"与"快速分类查询"。
+**背景**：label 建模，兼顾"单表为主"与"快速分类查询"。
 
-**决策**：`tags`（name UNIQUE + description）+ `issue_tags`（复合主键）独立表；CLI 内联 `--tag`（按 clap 能力，逗号/重复）；`mint tag list` 供 agent 学习 tag 含义。
+**决策**：`labels`（name UNIQUE + description）+ `issue_labels`（复合主键）独立表；CLI 内联 `--label`（按 clap 能力，逗号/重复）；`mint label list` 供 agent 学习 label 含义。
 
-**理由**：规范、可索引、避免子串误匹配；描述字段让 agent 学到 tag 含义。独立表未来可复用同模式做 roadmap/plan 关联。
+**理由**：规范、可索引、避免子串误匹配；描述字段让 agent 学到 label 含义。独立表未来可复用同模式做 roadmap/plan 关联。
 
 ## D10. project 检测优先级链
 
@@ -140,7 +140,7 @@
 
 **背景**：0.1.0 完成后 roadmap 硬约束"用 mint 管 mint"（dogfooding）尚未闭环——缺一个让 Claude Code 主动记录/推进 issue 的机制。0.3.0 规划的 capture/context/dedup 基建较远，等它落地再开始 dogfooding 会推迟真实使用反馈。
 
-**决策**：先做**项目级 skill** `.claude/skills/mint-dogfood`（基于 0.1.0 现有命令 add/list/show/state/tag），作为 0.3.0 适配器的**早期实验**：
+**决策**：先做**项目级 skill** `.claude/skills/mint-dogfood`（基于 0.1.0 现有命令 add/list/show/state/label），作为 0.3.0 适配器的**早期实验**：
 - skill 直接 shell 调 mint CLI，探测回退链（which mint → `./target/release/mint` → `./target/debug/mint` → `cargo run --`）。
 - **无 dedup 时的防噪音**：登记前 `list --json` 人工查重标题；克制登记（只记可执行事项，事实/教训归 mem-lite）。
 - **状态机提示词独立成 `references/state-machine.md`**——0.3.0 适配器直接复用，不重写。
@@ -155,14 +155,14 @@
 **决策**：
 - **容器独立 3 态 `open`/`done`/`dropped`，不复用 issue 6 态**。理由：6 态的 `dev`/`test`/`stage`/`test_cmd` 描述单条 issue 的开发流水线，对聚合容器无意义（容器不分 dev/test、无测试命令）；容器只需"进行中 / 已完成 / 已放弃"。
 - **roadmap 与 plan 共用同一建模**：同字段集（id/title/description/status/dropped_reason/created_at/updated_at）、同状态集、同关联语义，"容器关联多个 issue"一次设计（共享 `container.rs` 模块，`ContainerKind` 枚举分发）。
-- **关联表复用 `issue_tags` 模式**（D9）：复合主键 + `INSERT OR IGNORE` 幂等 attach；issue 可属多容器；容器不拥有 issue 生命周期（删容器不级联删 issue）。
+- **关联表复用 `issue_labels` 模式**（D9）：复合主键 + `INSERT OR IGNORE` 幂等 attach；issue 可属多容器；容器不拥有 issue 生命周期（删容器不级联删 issue）。
 - **容器 drop 加 `dropped_reason` 列**（与 issue 对称）。
 
 **理由**：容器是 issue 之上最基础的结构，建模一次定全；3 态足够表达聚合容器生命周期，避免为无意义的 dev/test 状态增加复杂度。
 
 ## D17. 轻量迁移：有序数组 + `PRAGMA user_version`，无迁移表
 
-**背景**：0.1.0 已发布（tag 0.1.0），0.2.0 是首个跨版本 schema 升级。需轻量迁移方案。
+**背景**：0.1.0 已发布（label 0.1.0），0.2.0 是首个跨版本 schema 升级。需轻量迁移方案。
 
 **决策**：
 - 迁移框架改为**有序数组** `[(目标版本, SQL)]`，migrate() 从当前 `user_version` 逐版本循环执行；每个迁移 SQL 自带 `BEGIN/COMMIT` + 末尾 `PRAGMA user_version = N`，失败整体回滚。
@@ -179,7 +179,7 @@
 - **3 种类型**：`related`（相关，对称）/ `solves`（#A 解决 #B）/ `duplicates`（#A 重复 #B）。
 - **单向存储 + 反向自动派生**：存一条 `(from_id, type, to_id)`，查询时补 reverse（`solves→solved-by`、`duplicates→duplicated-by`、`related` 对称），不冗余双写。
 - **冲突规则**：同向幂等（INSERT OR IGNORE）；`solves`/`duplicates` 反向互斥报错；`related` 反向对称 no-op（方向归一化 min,max）；自环禁；跨类型并存。
-- **CLI 形态**：`mint link` 命名空间 + create/remove/list（与 state/tag/roadmap/plan 两级嵌套一致）；`mint show` 内嵌 links、list 不内嵌（避免 N+1）。
+- **CLI 形态**：`mint link` 命名空间 + create/remove/list（与 state/label/roadmap/plan 两级嵌套一致）；`mint show` 内嵌 links、list 不内嵌（避免 N+1）。
 
 **理由**：轻量（3 类型少而清晰）、语义精确（LLM 直接读 rel 字段判断方向）、避免双写一致性问题；related 对称故反向幂等，solves/duplicates 有向故反向矛盾。
 
@@ -206,6 +206,18 @@
 - **强制逐态推进**（skill 层面）：不允许 planned→done 跳过 dev/test。
 
 **理由**：开发完成（获得 commit sha1）本质是 dev→test 行为，两者必须合一，避免漏记；`--sha` 必填强制开发完成有 commit 证据；逐态推进保证流程完整。
+
+## D21. issue tag 改名为 label
+
+**背景**：`tag`/`tags` 与 **git tag** 语义易混淆；dogfooding 中出现 `0.2.0` 这类 label 名（roadmap `version`），进一步混淆。
+
+**决策**：issue 的 tag 全局改名为 **label**：
+- 表 `tags`/`issue_tags` → `labels`/`issue_labels`（列 `tag_id` → `label_id`）。
+- 结构 `Tag` → `Label`、`Issue.tags` → `Issue.labels`。
+- CLI `mint tag` → `mint label`、`--tag` → `--label`、JSON `tags` → `labels`。
+- SQL/文档/skill 同步；未发布阶段改最新 DDL + 全局库 SQL 迁移（不保留 tag 别名）。
+
+**理由**：与 git tag 及 roadmap version 语义区分；label 表达"分类标签"更准确；全局一致避免维护两套命名。
 
 ---
 
