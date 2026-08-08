@@ -46,23 +46,26 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
    按 `references/mem-lite.md` 保存带 `issue#<id>` 与读取命令的 observation；mem-lite 缺失则跳过。
 
 3. **查看 / 查询（list / show）**：
-   - 会话开箱需要上下文时：`$MINT list --json`，可按需加 `--all`（含 done/dropped）、
+   - 会话开箱需要上下文时：`$MINT list --json`，可按需加 `--all`/`-a`（含 done/dropped）、
      `--status <open|planned|dev|test|done|dropped>`、`--tag <name>`、`--project <name>` 过滤；
+   - 容器：`roadmap list` / `plan list`（默认只显非 done，`--all`/`-a` 全列）、`show`；
    - 看单条细节：`$MINT show <id> --json`。
-   `--json` 字段：`id/title/body/kind/status/project_id/project/test_cmd/dropped_reason/tags/created_at/updated_at`。
+   `--json` 字段：`id/title/body/kind/status/project_id/project/test_cmd/dropped_reason/last_commit_id/plan_id/tags/links/created_at/updated_at`。
 
 4. **推进状态机（state）**：先 `Read` `references/state-machine.md` 获取完整转换表与硬约束，
-   再执行 `$MINT state <action> <id> [--test-cmd <CMD>] [--reason <TEXT>] --json`，
+   再执行 `$MINT state <action> <id> [--sha <SHA>] [--test-cmd <CMD>] [--reason <TEXT>] --json`，
    读退出码与 `{id,from,to}` 确认结果：
    - `plan <id>`（open→planned）、`start <id>`（planned→dev）；
-   - `stage <id> --test-cmd "..."`（dev→test，test 语义 = testing）；
+   - **`commit <id> --sha <SHA>`（dev→test，必填 --sha 记录 last_commit_id，默认读 HEAD）**——
+     开发完成必须 commit（刚提交未测试 → 进 test）；
    - `close <id> --test-cmd "..."`（test→done，**`--test-cmd` 必填**；没跑测试填 `not-tested`；
-     **无 dev→done 捷径**——跳过测试也必须先 stage 到 test 再 close）；
+     **无 dev→done 捷径**——跳过测试也必须先 commit 到 test 再 close）；
    - `reset <id>`（planned/dev/test→open，清空 test_cmd 需重测）；
    - `drop <id> --reason "..."`（任意状态→dropped）；
    - `reopen <id>`（done/dropped→open）。
    非法转换 CLI 会报 `invalid transition`，先 `show <id>` 确认当前状态再校正。
-   不要凭空推进状态：state 变更需有对应事实支撑（start 前在写代码、close 前测试通过）。
+   不要凭空推进状态：**逐态推进**（不允许 planned→done 跳过 dev/test）；state 变更需有
+   对应事实支撑（start 前在写代码、commit 前已提交、close 前测试通过）。
 
 5. **验证**：每次写操作后用 `$MINT show <id> --json` 确认状态/字段符合预期，
    向用户简报 `#<id>: <title> → <status>`。一条完整链路（如新 bug 从 add 到 close）
@@ -85,10 +88,13 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
 - **mint 管 issue（可执行待办），mem-lite 管记忆（事实/教训）**——两者不混，避免重复沉淀；
   双向关联（`issue#N` ↔ `memory#N`）与降级方案见 `references/mem-lite.md`。
 - `close` 缺 `--test-cmd` 会被 CLI 拒绝，报错信息即提示：用 `not-tested` 表示"跳过测试"。
-- **close 前记录关联 commit**：每个 issue 的开发实现 commit 落库后（my-git-commit 之后），
-  用 `mint commit <id> --sha <SHA>`（或读 HEAD）记录 `last_commit_id`——否则 `mint show` 看不到
-  该 issue 的开发记录。同一 issue 多个 commit 只记最后一个（覆盖式）。「多 issue plan」场景
-  在统一 close 前逐个补记。
+- **开发完成必须 `state commit <id> --sha <SHA>`**：dev→test 必填 --sha 记录 `last_commit_id`
+  （默认读 HEAD）；否则 `mint show` 看不到开发记录。close 前确保已 commit（逐态推进）。
+  同一 issue 多个 commit 只记最后一个。「多 issue plan」场景在统一 close 前逐个补记。
+- **容器层级使用**：版本方向用 `roadmap create <title> --version <V> --body <BODY>`（必填 version）；
+  方向内拆 plan：`plan create <title> --body <BODY> [--roadmap <ID>]`；
+  issue 归属：`plan issue <PLAN> <ISSUE>`（或 `roadmap issue <RM> <ISSUE>`，二选一——属 plan 后不能再直接挂 roadmap）。
+  容器状态由子项派生（无 close/drop/reopen 命令）；多版本方向用 `roadmap` 承载。
 - 默认库是全局共享的 `~/.local/share/mint/mint.db`；验证性/演示性操作优先设
   `MINT_DB_PATH=<临时文件>` 避免污染真实库。
 - 探测到的相对路径前缀（`./target/release/mint`）首次调用可能触发权限确认，属正常，允许一次即可。

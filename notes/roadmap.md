@@ -39,12 +39,13 @@
 **目标**：issue 之上引入"容器"概念，串联开发链路。
 
 **范围**：
-- **roadmap 表**：数据库化的开发路线（类似 notes/roadmap.md 文本），关联多个 issue
-- **plan 表**：编程 agent 的 plan，记录 + 状态管理，关联多个 issue
-- git commit 关联：`issues.last_commit_id`（多个 commit 只记最后一个），dev 状态记录 HEAD
-- 两种容器共享建模模式（"容器关联多个 issue"），一次设计
+- **roadmap 表**：版本规划（关键字段 `version` UNIQUE + body），关联 plan（plans.roadmap_id）与直接挂的 issue
+- **plan 表**：编程 agent 的执行计划（body 完整 md），关联多个 issue（issues.plan_id）
+- **git commit 关联**：`issues.last_commit_id`，`state commit`（dev→test）必填 --sha 写入
+- **容器状态 5 态派生**：open/running/partial/dropped/done，写后级联同步（issue→plan→roadmap）
 - **issue links**：`related`/`solves`/`duplicates` 带类型多对多关系（单向存 + 反向派生），`mint link create/remove/list`（对应 issue #16）
 - **时区显示修复**：存储 UTC、显示转本地时区（`datetime(col,'localtime')`）（对应 issue #17）
+- **--all/-a 别名**：所有 list 命令统一（对应 issue #18 重构）
 
 **验收**：roadmap/plan 能聚合其下 issue；agent 的 plan 可入库管理。
 

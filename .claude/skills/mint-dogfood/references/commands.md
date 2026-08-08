@@ -14,25 +14,29 @@
 | 命令 | 说明 |
 |---|---|
 | `add <TITLE> [--body <BODY>] [--kind problem\|requirement] [--project <NAME>] [--tag <name[:desc]>...] [--json]` | 新建 issue，status=open；project 自动检测（`--project`→git 库名→dirname→default）；tag 逗号分隔、可重复 |
-| `list [--all] [--status <s>] [--tag <name>] [--project <name>] [--json]` | 默认只列 open/planned/dev/test；`--all` 含 done/dropped；按 id DESC |
-| `show <ID> [--json]` | 单条详情（含 last_commit_id） |
-| `state plan\|start\|stage\|close\|reset\|drop\|reopen <ID> [--test-cmd <CMD>] [--reason <TEXT>] [--json]` | issue 状态转换；stage/close 用 `--test-cmd`；drop 用 `--reason` |
-| `tag list [--json]` | 列全部 tag（含关联 issue 计数），供 agent 学习 tag 语义 |
-| `roadmap create\|list\|show\|link\|unlink\|close\|drop\|reopen ... [--json]` | roadmap 容器：聚合 issue；link/unlink 关联；close/drop/reopen 容器状态 |
-| `plan create\|list\|show\|link\|unlink\|close\|drop\|reopen ... [--json]` | plan 容器（镜像 roadmap，共享建模） |
-| `commit <ID> [--sha <SHA>] [--json]` | 记录 issue 的最后关联 commit；--sha 优先，否则读当前 HEAD（非 git 目录报错） |
+| `list [--all\|-a] [--status <s>] [--tag <name>] [--project <name>] [--json]` | 默认只列 open/planned/dev/test；`--all`/`-a` 含 done/dropped；按 id DESC |
+| `show <ID> [--json]` | 单条详情（含 last_commit_id/plan_id/links） |
+| `state plan\|start\|commit\|close\|reset\|drop\|reopen <ID> [--sha <SHA>] [--test-cmd <CMD>] [--reason <TEXT>] [--json]` | issue 状态转换；commit 必填 --sha（记 last_commit_id）；close 必填 --test-cmd |
+| `tag list [--all\|-a] [--json]` | 列全部 tag（含关联 issue 计数），供 agent 学习 tag 语义 |
+| `roadmap create <TITLE> --version <V> [--body <BODY>] [--json]` | 建 roadmap（必填 version，如 0.1.0） |
+| `roadmap list [--all\|-a] [--json]` | 默认只显非 done；`--all`/`-a` 全列（含派生状态/version/计数） |
+| `roadmap show <ID> [--json]` | 详情 + 直接挂的 issue |
+| `roadmap issue <RM> <ISSUE> [--json]` / `roadmap detach-issue <RM> <ISSUE> [--json]` | 直接挂/解挂 issue（仅无 plan 的 issue） |
+| `plan create <TITLE> [--body <BODY>] [--roadmap <ID>] [--json]` | 建 plan（可挂 roadmap） |
+| `plan list [--all\|-a] [--json]` / `plan show <ID> [--json]` | 默认只显非 done |
+| `plan issue <PLAN> <ISSUE> [--json]` / `plan detach-issue <PLAN> <ISSUE> [--json]` | 挂/解挂 issue 到 plan |
 | `link create <FROM> <TYPE> <TO> [--json]` | 建 issue 链接；TYPE: related\|solves\|duplicates；solves/duplicates 反向互斥报错 |
 | `link remove <FROM> <TYPE> <TO> [--json]` | 删链接（对称：任一端表述都能删） |
 | `link list <ID> [--json]` | 列某 issue 的全部链接（出向 + 入向反向派生） |
 
 ## --json 字段
 
-- `list` / `show`：`id title body kind status project_id project test_cmd dropped_reason last_commit_id tags links created_at updated_at`
+- `list` / `show`：`id title body kind status project_id project test_cmd dropped_reason last_commit_id plan_id tags links created_at updated_at`
 - `add`：`id title project kind status`
-- `state`：`id from to`
+- `state`：`id from to`（commit 时含 `last_commit_id`）
 - `tag list`：`name description` + 关联 issue 计数
-- `roadmap` / `plan`：`list` 每项含 `issue_count`；`show` 含 `issues` 摘要列表；`close/drop/reopen` 返回 `{id, from, to}`
-- `commit`：`{id, last_commit_id}`
+- `roadmap` / `plan`：`id title version body roadmap_id status issue_count created_at updated_at`；`show` 含 `issues` 摘要列表
+- `roadmap/plan issue`：`{id, issue_id}`（容器状态为派生，无 close/drop/reopen）
 - `link create/remove`：`{from, to, type}`；`link list`：`[{other_id, other_title, rel, created_at}]`；`show` 含 `links` 数组（rel: related/solves/solved-by/duplicates/duplicated-by）
 
 ## 数据位置

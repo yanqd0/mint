@@ -183,6 +183,30 @@
 
 **理由**：轻量（3 类型少而清晰）、语义精确（LLM 直接读 rel 字段判断方向）、避免双写一致性问题；related 对称故反向幂等，solves/duplicates 有向故反向矛盾。
 
+## D19. 容器状态 5 态派生 + 层级关系（推翻 D16 的 3 态）
+
+**背景**：D16 定容器 3 态（open/done/dropped）+ dropped_reason + 关联表。使用中发现容器从未被实际使用，且语义不清。重构为层级 + 派生。
+
+**决策**：
+- **层级关系**：`issues.plan_id`、`plans.roadmap_id` 外键（一对多）；roadmap 直接挂无 plan 的 issue（`roadmap_direct_issues`，二选一约束——属 plan 后不能再直接挂 roadmap）。**推翻 D16 的 roadmap_issues/plan_issues 关联表**。
+- **容器状态 5 态派生**（纯当前态集合推导，不存独立语义）：`open`（从未开始）/ `running`（曾/正运行）/ `partial`（恰为 done+dropped 无活跃）/ `dropped`（全 dropped）/ `done`（全 done）。优先级 `running > done > dropped > partial > open`。
+- **写后级联同步**：issue 状态/归属变更 → 重算 plan → 重算 roadmap（同一事务）；status 列保留但派生写回，CLI 只读。**无 close/drop/reopen 命令**（状态纯派生）。
+- **字段**：roadmaps 加 `version`(UNIQUE) + `body`；plans 加 `body` + `roadmap_id`。**去 dropped_reason**。
+
+**理由**：层级关系贴合真实开发（版本→计划→issue）；派生状态语义清晰（open=从未开始、running=曾运行）且无需历史表；写后同步避免不一致；roadmap 以版本规划为本（version 是核心标识）。
+
+## D20. `state commit` 合并顶层 commit（dev→test 必附 sha）
+
+**背景**：原顶层 `mint commit`（只写 last_commit_id 不推进状态）与 `state stage`（dev→test 不带 sha）分离，导致开发完成与 commit 记录脱节、漏记。
+
+**决策**：
+- **`mint state stage` 改名 `mint state commit`**（dev→test），**必填 `--sha`**（默认读当前 HEAD）写 `last_commit_id`。语义：开发完成必须 commit（刚提交未测试 → 进 test）。
+- **删除顶层 `mint commit` 命令**（功能并入 state commit）；`Action::Stage` 改名 `Action::Commit`。
+- close 不变（test→done 必填 --test-cmd）；sha 已在 commit 时记录。
+- **强制逐态推进**（skill 层面）：不允许 planned→done 跳过 dev/test。
+
+**理由**：开发完成（获得 commit sha1）本质是 dev→test 行为，两者必须合一，避免漏记；`--sha` 必填强制开发完成有 commit 证据；逐态推进保证流程完整。
+
 ---
 
 ## 后续待定（暂未决策）

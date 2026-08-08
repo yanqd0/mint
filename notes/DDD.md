@@ -51,42 +51,40 @@ CLI 内联 `--tag`（按 clap 框架能力，逗号/重复）；`mint tag list` 
 
 ### Container（容器）
 
-issue 之上的**聚合容器**：把多个 issue 归组到一个"开发方向 / 执行计划"下。`roadmap` 与 `plan` 两类容器**共享同一建模**（"容器关联多个 issue"），复用 tag 的独立表 + 关联表模式（D9）。
+issue/plan 之上的**聚合容器**。`roadmap`（版本方向）与 `plan`（执行计划）构成层级：
+**roadmap → plan（plans.roadmap_id）→ issue（issues.plan_id）**；roadmap 可直接挂无 plan 的 issue（`roadmap_direct_issues`，二选一约束——issue 属 plan 后不能再直接挂 roadmap）。
 
-| 字段 | 含义 |
-|------|------|
-| `id` | 自增主键 |
-| `title` | 标题（NOT NULL，无需唯一——同 issues.title 语义） |
-| `description` | 描述（可选） |
-| `status` | `open` \| `done` \| `dropped` |
-| `dropped_reason` | drop 理由（`--reason`，可空） |
-| `created_at` | 创建时间 |
-| `updated_at` | 状态转换时写入 |
+**容器状态 5 态派生**（纯当前态集合推导，不存储为独立语义）：
 
-**状态集定案：独立 3 态 `open`/`done`/`dropped`，不复用 issue 6 态。**
-6 态中的 `dev`/`test`/`stage`/`test_cmd` 描述"单条 issue 的开发流水线"，对聚合容器无意义（容器不分 dev/test、无测试命令）。容器生命周期只需"进行中 / 已完成 / 已放弃"；`done` 表示其下 issue 已全部 close（含统一测试通过）。roadmap 与 plan **共用同一状态集**（一次设计）。
-
-| 转换 | 触发 | 约束 |
+| 状态 | 含义 | 判定 |
 |------|------|------|
-| open → done | `close` | 建议其下 issue 全 close 后执行 |
-| open → dropped | `drop` | 可附 `--reason`，写入 dropped_reason |
-| done/dropped → open | `reopen` | — |
+| `open` | 从未开始 | 空 / 全部子项 open |
+| `running` | 曾/正运行 | 有任一活跃（planned/dev/test）或有任一非 open 未全结束 |
+| `partial` | 部分完成 | 恰为 {done,dropped} 混合，无 open 无活跃 |
+| `dropped` | 全部放弃 | 全部子项 dropped |
+| `done` | 全部完成 | 全部子项 done |
 
-**关联语义**：`roadmap_issues`/`plan_issues` 复合主键 `(container_id, issue_id)`，`INSERT OR IGNORE` 幂等 attach（重复 link 忽略）。issue 可同时属于多个容器；同容器内一条 issue 至多一次。**容器不拥有 issue 的生命周期**——删除容器不级联删 issue（当前无删容器命令）。
+优先级：`running > done > dropped > partial > open`。
+- **plan 状态** ← 其下 issue 状态派生
+- **roadmap 状态** ← 其下 plan 状态 + 直接挂 issue 状态合并派生
 
-**CLI 形态**：`mint roadmap <sub>` / `mint plan <sub>`，子命令 create/list/show/link/unlink/close/drop/reopen（两级嵌套，仿 state/tag 命名空间）。
+**status 列保留但派生同步**：子项状态/归属变更时**写后级联同步**（改 issue → 重算 plan → 重算 roadmap，同一事务）；无单独更新接口，CLI 只读（价值在按状态筛选）。**无 close/drop/reopen 命令**（状态纯派生）。
+
+**字段**：roadmaps 有 `version`（UNIQUE，如 0.1.0 或任意用户形式）+ `body`（复杂描述）；plans 有 `body` + `roadmap_id`。
+
+**CLI 形态**：`mint roadmap create/list/show/issue/detach-issue`；`mint plan create/list/show/issue/detach-issue`。`list` 默认只显非 done，`--all`/`-a` 全列。
 
 ### Roadmap（路线图）
 
-数据库化的开发路线，对应 notes/roadmap.md 的文本形式：聚合一个开发方向下的多个 issue（如"0.2.0 容器 + git 关联" → 一组 issue）。
+数据库化的**版本规划**：关键字段 `version`（如 `0.1.0`，支持任意用户版本形式，UNIQUE）。roadmap 除自身的复杂描述（body）外，主要**关联 plan**（多版本方向的拆解）；也可直接挂不属于任何 plan 的 issue。
 
 ### Plan（计划）
 
-编程 agent 的执行计划：把一个目标拆成多个 issue 的登记 + 状态管理。程序化承载 mint-dogfood skill 的"多 issue plan 统一测试"模式（SKILL.md「多 issue plan 的执行模式」）——plan 记录拆解、issue 分批推进、全绿后统一 `close`。
+编程 agent 的**执行计划**：记录标题 + 完整 markdown 信息（body），主要**关联多个 issue**（issues.plan_id）。程序化承载 mint-dogfood skill 的"多 issue plan 统一测试"模式——plan 记录拆解、issue 分批推进、全绿后统一 `close`。
 
 ### Git 关联（issues.last_commit_id）
 
-`issues.last_commit_id TEXT`：最后一个解决/推进该 issue 的 git commit（**多个 commit 只记最后一个**，覆盖式写入）。写入时机：`mint commit <id>`（开发/测试阶段任意时刻）——读取当前 HEAD（`git rev-parse HEAD`）或 `--sha` 显式指定；"dev 状态记录 HEAD"即此语义。读取侧：`mint show <id>` 展示；done 的解决方案从该 commit 的 message 读（不做 resolution，见 D7）。
+`issues.last_commit_id TEXT`：最后一个解决/推进该 issue 的 git commit（**多个 commit 只记最后一个**，覆盖式写入）。写入时机：**`mint state commit <id> --sha <SHA>`**（dev→test，必填 --sha，默认读当前 HEAD）——开发完成必须 commit（刚提交未测试 → 进 test）。读取侧：`mint show <id>` 展示；done 的解决方案从该 commit 的 message 读（不做 resolution，见 D7）。
 
 ### Issue Link（issue 关联）
 
@@ -135,7 +133,7 @@ stateDiagram-v2
 |------|------|------|
 | open → planned | `plan` | — |
 | planned → dev | `start` | — |
-| dev → test | `stage` | `--test-cmd` 填测试命令 |
+| dev → test | `commit` | **`--sha` 必填**（默认读 HEAD），写 last_commit_id；开发完成必须 commit |
 | test → done | `close` | **`--test-cmd` 必填**；测试全绿才推进 |
 | planned/dev/test → open | `reset` | 打回重做 |
 | done/dropped → open | `reopen` | 重开；清空 `dropped_reason`（旧周期字段不再有意义） |
@@ -143,7 +141,7 @@ stateDiagram-v2
 
 **CLI 形态**：状态动作全部在 `mint state` 命名空间下：`mint state plan <id>` / `mint state close <id> --test-cmd '...'` / `mint state drop <id> --reason '...'`。顶层命令仅 add/list/show/state/tag（`state` 释放了 `plan` 顶层名给 0.2.0 的 plan 容器）。**无配置文件**：配置走 CLI 参数 + 环境变量（统一 `MINT_` 前缀，如 `MINT_DB_PATH`）。
 
-**无 dev→done 捷径**：跳过测试也要 `stage` 到 `test`，close 时 test_cmd 填 `not-tested`（用户侧英文值；中文语境下可写作"没测"）。此规则需写入未来 adapter 提示词。
+**无 dev→done 捷径**：跳过测试也要 `commit` 到 `test`，close 时 test_cmd 填 `not-tested`（用户侧英文值；中文语境下可写作"没测"）。此规则已写入 mint-dogfood skill 的 state-machine.md。
 
 ### capture（捕获）
 

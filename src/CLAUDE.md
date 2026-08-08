@@ -117,11 +117,12 @@ ORDER BY i.id DESC
 
 ## 数据模型约束
 
-- 9 表：`projects` / `issues` / `tags` / `issue_tags` / `roadmaps` / `plans` / `roadmap_issues` / `plan_issues` / `issue_links`（migration 有序数组驱动 `PRAGMA user_version`，当前 v3，见 `notes/DDD.md`）。
-- `issues`：`kind` 限 `problem|requirement`；`status` 限 `open|planned|dev|test|done|dropped`；`last_commit_id` 记最后关联 commit。
-- 容器（`roadmaps`/`plans`）：`status` 限 `open|done|dropped`（独立 3 态，不复用 issue 6 态）。
+- 8 表：`projects` / `issues` / `tags` / `issue_tags` / `roadmaps` / `plans` / `roadmap_direct_issues` / `issue_links`（migration 有序数组驱动 `PRAGMA user_version`，当前 v3，见 `notes/DDD.md`）。
+- `issues`：`kind` 限 `problem|requirement`；`status` 限 `open|planned|dev|test|done|dropped`；`last_commit_id` 记最后关联 commit；`plan_id` 外键 → plans（一对多）。
+- 容器（`roadmaps`/`plans`）：`status` 限 `open|running|partial|dropped|done`（5 态派生，写后同步，CLI 只读）；roadmaps 有 `version`(UNIQUE) + `body`；plans 有 `body` + `roadmap_id`。
+- `roadmap_direct_issues`：复合主键 `(roadmap_id,issue_id)`；issue 二选一（属 plan 后不能直接挂 roadmap）。
 - `issue_links`：`type` 限 `related|solves|duplicates`；复合主键 `(from_id,type,to_id)`；禁自环；单向存 + 反向派生。
-- 状态转换写 `updated_at`；`close` 必填 `test_cmd`；`drop` 写 `dropped_reason`；**不做 `resolution`/`resolved_at`**。
+- 状态转换写 `updated_at`；`state commit` 必填 `--sha`（写 last_commit_id）；`close` 必填 `test_cmd`；`drop` 写 `dropped_reason`；**不做 `resolution`/`resolved_at`**。
 - FTS5（0.3.0 实现）用 external content + 触发器同步 `issues_fts`；0.1.0 不建 FTS。
 
 ### 迁移方案哲学
