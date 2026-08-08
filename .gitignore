@@ -22,3 +22,11 @@ tags
 !.vscode/extensions.json
 !.vscode/*.code-snippets
 .history/
+
+### Claude Code ###
+.claude/*
+!.claude/agents
+!.claude/hooks
+!.claude/settings.json
+!.claude/skills
+
