@@ -255,6 +255,9 @@ struct LinkListArgs {
 
 #[derive(clap::Args)]
 struct ListTagsArgs {
+    /// Show all (kept for uniform --all/-a; no state dimension)
+    #[arg(long, short = 'a')]
+    all: bool,
     /// Output as JSON
     #[arg(long)]
     json: bool,
@@ -321,7 +324,7 @@ struct AddArgs {
 #[derive(clap::Args)]
 struct ListArgs {
     /// Show all statuses (including done/dropped)
-    #[arg(long)]
+    #[arg(long, short = 'a')]
     all: bool,
     /// Filter by status
     #[arg(long, value_enum)]

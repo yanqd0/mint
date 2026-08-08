@@ -737,3 +737,17 @@ fn st_show_embeds_links() {
     );
     assert!(!stderr.is_empty());
 }
+
+/// --all 的 -a 短别名。
+#[test]
+fn st_list_alias_short_a() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "x");
+    advance_to_done(&db, id);
+    // 默认不含 done
+    let v = run_json(&db, &["list", "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 0);
+    // -a 等价 --all
+    let v = run_json(&db, &["list", "-a", "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 1);
+}
