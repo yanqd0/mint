@@ -1,48 +1,112 @@
-# mint 命令速查（0.3.0）
+# mint 命令参考
 
-所有命令支持 `--json`。全局参数 `--db <PATH>`（或环境变量 `MINT_DB_PATH`）覆盖默认库。
+所有命令支持 `--json`。全局 `--db <PATH>`（或 `MINT_DB_PATH`）覆盖默认库。
+`mint <sub> --help` 查看完整参数和选项。
 
-## 探测回退链（本会话 `$MINT` 前缀）
+## add
 
-1. `which mint` → `mint`（本机 `~/bin/mint` 软链接 → `target/release/mint`，开发中常 `cargo build --release` 更新）
-2. `test -f target/release/mint` → `./target/release/mint`（优先 release）
-3. `test -f target/debug/mint` → `./target/debug/mint`
-4. `cargo run --`（兜底，首次编译较慢）
+```bash
+mint add "标题" \
+  --body "详细描述" \
+  --kind problem \
+  --priority 0 \
+  --label bug,firefox
+```
 
-## 命令表
+add 已内置去重（同项目标题模糊匹配），重复自动合并（`hit_count+1`）。
 
-| 命令 | 说明 |
-|---|---|
-| `add <TITLE> [--body <BODY>] [--kind problem\|requirement] [--project <NAME>] [--label <name[:desc]>...] [--json]` | 新建 issue，status=open；project 自动检测（`--project`→git 库名→dirname→default）；label 逗号分隔、可重复 |
-| `list [--all\|-a] [--status <s>] [--label <name>] [--project <name>] [--json]` | 默认只列 open/planned/dev/test；`--all`/`-a` 含 done/dropped；按 id DESC |
-| `show <ID> [--json]` | 单条详情（含 last_commit_id/plan_id/links） |
-| `search <QUERY> [--project <NAME>] [--label <NAME>] [--status <S>] [--json]` | 全文搜索（FTS5 trigram，查询 ≥3 字符；默认全状态，按相关度 rank） |
-| `edit <ID> [--title <T>] [--body <B>] [--json]` | 更新 title/body（COALESCE 保留未提供字段，body 空串可清空；title/body 变更触发 FTS 同步） |
-| `state plan\|start\|commit\|close\|reset\|drop\|reopen <ID> [--sha <SHA>] [--test-cmd <CMD>] [--reason <TEXT>] [--json]` | issue 状态转换；commit 必填 --sha（记 last_commit_id）；close 必填 --test-cmd |
-| `label list [--all\|-a] [--json]` | 列全部 label（含关联 issue 计数），供 agent 学习 label 语义 |
-| `roadmap create <TITLE> --version <V> [--body <BODY>] [--json]` | 建 roadmap（必填 version，如 0.1.0） |
-| `roadmap list [--all\|-a] [--json]` | 默认只显非 done；`--all`/`-a` 全列（含派生状态/version/计数） |
-| `roadmap show <ID> [--json]` | 详情 + 直接挂的 issue |
-| `roadmap issue <RM> <ISSUE> [--json]` / `roadmap detach-issue <RM> <ISSUE> [--json]` | 直接挂/解挂 issue（仅无 plan 的 issue） |
-| `plan create <TITLE> [--body <BODY>] [--roadmap <ID>] [--json]` | 建 plan（可挂 roadmap） |
-| `plan list [--all\|-a] [--json]` / `plan show <ID> [--json]` | 默认只显非 done |
-| `plan issue <PLAN> <ISSUE> [--json]` / `plan detach-issue <PLAN> <ISSUE> [--json]` | 挂/解挂 issue 到 plan |
-| `link create <FROM> <TYPE> <TO> [--json]` | 建 issue 链接；TYPE: related\|solves\|duplicates；solves/duplicates 反向互斥报错 |
-| `link remove <FROM> <TYPE> <TO> [--json]` | 删链接（对称：任一端表述都能删） |
-| `link list <ID> [--json]` | 列某 issue 的全部链接（出向 + 入向反向派生） |
-| `delete issue\|plan\|roadmap <ID> [--json]` | **危险/不可逆**：物理删除。issue 含 labels/links/roadmap 挂载关联一并清；plan/roadmap 解绑关联后删。默认不用，issue 优先 `state drop` |
+## list
 
-## --json 字段
+```bash
+mint list                                    # 活跃 issue
+mint list --all                              # 含 done/dropped
+mint list --status open --priority 0         # 按优先级筛选
+mint list --label 0.4.0 --project mint       # 按 label + 项目筛选
+```
 
-- `list` / `show`：`id title body kind status project_id project test_cmd dropped_reason last_commit_id plan_id labels links created_at updated_at`
-- `add`：`id title project kind status`
-- `state`：`id from to`（commit 时含 `last_commit_id`）
-- `label list`：`name description` + 关联 issue 计数
-- `roadmap` / `plan`：`id title version body roadmap_id status issue_count created_at updated_at`；`show` 含 `issues` 摘要列表
-- `roadmap/plan issue`：`{id, issue_id}`（容器状态为派生，无 close/drop/reopen）
-- `link create/remove`：`{from, to, type}`；`link list`：`[{other_id, other_title, rel, created_at}]`；`show` 含 `links` 数组（rel: related/solves/solved-by/duplicates/duplicated-by）
+## show
+
+```bash
+mint show 42            # 详情含 labels/links/commit/priority
+mint show 42 --json
+```
+
+## search
+
+```bash
+mint search "登录" --project mint            # ≤2 字符走 LIKE 兜底
+mint search "priority dependency" --status open
+mint search "keyword" --label bug --priority 0
+```
+
+## state
+
+```bash
+mint state plan 42                           # open → planned
+mint state start 42                          # planned → dev
+mint state commit 42 --sha $(git rev-parse HEAD)  # dev → test
+mint state close 42 --test-cmd "cargo test"  # test → done
+mint state drop 42 --reason "不再需要"        # 任意 → dropped
+mint state reopen 42                         # done/dropped → open
+mint state reset 42                          # planned/dev/test → open
+```
+
+## edit
+
+```bash
+mint edit 42 --title "新标题"
+mint edit 42 --body "" --priority 1
+```
+
+## link
+
+```bash
+mint link create 42 solves 10               # 42 解决了 10
+mint link create 42 blocked_by 55           # 42 被 55 阻塞
+mint link create 42 related 30              # 42 关联 30
+mint link list 42
+mint link remove 42 related 10
+```
+
+link 类型：`related`（相关）/ `solves`（解决）/ `duplicates`（重复）/ `blocked_by`（被阻塞）/ `blocks`（阻塞）。
+blocked_by ↔ blocks 互逆，库中归一化为 blocks 存储，查询时自动派生反向。
+
+## label
+
+```bash
+mint label list --all
+```
+
+## plan / roadmap（sprint / milestone）
+
+```bash
+mint roadmap create "v0.4 TUI" --version 0.4.0 --body "范围…"
+mint plan create "sprint-1" --body "目标…" --roadmap 4
+mint roadmap show 4
+mint plan show 12
+mint plan issue 12 42                        # 挂 issue 到 plan
+mint plan detach-issue 12 42                 # 解挂
+mint roadmap issue 4 42                      # 直接挂 issue 到 roadmap
+mint roadmap detach-issue 4 42               # 解挂
+```
+
+## delete
+
+```bash
+mint delete issue 99    # 危险：物理删除。优先用 state drop
+mint delete plan 12
+mint delete roadmap 4
+```
+
+## JSON 输出字段
+
+list/show 输出字段：
+`id title body kind status priority project_id project
+test_cmd dropped_reason last_commit_id plan_id hit_count labels links created_at updated_at`
+
+link rel 值：`related / solves / solved-by / duplicates / duplicated-by /
+blocked_by / blocks`
 
 ## 数据位置
 
-- 默认：`$XDG_DATA_HOME/mint/mint.db`（macOS 通常为 `~/.local/share/mint/mint.db`）；`MINT_DB_PATH` 或 `--db` 覆盖。
-- 0.2.0 无 dedup / FTS：查重靠 `list --json` 标题人工模糊匹配。
+默认：`$XDG_DATA_HOME/mint/mint.db`（`MINT_DB_PATH` 或 `--db` 覆盖）。

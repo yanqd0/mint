@@ -1,52 +1,84 @@
 ---
 name: mint-faa
 description: >-
-  Manage development issues with the mint CLI (Minimal Issue & Needs Tracker).
-  Record bugs, problems, requirements, and leftovers as issues; search before
-  adding; advance the 6-state workflow. Use when the user describes a bug,
-  problem, requirement, or TODO worth tracking, or asks to record an issue.
-allowed-tools: Bash(mint:*) Bash(which:*) Bash(cargo:run) Bash(test:*) Bash(ls:*) Read AskUserQuestion
+  Manage development issues with the mint CLI. Auto-triggered when the user
+  reports bugs, problems, requirements, TODOs, leftovers, review findings, or
+  plans (roadmap/milestone/sprint). When called without arguments, takes over
+  the session and recommends next steps. Trigger words: issue bug problem
+  requirement todo leftover review plan roadmap milestone sprint.
+allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 ---
 
-# mint-faa
+Manage development issues with the mint CLI: **parse intent → select flow (reference) → execute mint command sequence → verify**.
 
-Record and manage development issues via the `mint` CLI. mint is a global,
-single-user, SQLite-backed issue tracker for AI agents and humans. All commands
-support `--json` for agent-friendly output.
+Accepts an optional positional `<description>` argument summarizing intent. When called without arguments, enters **takeover mode** (recommends next development steps). Use `AskUserQuestion` when the intent is ambiguous.
 
-## Workflow
+## Execution Flow
 
-1. **Search first** — before recording, run `mint search "<keyword>"` (or `mint list`)
-   to avoid duplicating an existing issue. `mint add` already deduplicates
-   (same-project normalized-title fuzzy match, threshold 0.8), merging a duplicate
-   into the existing issue and bumping `hit_count`.
-2. **Record** — `mint add "<title>" --body "<details>" --kind problem|requirement`
-   `[--label <name>]`. Use a concise, specific title; put context in the body.
-   Problems (bugs, failures) → `--kind problem`; features/needs → `--kind requirement`.
-3. **Advance the state machine** — `mint state plan|start|commit|close <id>`:
-   open → planned → dev → test → done. `commit` requires `--sha` (defaults to HEAD in a git repo);
-   `close` requires `--test-cmd` (use `not-tested` if tests were skipped). There is no
-   dev→done shortcut: even when skipping tests, commit to test, then close with
-   `--test-cmd not-tested`. See `references/state-machine.md`.
-4. **Review** — `mint list` / `mint show <id>` to inspect status and details.
+1. **Parse intent → Select flow**: Identify the issue type from `<description>` / conversation context, `Read` the corresponding reference:
+   - **bug / problem** → `references/flow-bug.md` (issue → mount → link solves → fix → commit → close)
+   - **requirement** → `references/flow-requirement.md` (issue → schedule → mount plan)
+   - **review / audit report** → `references/flow-review.md` (findings/fixed bugs → record + mount active plan)
+   - **leftover / TODO / observation** → `references/flow-todo.md` (record, optionally mount)
+   - **version / plan / milestone** → `references/flow-planning.md` (roadmap/milestone create / plan/sprint create + split issues)
+   - **conditional branches** (mount rules / no tests / non-git / either-or) → `references/flow-conditions.md`
 
-## Auto-capture signals
+2. **Execute**: Follow the reference steps to run mint command sequences (issue creation / mount / link / state machine advancement),
+   advancing state-by-state and verifying with `show`. Search with `list --json` before recording (fuzzy title match) to avoid duplicates.
 
-A `PostToolUseFailure` hook may inject tool-failure signals into context
-("mint: tool failed…"). On such a signal, **judge whether it is worth recording**
-(fuzzy judgment), and if so call `mint add "<title>" --body "<error detail>"`.
-The dedupe built into `add` keeps the issue list clean.
+3. **Execution order**: Issues that `blocks` others execute first (dependencies first, analogous to `make`);
+   same level ordered by priority ascending (P0→P3), same priority by id ascending.
 
-## Command cheat-sheet
+4. **Multi-step plans**: For cross-module / multi-step work — first create a mint plan (under a roadmap/milestone) + split related issues,
+   then execute; advance each issue through the state machine to done (associate the corresponding commit).
 
-| Command | Purpose |
-|---|---|
-| `mint add <title> [--body] [--kind] [--label]` | Create issue (dedupe built-in) |
-| `mint search <q> [--project] [--label] [--status]` | Full-text search (FTS5, ≥3 chars) |
-| `mint list [--all] [--status] [--label] [--project]` | List issues (active by default) |
-| `mint show <id>` | Issue details |
-| `mint state plan\|start\|commit\|close\|reset\|drop\|reopen <id>` | State transitions |
-| `mint label list` | List labels |
+## Takeover Mode (no arguments)
 
-See `references/commands.md` for the full command reference and
-`references/state-machine.md` for the state-machine rules.
+When called without `<description>`, enters takeover mode to replace initial thinking:
+
+1. **Scan TODO/FIXME/XXX**: grep project code markers, convert each to an issue (dedup, no duplicates; body notes source location).
+2. **Roadmap/milestone check**: Compare existing roadmaps with project state; suggest creating new ones when version planning signs appear → **confirm with user** before creating (skip if duplicate).
+3. **Next step recommendation**: Topological sort by blocks (dependencies first), same level by priority ascending, with rationale.
+4. **Declare takeover**: Subsequent sessions can describe intent directly; the skill auto-follows the mint flow.
+
+## Common Commands
+
+```bash
+# Record issue (built-in dedup)
+mint add "login button unresponsive" --body "Firefox click no feedback, console 500" --kind problem --priority 0 --label bug
+
+# View & search
+mint list --status open --priority 0
+mint search "login" --project mint --json
+
+# State machine (step by step)
+mint state plan 42
+mint state start 42
+mint state commit 42 --sha $(git rev-parse HEAD)
+mint state close 42 --test-cmd "cargo test"
+mint state drop 42 --reason "no longer needed"
+
+# Edit
+mint edit 42 --title "new title" --priority 1
+
+# Links (blocks = dependency)
+mint link create 42 solves 10
+mint link create 42 blocked_by 55
+
+# Plans (plan/sprint under roadmap/milestone)
+mint plan create "sprint-1" --body "goal…" --roadmap 4
+mint plan issue 12 42
+```
+
+See `references/commands.md` for the full command reference and `mint <sub> --help` for per-command details.
+
+## Constraints
+
+- **Dedup built-in**: `add` performs same-project normalized-title fuzzy matching; duplicates auto-merge (bumping `hit_count+1`).
+- **mint manages issues (actionable todos), mem-lite manages memories (facts/lessons)** — do not mix; `issue#N` ↔ `memory#N` linkage: see `references/mem-lite.md`.
+- **Completion requires `state commit <id> --sha <SHA>`** (defaults to HEAD); `close` requires `--test-cmd` (use `not-tested` if tests were skipped).
+- **Plan vs. single-item**: cross-module/multi-step → create a plan/sprint + split issues; single small fix/review finding → just record an issue.
+- **Mount rules** (`references/flow-conditions.md`): associate with plan → no plan? mount roadmap → neither (standalone); issue is either-or (can't directly mount a roadmap after belonging to a plan).
+- **link**: introduced by another change → `link create <issue> solves <introducing-requirement>`.
+- **delete is dangerous/irreversible**: avoid by default, narrow scenarios only + explicit user confirmation; prefer `state drop` for issues.
+- **Clean up verification artifacts**: temporary issues/plans/roadmaps created during verification should be `state drop`ped (with reason) to avoid noise.
