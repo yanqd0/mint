@@ -6,6 +6,7 @@
 pub mod cli;
 pub mod container;
 pub mod db;
+pub mod dedup;
 pub mod error;
 pub mod git;
 pub mod label;
