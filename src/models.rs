@@ -1,4 +1,4 @@
-//! 数据模型：Project / Issue / Tag 结构体与 serde 序列化。
+//! 数据模型：Project / Issue / Label 结构体与 serde 序列化。
 
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
@@ -123,7 +123,7 @@ pub struct Issue {
     pub dropped_reason: Option<String>,
     pub last_commit_id: Option<String>,
     pub plan_id: Option<i64>,
-    pub tags: Vec<String>,
+    pub labels: Vec<String>,
     pub links: Vec<Link>,
     pub created_at: String,
     pub updated_at: String,
@@ -195,9 +195,9 @@ pub struct Link {
     pub created_at: String,
 }
 
-/// Tag 标签。
+/// Label 标签。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Tag {
+pub struct Label {
     pub id: i64,
     pub name: String,
     pub description: Option<String>,

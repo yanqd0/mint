@@ -229,7 +229,7 @@ pub fn delete_roadmap(conn: &Connection, id: i64) -> Result<(), Error> {
     delete_txn(conn, db::ROADMAP_DELETE, id, |_| Ok(()))
 }
 
-/// 物理删除 issue：关联操作（清 tag/links/roadmap 挂载 + 删行）与所属容器派生状态同步在同一事务。
+/// 物理删除 issue：关联操作（清 label/links/roadmap 挂载 + 删行）与所属容器派生状态同步在同一事务。
 /// 所属容器在删除前记录（删除后无法查询）。
 pub fn delete_issue(conn: &Connection, id: i64) -> Result<(), Error> {
     let exists: Option<i64> = conn

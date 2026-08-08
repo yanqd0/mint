@@ -2,7 +2,7 @@
 //!
 //! - `related` 对称：方向归一化（min,max），反向 no-op。
 //! - `solves` / `duplicates` 有向：同类型反向端点互斥，应用层报错。
-//! - 复用 issue_tags 的 INSERT OR IGNORE 幂等模式（D9）。
+//! - 复用 issue_labels 的 INSERT OR IGNORE 幂等模式（D9）。
 
 use rusqlite::{Connection, OptionalExtension, params};
 

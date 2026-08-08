@@ -1,13 +1,13 @@
-//! tag 注册、去重与 issue 关联。
+//! label 注册、去重与 issue 关联。
 
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::db;
 use crate::error::Error;
-use crate::models::Tag;
+use crate::models::Label;
 
-/// `--tag` 语法：`name` 或 `name:description`（冒号分隔）。
-/// 逗号分隔多个 tag。
+/// `--label` 语法：`name` 或 `name:description`（冒号分隔）。
+/// 逗号分隔多个 label。
 pub fn parse_specs(raw: &[String]) -> Vec<(String, Option<String>)> {
     raw.iter()
         .flat_map(|s| s.split(','))
@@ -19,7 +19,7 @@ pub fn parse_specs(raw: &[String]) -> Vec<(String, Option<String>)> {
                 Some((name, desc)) if !name.trim().is_empty() && !desc.trim().is_empty() => {
                     Some((name.trim().to_string(), Some(desc.trim().to_string())))
                 }
-                // 含冒号但任一段为空（如 "a:" / ":desc"）→ 丢弃，不产出畸形 tag
+                // 含冒号但任一段为空（如 "a:" / ":desc"）→ 丢弃，不产出畸形 label
                 Some(_) => None,
                 // 无冒号 → 纯 name
                 None => Some((part.to_string(), None)),
@@ -28,41 +28,41 @@ pub fn parse_specs(raw: &[String]) -> Vec<(String, Option<String>)> {
         .collect()
 }
 
-/// 确保 tag 存在并返回其 id（新 tag 自动注册，已有则复用）。
+/// 确保 label 存在并返回其 id（新 label 自动注册，已有则复用）。
 pub fn ensure(conn: &Connection, name: &str, description: Option<&str>) -> Result<i64, Error> {
     if let Some(id) = query_id(conn, name)? {
         return Ok(id);
     }
-    conn.execute(db::TAG_INSERT, params![name, description])?;
+    conn.execute(db::LABEL_INSERT, params![name, description])?;
     query_id(conn, name)?
-        .ok_or_else(|| Error::Other(format!("tag '{name}' just inserted but not found")))
+        .ok_or_else(|| Error::Other(format!("label '{name}' just inserted but not found")))
 }
 
-/// 查询 tag id（不存在返回 None）。
+/// 查询 label id（不存在返回 None）。
 pub fn query_id(conn: &Connection, name: &str) -> Result<Option<i64>, Error> {
-    conn.query_row(db::TAG_SELECT_ID, params![name], |r| r.get(0))
+    conn.query_row(db::LABEL_SELECT_ID, params![name], |r| r.get(0))
         .optional()
         .map_err(Error::from)
 }
 
-/// 为 issue 关联多个 tag（幂等：重复关联忽略）。
+/// 为 issue 关联多个 label（幂等：重复关联忽略）。
 pub fn attach(
     conn: &Connection,
     issue_id: i64,
     specs: &[(String, Option<String>)],
 ) -> Result<(), Error> {
     for (name, desc) in specs {
-        let tag_id = ensure(conn, name, desc.as_deref())?;
-        conn.execute(db::TAG_ATTACH, params![issue_id, tag_id])?;
+        let label_id = ensure(conn, name, desc.as_deref())?;
+        conn.execute(db::LABEL_ATTACH, params![issue_id, label_id])?;
     }
     Ok(())
 }
 
-/// 列出所有 tag（含关联 issue 数）。
-pub fn list(conn: &Connection) -> Result<Vec<(Tag, i64)>, Error> {
-    let mut stmt = conn.prepare(db::TAG_LIST)?;
+/// 列出所有 label（含关联 issue 数）。
+pub fn list(conn: &Connection) -> Result<Vec<(Label, i64)>, Error> {
+    let mut stmt = conn.prepare(db::LABEL_LIST)?;
     let rows = stmt.query_map([], |r| {
-        let tag = Tag {
+        let label = Label {
             id: r.get(0)?,
             name: r.get(1)?,
             description: r.get(2)?,
@@ -70,14 +70,14 @@ pub fn list(conn: &Connection) -> Result<Vec<(Tag, i64)>, Error> {
             updated_at: r.get(4)?,
         };
         let count: i64 = r.get(5)?;
-        Ok((tag, count))
+        Ok((label, count))
     })?;
     rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
 }
 
-/// 查询某 issue 的 tag 名列表（按 name 排序）。
+/// 查询某 issue 的 label 名列表（按 name 排序）。
 pub fn names_for_issue(conn: &Connection, issue_id: i64) -> Result<Vec<String>, Error> {
-    let mut stmt = conn.prepare(db::TAG_NAMES_FOR_ISSUE)?;
+    let mut stmt = conn.prepare(db::LABEL_NAMES_FOR_ISSUE)?;
     let rows = stmt.query_map(params![issue_id], |r| r.get(0))?;
     rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
 }
@@ -125,7 +125,7 @@ mod tests {
         assert_eq!(parse_specs(&raw), expected);
     }
 
-    /// 新 tag 自动注册，重复 ensure 复用同一 id。
+    /// 新 label 自动注册，重复 ensure 复用同一 id。
     #[test]
     fn ensure_registers_and_dedups() {
         let (conn, _) = setup();
@@ -133,7 +133,7 @@ mod tests {
         let id2 = ensure(&conn, "bug", Some("缺陷")).unwrap();
         assert_eq!(id1, id2);
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM tags", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM labels", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
     }
@@ -146,12 +146,12 @@ mod tests {
         attach(&conn, iid, &specs).unwrap();
         attach(&conn, iid, &specs).unwrap();
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM issue_tags", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM issue_labels", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
     }
 
-    /// 查询 issue 的 tag 名。
+    /// 查询 issue 的 label 名。
     #[test]
     fn names_for_issue_returns_sorted() {
         let (conn, iid) = setup();

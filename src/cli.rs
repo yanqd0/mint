@@ -10,12 +10,12 @@ use crate::container::{self, ContainerKind};
 use crate::db;
 use crate::error::Error;
 use crate::git;
+use crate::label;
 use crate::link;
 use crate::models::{Issue, Kind, LinkType, Status};
 use crate::output;
 use crate::project;
 use crate::state::{self, Action};
-use crate::tag;
 
 /// 全局 SQLite issue 系统：mint-faa（命令 `mint`）。
 #[derive(Parser)]
@@ -40,8 +40,8 @@ enum Commands {
     Show(ShowArgs),
     /// State transitions
     State(StateArgs),
-    /// Tag subcommands
-    Tag(TagArgs),
+    /// Label subcommands
+    Label(LabelArgs),
     /// Roadmap container subcommands
     Roadmap(RoadmapArgs),
     /// Plan container subcommands
@@ -77,15 +77,15 @@ enum StateCmd {
 }
 
 #[derive(clap::Args)]
-struct TagArgs {
+struct LabelArgs {
     #[command(subcommand)]
-    command: TagCmd,
+    command: LabelCmd,
 }
 
 #[derive(Subcommand)]
-enum TagCmd {
-    /// List all tags (with issue counts)
-    List(ListTagsArgs),
+enum LabelCmd {
+    /// List all labels (with issue counts)
+    List(ListLabelsArgs),
 }
 
 #[derive(clap::Args)]
@@ -136,7 +136,7 @@ struct DeleteArgs {
 
 #[derive(Subcommand)]
 enum DeleteCmd {
-    /// Permanently delete an issue and its links/tags (DANGEROUS: prefer `state drop`)
+    /// Permanently delete an issue and its links/labels (DANGEROUS: prefer `state drop`)
     Issue(ContainerIdArgs),
     /// Delete a plan (detaches its issues; DANGEROUS)
     Plan(ContainerIdArgs),
@@ -272,7 +272,7 @@ struct LinkListArgs {
 }
 
 #[derive(clap::Args)]
-struct ListTagsArgs {
+struct ListLabelsArgs {
     /// Show all (kept for uniform --all/-a; no state dimension)
     #[arg(long, short = 'a')]
     all: bool,
@@ -331,9 +331,9 @@ struct AddArgs {
     /// Project name (default: auto-detect from git/dir)
     #[arg(long)]
     project: Option<String>,
-    /// Tags: 'name' or 'name:desc', comma-separated
+    /// Labels: 'name' or 'name:desc', comma-separated
     #[arg(long)]
-    tag: Vec<String>,
+    label: Vec<String>,
     /// Output as JSON
     #[arg(long)]
     json: bool,
@@ -347,9 +347,9 @@ struct ListArgs {
     /// Filter by status
     #[arg(long, value_enum)]
     status: Option<Status>,
-    /// Filter by tag name
+    /// Filter by label name
     #[arg(long)]
-    tag: Option<String>,
+    label: Option<String>,
     /// Filter by project name
     #[arg(long)]
     project: Option<String>,
@@ -378,8 +378,8 @@ impl Cli {
                 StateCmd::Drop(d) => cmd_drop(&conn, d),
                 StateCmd::Reopen(t) => cmd_trans(&conn, t, Action::Reopen),
             },
-            Commands::Tag(t) => match &t.command {
-                TagCmd::List(l) => cmd_tag_list(&conn, l),
+            Commands::Label(t) => match &t.command {
+                LabelCmd::List(l) => cmd_label_list(&conn, l),
             },
             Commands::Roadmap(r) => cmd_roadmap(&conn, &r.command),
             Commands::Plan(p) => cmd_plan(&conn, &p.command),
@@ -422,7 +422,7 @@ fn cmd_add(
     let status = Status::Open;
     let test_cmd: Option<&str> = None;
 
-    // 事务包裹：project 注册 + issue 插入 + tag 关联原子提交，中断不留孤儿行。
+    // 事务包裹：project 注册 + issue 插入 + label 关联原子提交，中断不留孤儿行。
     // 用 BEGIN IMMEDIATE：事务起点即持写锁，避免 WAL 下 DEFERRED 的 BUSY_SNAPSHOT 间隙。
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let pid = project::ensure(&tx, &pname, cwd)?;
@@ -433,9 +433,9 @@ fn cmd_add(
     )?;
     let id = tx.last_insert_rowid();
 
-    let specs = tag::parse_specs(&a.tag);
+    let specs = label::parse_specs(&a.label);
     if !specs.is_empty() {
-        tag::attach(&tx, id, &specs)?;
+        label::attach(&tx, id, &specs)?;
     }
     tx.commit()?;
 
@@ -456,11 +456,11 @@ fn cmd_add(
 fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
     let all: i64 = if l.all { 1 } else { 0 };
     let status = l.status; // Option<Status>，impl ToSql（NULL=不过滤）
-    let tag: Option<&str> = l.tag.as_deref();
+    let label: Option<&str> = l.label.as_deref();
     let project: Option<&str> = l.project.as_deref();
 
     let mut stmt = conn.prepare(db::ISSUE_LIST)?;
-    let rows = stmt.query_map(rusqlite::params![all, status, tag, project], |r| {
+    let rows = stmt.query_map(rusqlite::params![all, status, label, project], |r| {
         Ok(Issue {
             id: r.get(0)?,
             title: r.get(1)?,
@@ -473,7 +473,7 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
             dropped_reason: r.get(8)?,
             last_commit_id: r.get(9)?,
             plan_id: r.get(10)?,
-            tags: Vec::new(),
+            labels: Vec::new(),
             links: Vec::new(),
             created_at: r.get(11)?,
             updated_at: r.get(12)?,
@@ -481,9 +481,9 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
     })?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
-    // 填充 tags（每个 issue 一次查询，量小可接受）
+    // 填充 labels（每个 issue 一次查询，量小可接受）
     for issue in &mut issues {
-        issue.tags = tag::names_for_issue(conn, issue.id)?;
+        issue.labels = label::names_for_issue(conn, issue.id)?;
     }
 
     if l.json {
@@ -510,7 +510,7 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
                 dropped_reason: r.get(8)?,
                 last_commit_id: r.get(9)?,
                 plan_id: r.get(10)?,
-                tags: Vec::new(),
+                labels: Vec::new(),
                 links: Vec::new(),
                 created_at: r.get(11)?,
                 updated_at: r.get(12)?,
@@ -522,7 +522,7 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
         })?;
 
     let mut issue = issue;
-    issue.tags = tag::names_for_issue(conn, id)?;
+    issue.labels = label::names_for_issue(conn, id)?;
     issue.links = link::links_for(conn, id)?;
 
     if s.json {
@@ -533,13 +533,13 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
     Ok(())
 }
 
-/// tag list：列出所有 tag（含关联 issue 数）。
-fn cmd_tag_list(conn: &rusqlite::Connection, l: &ListTagsArgs) -> Result<(), Error> {
-    let tags = tag::list(conn)?;
+/// label list：列出所有 label（含关联 issue 数）。
+fn cmd_label_list(conn: &rusqlite::Connection, l: &ListLabelsArgs) -> Result<(), Error> {
+    let labels = label::list(conn)?;
     if l.json {
-        println!("{}", serde_json::to_string(&tags)?);
+        println!("{}", serde_json::to_string(&labels)?);
     } else {
-        for (t, count) in &tags {
+        for (t, count) in &labels {
             let desc = t.description.as_deref().unwrap_or("");
             println!("{:<16} {:>5} issues  {}", t.name, count, desc);
         }

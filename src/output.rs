@@ -6,10 +6,10 @@ use crate::models::{Container, Issue, IssueSummary};
 pub fn format_list(issues: &[Issue]) -> String {
     let mut out = String::new();
     for i in issues {
-        let tag_str = if i.tags.is_empty() {
+        let label_str = if i.labels.is_empty() {
             String::new()
         } else {
-            format!(" [{}]", i.tags.join(","))
+            format!(" [{}]", i.labels.join(","))
         };
         out.push_str(&format!(
             "#{:<4} {:<10} {:<14} {}{}\n",
@@ -17,7 +17,7 @@ pub fn format_list(issues: &[Issue]) -> String {
             i.kind.as_str(),
             i.status.as_str(),
             i.title,
-            tag_str
+            label_str
         ));
     }
     out
@@ -45,8 +45,8 @@ pub fn format_issue(i: &Issue) -> String {
     if let Some(sha) = &i.last_commit_id {
         out.push_str(&format!("  commit:  {sha}\n"));
     }
-    if !i.tags.is_empty() {
-        out.push_str(&format!("  tags:    {}\n", i.tags.join(", ")));
+    if !i.labels.is_empty() {
+        out.push_str(&format!("  labels:    {}\n", i.labels.join(", ")));
     }
     if !i.links.is_empty() {
         out.push_str(&format!("  links:    {}\n", i.links.len()));
@@ -129,7 +129,7 @@ mod tests {
         test_cmd: Option<&str>,
         dropped: Option<&str>,
         commit: Option<&str>,
-        tags: &[&str],
+        labels: &[&str],
         links: Vec<Link>,
     ) -> Issue {
         Issue {
@@ -144,7 +144,7 @@ mod tests {
             dropped_reason: dropped.map(Into::into),
             last_commit_id: commit.map(Into::into),
             plan_id: None,
-            tags: tags.iter().map(|s| s.to_string()).collect(),
+            labels: labels.iter().map(|s| s.to_string()).collect(),
             links,
             created_at: "2026-01-01 00:00:00".into(),
             updated_at: "2026-01-01 00:00:00".into(),
@@ -208,12 +208,12 @@ mod tests {
         assert!(out.contains(needle), "缺 {needle}: {out}");
     }
 
-    /// format_list：tags 拼接（有/无/多个）。
+    /// format_list：labels 拼接（有/无/多个）。
     #[rstest]
     #[case(&[], "")]
     #[case(&["dev"], "[dev]")]
     #[case(&["dev", "urgent"], "[dev,urgent]")]
-    fn format_list_tags(#[case] tags: &[&str], #[case] expected: &str) {
+    fn format_list_labels(#[case] labels: &[&str], #[case] expected: &str) {
         let out = format_list(&[mk_issue(
             1,
             "t",
@@ -223,22 +223,22 @@ mod tests {
             None,
             None,
             None,
-            tags,
+            labels,
             vec![],
         )]);
         if expected.is_empty() {
-            assert!(!out.contains('['), "无 tags 不应有括号: {out}");
+            assert!(!out.contains('['), "无 labels 不应有括号: {out}");
         } else {
             assert!(out.contains(expected), "缺 {expected}: {out}");
         }
     }
 
-    /// format_issue：可选字段的出现/缺失（body/test_cmd/dropped/commit/tags/links）。
+    /// format_issue：可选字段的出现/缺失（body/test_cmd/dropped/commit/labels/links）。
     #[rstest]
     #[case::minimal(
         mk_issue(1, "t", Kind::Problem, Status::Open, None, None, None, None, &[], vec![]),
         &["#1 t", "status:  open", "project: mint"],
-        &["body:", "test:", "dropped:", "commit:", "tags:", "links:"],
+        &["body:", "test:", "dropped:", "commit:", "labels:", "links:"],
     )]
     #[case::full(
         mk_issue(
@@ -253,13 +253,13 @@ mod tests {
             &["dev"],
             vec![mk_link(2, "other", "related")],
         ),
-        &["body:", "test:    cargo test", "dropped: why", "commit:  abc123", "tags:    dev", "links:"],
+        &["body:", "test:    cargo test", "dropped: why", "commit:  abc123", "labels:    dev", "links:"],
         &[],
     )]
     #[case::partial(
         mk_issue(1, "t", Kind::Problem, Status::Dev, None, Some("cmd"), None, None, &[], vec![]),
         &["test:    cmd"],
-        &["body:", "dropped:", "commit:", "tags:", "links:"],
+        &["body:", "dropped:", "commit:", "labels:", "links:"],
     )]
     fn format_issue_fields(#[case] i: Issue, #[case] present: &[&str], #[case] absent: &[&str]) {
         let out = format_issue(&i);
