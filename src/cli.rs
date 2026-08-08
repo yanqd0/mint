@@ -41,6 +41,8 @@ enum Commands {
     Search(SearchArgs),
     /// Show an issue's details
     Show(ShowArgs),
+    /// Edit an issue's title/body
+    Edit(EditArgs),
     /// State transitions
     State(StateArgs),
     /// Label subcommands
@@ -323,6 +325,20 @@ struct ShowArgs {
 }
 
 #[derive(clap::Args)]
+struct EditArgs {
+    id: i64,
+    /// New title (omit to keep; empty rejected)
+    #[arg(long)]
+    title: Option<String>,
+    /// New body (omit to keep; empty string clears)
+    #[arg(long)]
+    body: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
 struct AddArgs {
     title: String,
     /// Optional body text
@@ -391,6 +407,7 @@ impl Cli {
             Commands::List(l) => cmd_list(&conn, l),
             Commands::Search(s) => cmd_search(&conn, s),
             Commands::Show(s) => cmd_show(&conn, s),
+            Commands::Edit(e) => cmd_edit(&conn, e),
             Commands::State(st) => match &st.command {
                 StateCmd::Plan(t) => cmd_trans(&conn, t, Action::Plan),
                 StateCmd::Start(t) => cmd_trans(&conn, t, Action::Start),
@@ -621,6 +638,33 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
         println!("{}", serde_json::to_string(&issue)?);
     } else {
         print!("{}", output::format_issue(&issue));
+    }
+    Ok(())
+}
+
+/// 更新 issue 的 title/body（COALESCE 保留未提供字段；title/body 变更触发 FTS 同步触发器）。
+fn cmd_edit(conn: &rusqlite::Connection, e: &EditArgs) -> Result<(), Error> {
+    let title = e.title.as_deref().map(str::trim);
+    let body = e.body.as_deref();
+    if title.is_none() && body.is_none() {
+        return Err(Error::Other("edit requires --title or --body".to_string()));
+    }
+    if title.is_some_and(|t| t.is_empty()) {
+        return Err(Error::Other("title must not be empty".to_string()));
+    }
+    let affected = conn.execute(db::ISSUE_EDIT, rusqlite::params![e.id, title, body])?;
+    if affected == 0 {
+        return Err(Error::Other(format!("issue #{} not found", e.id)));
+    }
+    if e.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "id": e.id, "title": title, "body": body,
+            }))?
+        );
+    } else {
+        println!("Updated issue #{}", e.id);
     }
     Ok(())
 }

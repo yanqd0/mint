@@ -16,6 +16,7 @@ pub const ISSUE_UPDATE_TRANSITION: &str = include_str!("queries/issue_update_tra
 pub const ISSUE_DELETE: &str = include_str!("queries/issue_delete.sql");
 pub const ISSUE_ACTIVE_TITLES: &str = include_str!("queries/issue_active_titles.sql");
 pub const ISSUE_BUMP_HIT_COUNT: &str = include_str!("queries/issue_bump_hit_count.sql");
+pub const ISSUE_EDIT: &str = include_str!("queries/issue_edit.sql");
 
 pub const ISSUE_LINK_EXISTS: &str = include_str!("queries/issue_link_exists.sql");
 pub const ISSUE_LINK_INSERT: &str = include_str!("queries/issue_link_insert.sql");
