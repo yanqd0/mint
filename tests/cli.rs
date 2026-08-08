@@ -132,7 +132,17 @@ fn st_list_status_done_bypasses_active_filter() {
 fn st_transition_illegal_rejected() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "illegal");
-    let stderr = run_fail(&db, &["issue", "state", "close", &id.to_string(), "--test-cmd", "x"]);
+    let stderr = run_fail(
+        &db,
+        &[
+            "issue",
+            "state",
+            "close",
+            &id.to_string(),
+            "--test-cmd",
+            "x",
+        ],
+    );
     assert!(stderr.contains("invalid transition"), "stderr: {stderr}");
 }
 
@@ -276,7 +286,14 @@ fn st_add_duplicate_merges_labels() {
     let id = add_issue(&db, "fix login bug");
     run_json(
         &db,
-        &["issue", "add", "fix login bug", "--label", "urgent", "--json"],
+        &[
+            "issue",
+            "add",
+            "fix login bug",
+            "--label",
+            "urgent",
+            "--json",
+        ],
     );
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert!(
@@ -313,9 +330,15 @@ fn st_add_fuzzy_duplicate() {
 #[test]
 fn st_add_different_project_no_merge() {
     let (_dir, db) = empty_db();
-    let a = run_json(&db, &["issue", "add", "fix login", "--project", "proj-a", "--json"]);
+    let a = run_json(
+        &db,
+        &["issue", "add", "fix login", "--project", "proj-a", "--json"],
+    );
     let id_a = a["id"].as_i64().unwrap();
-    let b = run_json(&db, &["issue", "add", "fix login", "--project", "proj-b", "--json"]);
+    let b = run_json(
+        &db,
+        &["issue", "add", "fix login", "--project", "proj-b", "--json"],
+    );
     let id_b = b["id"].as_i64().unwrap();
     assert_ne!(id_a, id_b, "不同 project 不应合并");
     let v = run_json(&db, &["list", "--all", "--json"]);
@@ -532,7 +555,14 @@ fn st_edit_title_preserves_body() {
     let id = v["id"].as_i64().unwrap();
     run_json(
         &db,
-        &["issue", "set", &id.to_string(), "--title", "new t", "--json"],
+        &[
+            "issue",
+            "set",
+            &id.to_string(),
+            "--title",
+            "new t",
+            "--json",
+        ],
     );
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["title"], "new t");
@@ -545,7 +575,10 @@ fn st_edit_body_clear() {
     let (_dir, db) = empty_db();
     let v = run_json(&db, &["issue", "add", "t", "--body", "some body", "--json"]);
     let id = v["id"].as_i64().unwrap();
-    run_json(&db, &["issue", "set", &id.to_string(), "--body", "", "--json"]);
+    run_json(
+        &db,
+        &["issue", "set", &id.to_string(), "--body", "", "--json"],
+    );
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["body"], "");
 }
@@ -632,7 +665,10 @@ fn st_reopen_clears_dropped_reason() {
     );
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["dropped_reason"], "obsolete");
-    run_json(&db, &["issue", "state", "reopen", &id.to_string(), "--json"]);
+    run_json(
+        &db,
+        &["issue", "state", "reopen", &id.to_string(), "--json"],
+    );
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["status"], "open");
     assert_eq!(v["dropped_reason"], serde_json::Value::Null);
@@ -642,7 +678,10 @@ fn st_reopen_clears_dropped_reason() {
 #[test]
 fn st_project_autodetect_explicit() {
     let (_dir, db) = empty_db();
-    let v = run_json(&db, &["issue", "add", "explicit", "--project", "mint", "--json"]);
+    let v = run_json(
+        &db,
+        &["issue", "add", "explicit", "--project", "mint", "--json"],
+    );
     assert_eq!(v["project"], "mint");
 }
 
@@ -685,10 +724,7 @@ fn st_roadmap_issue_detach() {
     run_json(&db, &["roadmap", "attach", "1", &id.to_string(), "--json"]);
     let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 1);
-    run_json(
-        &db,
-        &["roadmap", "detach", "1", &id.to_string(), "--json"],
-    );
+    run_json(&db, &["roadmap", "detach", "1", &id.to_string(), "--json"]);
     let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 0);
 }
@@ -725,7 +761,10 @@ fn st_plan_create_link_derived() {
 
     // 推进 issue 到 dev → plan running
     run_json(&db, &["issue", "state", "plan", &iid.to_string(), "--json"]);
-    run_json(&db, &["issue", "state", "start", &iid.to_string(), "--json"]);
+    run_json(
+        &db,
+        &["issue", "state", "start", &iid.to_string(), "--json"],
+    );
     let v = run_json(&db, &["plan", "show", "1", "--json"]);
     assert_eq!(v["status"], "running");
 
@@ -791,7 +830,14 @@ fn st_state_commit_illegal_from_open() {
     let id = add_issue(&db, "c");
     let stderr = run_fail(
         &db,
-        &["issue", "state", "commit", &id.to_string(), "--sha", "abc123"],
+        &[
+            "issue",
+            "state",
+            "commit",
+            &id.to_string(),
+            "--sha",
+            "abc123",
+        ],
     );
     assert!(stderr.contains("invalid transition"), "stderr: {stderr}");
 }
@@ -1034,7 +1080,14 @@ fn st_link_solves_reverse_conflict() {
     );
     let stderr = run_fail(
         &db,
-        &["issue", "link", "create", &b.to_string(), "solves", &a.to_string()],
+        &[
+            "issue",
+            "link",
+            "create",
+            &b.to_string(),
+            "solves",
+            &a.to_string(),
+        ],
     );
     assert!(stderr.contains("already linked"), "stderr: {stderr}");
 }
@@ -1080,10 +1133,20 @@ fn st_link_missing_ids() {
     let a = add_issue(&db, "a");
     let stderr = run_fail(
         &db,
-        &["issue", "link", "create", &a.to_string(), "related", &a.to_string()],
+        &[
+            "issue",
+            "link",
+            "create",
+            &a.to_string(),
+            "related",
+            &a.to_string(),
+        ],
     );
     assert!(stderr.contains("to itself"), "stderr: {stderr}");
-    let stderr = run_fail(&db, &["issue", "link", "create", &a.to_string(), "related", "999"]);
+    let stderr = run_fail(
+        &db,
+        &["issue", "link", "create", &a.to_string(), "related", "999"],
+    );
     assert!(stderr.contains("issue #999 not found"), "stderr: {stderr}");
 }
 
@@ -1110,7 +1173,14 @@ fn st_show_embeds_links() {
     // 非法 type 被 clap 拒绝
     let stderr = run_fail(
         &db,
-        &["issue", "link", "create", &a.to_string(), "bogus", &b.to_string()],
+        &[
+            "issue",
+            "link",
+            "create",
+            &a.to_string(),
+            "bogus",
+            &b.to_string(),
+        ],
     );
     assert!(!stderr.is_empty());
 }

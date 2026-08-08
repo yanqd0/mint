@@ -6,7 +6,7 @@ use crate::db;
 use crate::error::Error;
 use crate::label;
 
-use super::list::{fill_labels, issue_from_row};
+use super::list::issue_from_row;
 
 #[derive(clap::Args)]
 pub struct GetArgs {

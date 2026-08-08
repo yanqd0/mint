@@ -4,6 +4,7 @@ use rusqlite::Connection;
 
 use crate::container;
 use crate::error::Error;
+use crate::label;
 
 pub(crate) fn print_deleted(kind: &str, id: i64, json: bool) -> Result<(), Error> {
     if json {
@@ -28,6 +29,18 @@ pub fn dispatch(conn: &Connection, cmd: &super::DeleteCmd) -> Result<(), Error> 
         super::DeleteCmd::Roadmap(a) => {
             container::delete_roadmap(conn, a.id)?;
             print_deleted("roadmap", a.id, a.json)
+        }
+        super::DeleteCmd::Label(a) => {
+            label::delete(conn, &a.name)?;
+            if a.json {
+                println!(
+                    "{}",
+                    serde_json::json!({ "deleted": a.name, "kind": "label" })
+                );
+            } else {
+                println!("Deleted label '{}'", a.name);
+            }
+            Ok(())
         }
     }
 }

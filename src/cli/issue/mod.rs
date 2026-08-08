@@ -17,7 +17,7 @@ pub mod state;
 
 use add::AddArgs;
 use link::LinkArgs;
-use list::{ListArgs, SearchArgs, ShowArgs};
+use list::{ListArgs, ShowArgs};
 use set_get::{GetArgs, SetArgs};
 use state::StateArgs;
 
@@ -46,11 +46,7 @@ pub enum IssueCmd {
 }
 
 /// Issue 命令分发。
-pub fn dispatch(
-    conn: &mut Connection,
-    cwd: &Path,
-    cmd: &IssueCmd,
-) -> Result<(), Error> {
+pub fn dispatch(conn: &mut Connection, cwd: &Path, cmd: &IssueCmd) -> Result<(), Error> {
     match cmd {
         IssueCmd::Add(a) => add::cmd_add(conn, cwd, a),
         IssueCmd::List(l) => list::cmd_list(conn, l),

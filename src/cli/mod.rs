@@ -14,8 +14,8 @@ pub mod issue;
 pub mod plan;
 pub mod roadmap;
 
-use issue::list::{ListArgs, SearchArgs, ShowArgs};
 use issue::IssueArgs;
+use issue::list::{ListArgs, SearchArgs, ShowArgs};
 
 // ── 共享 clap args（plan/roadmap 共用）────────────────────────────
 
@@ -78,6 +78,48 @@ pub struct RoadmapIssueArgs {
 pub struct PlanIssueArgs {
     pub id: i64,
     pub issue_id: i64,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Args)]
+pub struct ContainerGetArgs {
+    pub id: i64,
+    /// Field name: title, body, status, version (roadmap), roadmap_id (plan),
+    /// created_at, updated_at
+    pub field: String,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Args)]
+pub struct PlanSetArgs {
+    pub id: i64,
+    /// New title (omit to keep; empty rejected)
+    #[arg(long)]
+    pub title: Option<String>,
+    /// New body (omit to keep; empty string clears)
+    #[arg(long)]
+    pub body: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Args)]
+pub struct RoadmapSetArgs {
+    pub id: i64,
+    /// New title (omit to keep; empty rejected)
+    #[arg(long)]
+    pub title: Option<String>,
+    /// New version (omit to keep; empty rejected)
+    #[arg(long)]
+    pub version: Option<String>,
+    /// New body (omit to keep; empty string clears)
+    #[arg(long)]
+    pub body: Option<String>,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -161,6 +203,10 @@ pub enum RoadmapCmd {
     Attach(RoadmapIssueArgs),
     /// Detach an issue from a roadmap
     Detach(RoadmapIssueArgs),
+    /// Get a single field's value (bare output; --json for structured)
+    Get(ContainerGetArgs),
+    /// Set fields: --title / --body / --version
+    Set(RoadmapSetArgs),
 }
 
 #[derive(clap::Args)]
@@ -181,6 +227,10 @@ pub enum PlanCmd {
     Attach(PlanIssueArgs),
     /// Remove an issue from this plan
     Detach(PlanIssueArgs),
+    /// Get a single field's value (bare output; --json for structured)
+    Get(ContainerGetArgs),
+    /// Set fields: --title / --body
+    Set(PlanSetArgs),
 }
 
 #[derive(clap::Args)]
@@ -191,12 +241,23 @@ pub struct DeleteArgs {
 
 #[derive(Subcommand)]
 pub enum DeleteCmd {
-    /// Permanently delete an issue and its links/labels (DANGEROUS: prefer `state drop`)
+    /// Permanently delete an issue and its links/labels (DANGEROUS: prefer `issue state drop`)
     Issue(ContainerIdArgs),
     /// Delete a plan (detaches its issues; DANGEROUS)
     Plan(ContainerIdArgs),
     /// Delete a roadmap (detaches its plans and direct issues; DANGEROUS)
     Roadmap(ContainerIdArgs),
+    /// Delete a label by name (clears its issue associations; DANGEROUS)
+    Label(DeleteLabelArgs),
+}
+
+#[derive(clap::Args)]
+pub struct DeleteLabelArgs {
+    /// Label name to delete
+    pub name: String,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 // ── Cli::run ──────────────────────────────────────────────────────
