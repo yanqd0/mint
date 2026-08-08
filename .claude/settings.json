@@ -8,6 +8,11 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/rust_format.py",
             "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/sqruff_format.py",
+            "timeout": 60
           }
         ]
       }
