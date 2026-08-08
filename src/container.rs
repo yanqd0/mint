@@ -176,6 +176,37 @@ pub fn get(conn: &Connection, kind: ContainerKind, id: i64) -> Result<Option<Con
     .map_err(Error::from)
 }
 
+/// 更新 plan 的 title/body（COALESCE 保留未提供字段）。
+/// 不涉及派生状态同步（title/body 变更不影响 plan 状态）。
+pub fn update_plan(
+    conn: &Connection,
+    id: i64,
+    title: Option<&str>,
+    body: Option<&str>,
+) -> Result<(), Error> {
+    let affected = conn.execute(db::PLAN_UPDATE, params![id, title, body])?;
+    if affected == 0 {
+        return Err(Error::Other(format!("plan #{id} not found")));
+    }
+    Ok(())
+}
+
+/// 更新 roadmap 的 title/version/body（COALESCE 保留未提供字段）。
+/// 不涉及派生状态同步（title/version/body 变更不影响 roadmap 状态）。
+pub fn update_roadmap(
+    conn: &Connection,
+    id: i64,
+    title: Option<&str>,
+    version: Option<&str>,
+    body: Option<&str>,
+) -> Result<(), Error> {
+    let affected = conn.execute(db::ROADMAP_UPDATE, params![id, title, version, body])?;
+    if affected == 0 {
+        return Err(Error::Other(format!("roadmap #{id} not found")));
+    }
+    Ok(())
+}
+
 /// 执行删除（多语句 SQL 的关联操作）+ `after` 同步，同一 `BEGIN IMMEDIATE...COMMIT` 事务内原子提交。
 /// 任一失败整体回滚，使"删除 + 派生状态同步"不可分割；拒绝在既有事务内调用（避免误回滚外层事务）。
 /// SQL 仅单参数 `?1`；id 为自增数字，替换安全（无注入面）。
@@ -657,6 +688,80 @@ mod tests {
                 .status,
             ContainerStatus::Open
         );
+    }
+
+    /// update_plan 更新 title，body 不变。
+    #[test]
+    fn update_plan_changes_title() {
+        let (conn, _) = setup();
+        let pid = create(
+            &conn,
+            ContainerKind::Plan,
+            "old",
+            None,
+            Some("old body"),
+            None,
+        )
+        .unwrap();
+        update_plan(&conn, pid, Some("new title"), None).unwrap();
+        let p = get(&conn, ContainerKind::Plan, pid).unwrap().unwrap();
+        assert_eq!(p.title, "new title");
+        assert_eq!(p.body.as_deref(), Some("old body"));
+    }
+
+    /// update_plan 更新 body，title 不变。
+    #[test]
+    fn update_plan_preserves_title() {
+        let (conn, _) = setup();
+        let pid = create(
+            &conn,
+            ContainerKind::Plan,
+            "t",
+            None,
+            Some("old body"),
+            None,
+        )
+        .unwrap();
+        update_plan(&conn, pid, None, Some("new body")).unwrap();
+        let p = get(&conn, ContainerKind::Plan, pid).unwrap().unwrap();
+        assert_eq!(p.title, "t");
+        assert_eq!(p.body.as_deref(), Some("new body"));
+    }
+
+    /// update_plan 不存在的 plan 报 not found。
+    #[test]
+    fn update_plan_missing_errors() {
+        let (conn, _) = setup();
+        let err = update_plan(&conn, 999, Some("x"), None).unwrap_err();
+        assert!(err.to_string().contains("plan #999 not found"), "{err}");
+    }
+
+    /// update_roadmap 更新 version，title/body 不变。
+    #[test]
+    fn update_roadmap_changes_version() {
+        let (conn, _) = setup();
+        let rid = create(
+            &conn,
+            ContainerKind::Roadmap,
+            "r",
+            Some("0.1.0"),
+            Some("old body"),
+            None,
+        )
+        .unwrap();
+        update_roadmap(&conn, rid, None, Some("0.2.0"), None).unwrap();
+        let r = get(&conn, ContainerKind::Roadmap, rid).unwrap().unwrap();
+        assert_eq!(r.version, Some("0.2.0".to_string()));
+        assert_eq!(r.title, "r");
+        assert_eq!(r.body.as_deref(), Some("old body"));
+    }
+
+    /// update_roadmap 不存在的 roadmap 报 not found。
+    #[test]
+    fn update_roadmap_missing_errors() {
+        let (conn, _) = setup();
+        let err = update_roadmap(&conn, 999, Some("x"), None, None).unwrap_err();
+        assert!(err.to_string().contains("roadmap #999 not found"), "{err}");
     }
 
     /// 物理删除属容器的 issue 后，父容器派生状态回落（done → open）。
