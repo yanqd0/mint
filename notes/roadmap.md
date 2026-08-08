@@ -59,13 +59,15 @@
 **范围**：
 - 去重：标题归一化 + 模糊匹配，`hit_count` bump，打印"已合并 #id"
 - FTS 全文搜索：`mint search <q>`（FTS5 + 触发器同步）
-- Claude Code 适配器：`mint capture` + `mint context` + `mint agent install/remove claude`
-  - hooks：PostToolUse / PostToolUseFailure / SessionStart
-  - skill：`issue-tracker`（主动 add / 开始前先 search）
-  - SessionStart 注入 `mint context --project`
-  - **状态机提示词**：跳过测试也要走 stage、test_cmd 填 `not-tested`——写入 adapter 提示词
+- Claude Code 适配器：plugin 化交付（skill + hooks + 私有 marketplace，`claude-plugin/`）
+  - hooks：PostToolUseFailure（注入失败信号供 LLM 判断后 `mint add`）+ SessionStart（注入 `mint list` top8）
+  - skill：`mint-faa`（en）/ `mint-faa-cn`（中文 = mint-dogfood 本体），主动 add / 开始前先 search
+  - 状态机提示词写入 skill（跳过测试也走 stage、test_cmd 填 `not-tested`）
+  - 安装：`claude plugin marketplace add <claude-plugin>` → `claude plugin install mint-faa@mint`（二选一）
 
-> **早期实验**：0.1.0 后已落地 `.claude/skills/mint-dogfood`（项目级 skill，基于 0.1.0 命令的主动登记 + list 查重防噪音）。0.3.0 的 capture/context/dedup 落地后该 skill 升级复用；`references/state-machine.md` 即本条目"状态机提示词"的先行交付，可直接复用。
+> **早期实验**：0.1.0 后已落地 `.claude/skills/mint-dogfood`（项目级 skill）。0.3.0 定案（D24）：不新增 capture/context 命令（用 add/list 替代）；mint-dogfood 本体迁入 `mint-faa-cn` skill，项目级保留软链接；`references/state-machine.md` 即"状态机提示词"先行交付，已复用。
+
+> **0.7.0 前置调研**（D24）：Codex = 全局 hooks（PostToolUse 失败启发式 + notify）+ `.agents/skills/` SKILL.md + AGENTS.md + MCP；OpenCode = TS 插件事件流（`message.part.updated` ToolStateError）+ `session.prompt(noReply)` + `$` 调 mint + `.opencode/skills/`（兼容 `.claude/skills/`）。两 agent 的 hook/插件转发信号给 LLM，LLM 用 skill 判断后调 `mint add`——与 Claude 同构。
 
 **验收**：agent 会话中自动捕获生效；重复 issue 自动合并。
 

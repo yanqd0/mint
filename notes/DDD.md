@@ -145,15 +145,15 @@ stateDiagram-v2
 
 ### capture（捕获）
 
-hook 事件的统一入口：接收 agent 传来的原始信号，做归一化、去重后入库。**归一化放 CLI 侧（`capture.rs`），不放 hook 侧**——hook 只做"检测信号 + 转发原始信息"的传声筒。**0.3.0 实现**（随 Claude 适配器）。
+hook 事件的统一入口：接收 agent 传来的信号并登记。**0.3.0 定案（D24）**：不新增 capture 命令——实现收敛到 `mint add`（去重已内置）；hook 只做确定性信号注入，**模糊判断（是否记录）与生成（标题/正文）由主 agent 用 skill 完成**，然后 `mint add "<title>" --body "<detail>"`（重复自动合并、`hit_count+1`）。客户端特殊需求按需增强 add/list（如 stdin）。
 
 ### context（上下文注入）
 
-会话启动时生成注入文本（当前项目 open + 全局概览），让 agent 开箱即知当前待办。
+会话启动时注入当前待办，让 agent 开箱即知。**0.3.0 定案（D24）**：不新增 context 命令——SessionStart hook 直接 `mint list` 输出注入（head 截断 top 8，当前项目活跃 issue）。
 
 ### adapter（适配器）
 
-每种 agent 一个适配器，把该 agent 的扩展机制（hooks/指令文件/MCP）接到本体的 `capture`/`context` 通用接口上。Claude Code 有真 hooks（全自动）；Codex/OpenCode 降级为"指令驱动的主动登记"。
+每种 agent 一个适配器，把该 agent 的扩展机制（hooks/指令文件/MCP）接到 mint 通用命令上（add/search/list，均 `--json` 友好）。**0.3.0 定案（D24）**：Claude 以 plugin 形态交付（`claude-plugin/` 私有市场：`mint-faa` en + `mint-faa-cn` 中文，skill 名统一 `mint-faa`，二选一安装；hooks 随 plugin 自动合并）；`.claude/skills/mint-dogfood` 软链接保留中文 skill。Codex（hooks PostToolUse 启发式 + `.agents/skills/` + AGENTS.md）与 OpenCode（TS 插件事件流 + `.opencode/skills/`）调研结论见 roadmap 0.7.0 前置。
 
 ### dedup（去重）
 

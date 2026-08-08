@@ -249,6 +249,21 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D24. 多 agent 适配与 capture/context 定案
+
+**背景**：0.3.0 接入 Claude Code。经 Claude/Codex/OpenCode 三 agent 调研，明确适配架构。
+
+**决策**：
+- **不新增 capture/context 命令**：agent 适配用 mint 既有通用命令（`add` 已内置去重、`search` FTS、`list`/`--json` 本就为 agent 设计）；客户端特殊需求按需增强 add/list（如 stdin）。
+- **模糊判断/生成归 LLM**：hook 只做确定性信号注入；"是否值得记录 + 写标题/正文"由主 agent 用 skill 判断后调 `mint add`。
+- **Claude 主链路**：`PostToolUseFailure`(Bash|Write|Edit) command hook → `hookSpecificOutput.additionalContext` 注入失败信号 → 主 Claude 用 skill 判断 → `mint add`（去重内置，重复自动合并）。
+- **双 plugin 双语**：`claude-plugin/` 私有市场，`mint-faa`(en) + `mint-faa-cn`(cn = 原 mint-dogfood 本体)，skill 名统一 `mint-faa`，二选一安装；`.claude/skills/mint-dogfood` 软链接保留。
+- **hooks 随 plugin**（官方 `hooks/hooks.json` 约定，插件启用自动合并）；安装走标准 `claude plugin marketplace add <path>` → `claude plugin install mint-faa@mint`。
+
+**理由**：mint 是独立 CLI，agent 适配随 plugin 共同演进；LLM 负责模糊部分（判断/撰写），确定性去重/检索在 CLI；hooks 用官方插件机制避免手动改 settings.json。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
