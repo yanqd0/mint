@@ -1,120 +1,62 @@
 ---
 name: mint-dogfood
 description: >-
-  用 mint CLI 记录并推进 mint 项目自身的开发 issue 与版本规划（dogfooding）。
-  当用户在 mint 仓库内"发现一个 bug / 有个需求 / 要登记一个 issue / 开个 issue /
-  收到审查/复查报告（code-reviewer/security-auditor/tester）中的观察项或技术债 /
-  把某个 issue 推进到 plan/start/commit/close/reset/drop/reopen / 开始做/测试/关闭/放弃
-  某件事 / 本次改动值得记一条 / 规划下一个版本 / 路线图 / roadmap / 拆解执行计划 /
-  plan / 里程碑 / 排期 / 版本规划 / 执行一个方案 / 方案计划 / 按计划实施"等意图时自动触发；也支持手动 /mint-dogfood。
-  基于 0.2.0 现有命令（add/list/show/state/label/roadmap/plan/link，无 dedup/FTS——登记前先 list 查重标题防噪音）。
-  数据落全局 SQLite（~/.local/share/mint/mint.db，MINT_DB_PATH 可覆盖）。
-  本技能是 0.3.0 Claude Code 适配器（capture/context/dedup）的早期实验。
-allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mint:*) Bash(cargo:run) Bash(which:*) Bash(test:*) Bash(ls:*) Bash(git:*) Read AskUserQuestion
+  用 mint 管理开发 issue 与流程（dogfooding）。定位是 mint 使用的**流程注入**（高抽象层）：
+  用户用一句话描述意图（"发现一个 bug：X 导致 Y" / "有个需求：Z" / "记一个遗留问题" /
+  "下一步开发什么"），skill 自动决定并执行 mint 命令序列——不是 mint 的命令级包装，用户无需按命令格式表达。
+  当用户在 mint 仓库内出现"需求 / 问题 / bug / issue / 遗留问题 / TODO / 改进点 / 观察项 /
+  审查复查报告 / 计划 / 里程碑 / roadmap / plan / 排期 / 修复 / 解决 / 登记 / 记录 / 值得记 /
+  下一步开发什么 / 发现了一个..."等**值得记录的概念**时自动触发；也支持手动 /mint-dogfood
+  （新 session 显式触发进入接管模式：扫描 TODO→转 issue、建议 roadmap、给出下一步开发计划）。
+allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mint:*) Bash(cargo:run) Bash(which:*) Bash(test:*) Bash(ls:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 ---
 
-用 mint CLI 管理 mint 项目自身的开发 issue：探测调用链 → 登记/查询 → 推进 6 态状态机 → 验证落库。
+用 mint 管理开发 issue 与流程：**解析意图（描述）→ 选择流程（reference）→ 执行 mint 命令序列 → 验证**。
 
-可接收动作参数 `<action>` 与载荷（`<title>`、`<id>`、`<body>`、`<kind>`、`<label>` 等），形如：
-`/mint-dogfood add "标题" --kind requirement`、`/mint-dogfood list --all`、
-`/mint-dogfood commit 3 --sha <SHA>`、`/mint-dogfood close 3 --test-cmd "cargo test"`、
-`/mint-dogfood drop 3 --reason "obsolete"`。
-未传参时按对话上下文自动判断动作；动作或标题不明确时用 `AskUserQuestion` 确认。
+可接收位置参数 `<description>`：一句话描述意图（可含标题/上下文/类型线索）。未传参时按对话上下文自动判断。描述不明确（类型/挂载/流程）时用 `AskUserQuestion` 澄清。
 
-## 执行步骤
+## 执行流程
 
-1. **探测 mint 调用链**：按顺序解析出本会话的 `$MINT` 调用前缀，命中的第一个即使用，
-   并在对话中记住（后续所有 mint 调用都复用此前缀，不再重测）：
-   1. `which mint` → 前缀为 `mint`；
-   2. `test -f target/release/mint` → 前缀为 `./target/release/mint`（优先 release，启动快）；
-   3. `test -f target/debug/mint` → 前缀为 `./target/debug/mint`；
-   4. 兜底：`cargo run --`（首次会编译，较慢）。
-   全部失败（都不存在）→ 提示需先 `cargo build --release`，结束。
-   所有 mint 调用统一加 `--json` 便于解析。
-   **project 自动检测**：在 mint 仓库内 add 会自动落到 `project=mint`（git 库名），无需传 `--project`。
+1. **探测 mint 调用链**：按顺序解析本会话 `$MINT` 前缀（命中即用，后续复用）：
+   `which mint` → `./target/release/mint` → `./target/debug/mint` → `cargo run --`；全失败提示 `cargo build --release`。
+   所有 mint 调用统一 `--json`；在 mint 仓库内 project 自动检测为 `mint`。
 
-2. **登记（issue / roadmap / plan）**：
-   - **登记规划（roadmap/plan）**：检测到版本/路线图/拆解计划意图时——
-     版本规划 → `$MINT roadmap create "<版本标题>" --version <V> --body "<目标+范围+验收>"`
-       （`version` 必填、语义化如 0.3.0；登记前 `roadmap list --all` 按 version 查重）；
-     拆解执行计划 → `$MINT plan create "<计划标题>" --body "<body>" --roadmap <RM_ID>`，
-       相关 issue 用 `$MINT plan issue <PLAN> <ISSUE>` 挂入（二选一：属 plan 后不再直接挂 roadmap）。
-     未触发规划意图则跳过本子节。
-   - **方案执行登记**：当对话在**执行一个方案/计划**（plan mode 产出的 `.claude/plans/*.md` 方案，
-     或用户显式给出的多步骤开发任务）时，**第一步先登记**再动手——
-     `$MINT plan create "<方案标题>" --body "<方案摘要>" --roadmap <RM_ID>`（方案归属的版本 roadmap），
-     按方案子任务逐个 `$MINT add`（kind=requirement，label `<版本>,dev-clean`）并 `plan issue` 挂入；
-     随后执行方案，每个 issue 完成时走状态机到 done（关联对应 commit）。
-   - **登记 issue（add）**：先查重——运行 `$MINT list --json`（默认列 open/planned/dev/test）取标题，
-     与拟登记标题做模糊匹配：
-     - 存在未关闭的近似标题 → **不新建**，报告"已存在 #id"，建议 `show <id>` 查看或 `state plan <id>` 推进；
-     - 确认无重复 → `$MINT add "<title>" --body "<body>" [--kind problem|requirement] [--label "name:desc,name2"] --json`。
-     kind 默认 `problem`（缺陷），需求用 `requirement`；`--label` 支持 `name` 或 `name:description`、逗号分隔。
-     记录 add 返回的 `id`，供后续状态操作引用。
-     **克制登记**：只记"可执行、真会推动开发"的事项；事实/教训/决策类归属 mem-lite，不登记。
-     **审查/复查报告观察项**：收到 code-reviewer/security-auditor/tester 报告时，其中的
-     非阻塞观察项、技术债、已知限制也应登记为 issue（`kind=problem`，label `dev-clean:技术债`），
-     并标注来源（如"security-auditor 复审观察"）与排期。审查报告"未发现"不登记。
-     **mem-lite 关联**（可选增强）：若某条事实/教训对应本 issue，且 `which claude-mem-lite` 存在，
-     按 `references/mem-lite.md` 保存带 `issue#<id>` 与读取命令的 observation；mem-lite 缺失则跳过。
+2. **解析意图 → 选择流程**：从 `<description>`/对话上下文识别类型，`Read` 对应 reference：
+   - **bug / 问题** → `references/flow-bug.md`（issue → 挂载 → link solves → 修复 → commit → close）
+   - **需求** → `references/flow-requirement.md`（issue → 排期 → 挂 plan）
+   - **审查/复查报告** → `references/flow-review.md`（观察项/已修复 bugfix → 登记 + 挂活跃 plan）
+   - **遗留 / TODO / 观察项** → `references/flow-todo.md`（登记，可选挂载）
+   - **版本 / 计划 / 里程碑** → `references/flow-planning.md`（roadmap create / plan create + 拆 issues）
+   - **条件分支**（挂载规则/无测试/非 git/二选一）→ `references/flow-conditions.md`
 
-3. **查看 / 查询（list / show）**：
-   - 会话开箱需要上下文时：`$MINT list --json`，可按需加 `--all`/`-a`（含 done/dropped）、
-     `--status <open|planned|dev|test|done|dropped>`、`--label <name>`、`--project <name>` 过滤；
-   - 容器：`roadmap list` / `plan list`（默认只显非 done，`--all`/`-a` 全列）、`show`；
-   - 看单条细节：`$MINT show <id> --json`。
-   `--json` 字段：`id/title/body/kind/status/project_id/project/test_cmd/dropped_reason/last_commit_id/plan_id/labels/links/created_at/updated_at`。
+3. **执行流程**：按 reference 步骤执行 mint 命令序列（issue 创建 / 挂载 / link / 状态机推进），
+   逐态推进并 `show` 验证。登记前先 `list --json` 查重（标题模糊匹配），不重复创建。
 
-4. **推进状态机（state）**：先 `Read` `references/state-machine.md` 获取完整转换表与硬约束，
-   再执行 `$MINT state <action> <id> [--sha <SHA>] [--test-cmd <CMD>] [--reason <TEXT>] --json`，
-   读退出码与 `{id,from,to}` 确认结果：
-   - `plan <id>`（open→planned）、`start <id>`（planned→dev）；
-   - **`commit <id> --sha <SHA>`（dev→test，必填 --sha 记录 last_commit_id，默认读 HEAD）**——
-     开发完成必须 commit（刚提交未测试 → 进 test）；
-   - `close <id> --test-cmd "..."`（test→done，**`--test-cmd` 必填**；没跑测试填 `not-tested`；
-     **无 dev→done 捷径**——跳过测试也必须先 commit 到 test 再 close）；
-   - `reset <id>`（planned/dev/test→open，清空 test_cmd 需重测）；
-   - `drop <id> --reason "..."`（任意状态→dropped）；
-   - `reopen <id>`（done/dropped→open）。
-   非法转换 CLI 会报 `invalid transition`，先 `show <id>` 确认当前状态再校正。
-   不要凭空推进状态：**逐态推进**（不允许 planned→done 跳过 dev/test）；state 变更需有
-   对应事实支撑（start 前在写代码、commit 前已提交、close 前测试通过）。
+4. **方案执行**（跨模块/多步骤方案）：按「方案执行登记」——第一步先建 mint plan（挂 roadmap）+ 拆相关 issue，
+   再执行方案；每个 issue 走状态机到 done（关联对应 commit）。
 
-5. **验证**：每次写操作后用 `$MINT show <id> --json` 确认状态/字段符合预期，
-   向用户简报 `#<id>: <title> → <status>`。一条完整链路（如新 bug 从 add 到 close）
-   可逐步推进、每步验证，用户明确要求"直接走完"时再连续执行。
+## 接管模式（新 session 显式 /mint-dogfood）
 
-## 多 issue plan 的执行模式（同一 plan 多任务统一测试）
+用户在新 session 执行 `/mint-dogfood` → 进入**接管模式**（`Read` `references/flow-session.md`），
+完成初始化后让用户**立即知道下一步开发什么**（mint 代替初始化思考）：
 
-当用户把一个 plan 拆成多个 issue（如"开发规范收编"拆成 3 个合并 issue）时：
+1. **扫描 TODO/FIXME/XXX**：grep 项目代码标记，逐个转 issue（查重不重复，body 注明来源位置）。
+2. **roadmap 检查与建议**：对比现有 roadmap 与项目状态，发现新版本规划迹象 → **和用户确认后** `roadmap create`
+   （重复则不问、不加）。
+3. **下一步计划建议**：基于 roadmap 规划 + open issues（未关闭），推荐下一个应开发项（未排期 bug /
+   当前版本核心项 / 阻塞项），附理由。
+4. **声明接管**：后续 session 的新 bug/需求/方案执行/审查发现，用户直接描述意图即可，skill 自动走 mint 流程。
 
-- **登记**：一次登记多个 issue，标题带序号前缀（如 `① 开发规范收编`），body 引用同一份 plan 文档；登记前先 `list --json` 查重。
-- **推进**：按依赖顺序分批推进，每个 issue 独立走 `open→planned→dev→test`，**不必逐个 close**。
-- **统一测试**：全部到 `test` 后，一次性跑统一测试命令（fmt/clippy/测试全链路），全绿后再统一 `close`。
-- **close 的 test_cmd**：填统一测试命令，如：
-  `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
-- **理由**：同一 plan 的改动相互耦合，逐个 close 的重复测试成本高于统一测试；统一 close 前确保最后一批改动也覆盖测试。
+> 非 `/mint-dogfood` 主动触发时（description 自动触发）**不执行**接管初始化（避免每次触发都扫描）。
 
 ## 约束
 
-- **不自动新建噪音 issue**：登记前必须查重；意图不明确（非显式"记一下/登记/开 issue"）时先确认。
-- **mint 管 issue（可执行待办），mem-lite 管记忆（事实/教训）**——两者不混，避免重复沉淀；
-  双向关联（`issue#N` ↔ `memory#N`）与降级方案见 `references/mem-lite.md`。
-- `close` 缺 `--test-cmd` 会被 CLI 拒绝，报错信息即提示：用 `not-tested` 表示"跳过测试"。
-- **开发完成必须 `state commit <id> --sha <SHA>`**：dev→test 必填 --sha 记录 `last_commit_id`
-  （默认读 HEAD）；否则 `mint show` 看不到开发记录。close 前确保已 commit（逐态推进）。
-  同一 issue 多个 commit 只记最后一个。「多 issue plan」场景在统一 close 前逐个补记。
-- **规划必登记（roadmap/plan）**：版本方向规划必须 `roadmap create <title> --version <V> --body <BODY>`
-  （`version` 必填、语义化，登记前 `roadmap list --all` 按 version 查重）；
-  方向内拆执行计划必须 `plan create <title> --body <BODY> --roadmap <ID>`；
-  issue 归属：`plan issue <PLAN> <ISSUE>`（或 `roadmap issue <RM> <ISSUE>`，二选一——属 plan 后不能再直接挂 roadmap）。
-  容器状态由子项派生（无 close/drop/reopen 命令）；多版本方向用 `roadmap` 承载。
-- **方案 vs 单点登记的区分**：跨模块/多步骤方案（含 plan mode 产出的方案）→ **建 plan + 拆多个 issue**；
-  单点小改动 / 审查发现 / 观察项 → **只记 issue**（不建 plan）。
-- **`delete` 是危险/不可逆操作**（`mint delete issue|plan|roadmap <id>`，仅顶层命令、容器子命令无 delete）：
-  **默认不使用**。仅限极窄场景——清理误建/残留容器、用户明确指示物理移除数据；
-  issue 删除优先 `state drop`（软删除，保审计）；使用前向用户显式确认，不主动建议。
-- 默认库是全局共享的 `~/.local/share/mint/mint.db`；验证性/演示性操作优先设
-  `MINT_DB_PATH=<临时文件>` 避免污染真实库。
-- 探测到的相对路径前缀（`./target/release/mint`）首次调用可能触发权限确认，属正常，允许一次即可。
-- **PATH 软链接**：`~/bin/mint` 软链接指向 `target/release/mint`（本机已建）。开发过程中**时常执行 `cargo build --release`** 更新该产物，使软链接始终指向最新二进制（默认命中 `which mint` → `Bash(mint:*)`，无相对路径权限弹窗）。
+- **登记前查重**：`list --json` 标题模糊匹配，存在未关闭近似标题 → 不新建，建议 `show`/推进。
+- **mint 管 issue（可执行待办），mem-lite 管记忆（事实/教训）**——不混；`issue#N` ↔ `memory#N` 关联见 `references/mem-lite.md`。
+- **开发完成必须 `state commit <id> --sha <SHA>`**（默认读 HEAD）；`close` 必填 `--test-cmd`（无测试填 `not-tested`）。
+- **方案 vs 单点区分**：跨模块/多步骤方案 → 建 plan + 拆 issues；单点小改动/审查发现/观察项 → 只记 issue。
+- **挂载规则**（`references/flow-conditions.md`）：关联 plan → 无 plan 挂 roadmap → 不挂（独立）；issue 二选一（属 plan 后不能直接挂 roadmap）。
+- **link**：被别的修改引入 → `link create <issue> solves <引入它的需求>`。
+- **delete 是危险/不可逆操作**：默认不使用，极窄场景 + 用户显式确认；issue 优先 `state drop`。
+- 默认库 `~/.local/share/mint/mint.db`；验证性操作优先 `MINT_DB_PATH=<临时>`。
+- **PATH 软链接**：`~/bin/mint` → `target/release/mint`，开发中常 `cargo build --release` 更新。
