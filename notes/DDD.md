@@ -157,7 +157,7 @@ hook 事件的统一入口：接收 agent 传来的原始信号，做归一化�
 
 ### dedup（去重）
 
-`add`/`capture` 时对未关闭状态（open/planned/dev/test）做标题模糊匹配，命中则 `hit_count+1` 并打印"已合并 #id"，未命中才新建。是系统长期不变成垃圾场的关键。**0.3.0 实现**。
+`add`/`capture` 时对未关闭状态（open/planned/dev/test）做标题模糊匹配，命中则 `hit_count+1` 并打印"已合并 #id"，未命中才新建。是系统长期不变成垃圾场的关键。**0.3.0 已实现**。算法：作用域=同 project 非终态；归一化=`trim+小写+空白折叠`；归一化精确匹配优先，否则字符级 Levenshtein 相似度 ≥0.8 取最高（见 decisions.md D22）。`issues.hit_count` 记重复命中次数。
 
 ### FTS（全文检索）
 

@@ -89,13 +89,13 @@ ORDER BY i.id DESC
 - **表改名注意**：`ALTER TABLE RENAME` 只改表/列名，**不更新其它表 CREATE 语句里的外键 `REFERENCES` 文本**
   （schema 是文本存储）——改表名后必须重建引用方表（DROP+CREATE，事务内 `PRAGMA foreign_keys=OFF`，数据保留），
   否则外键运行时按旧名查找报 `no such table`。
-- **同版本业务代码必须原地修改**：同一版本内 schema 改动直接改最新 DDL，**不固化 migration**
-  （未发布前本地测试空库可删除重建）。
-- **本地有数据的 db**：开发阶段需要临时 SQL 手动迁移（有数据不能删），不要依赖自动 migration。
-- **未发布阶段 migration 合并**（1.0.0 前可能反复执行、发布前夕必做）：① 把最新 migration 逐句并入
-  `001_init.sql`（最终形态，表创建顺序满足 FK 引用，`user_version = 1`）；② 删除旧 migration 文件 +
-  `sql.rs` 常量；③ `MIGRATIONS`/`CURRENT_VERSION` 重定基线为 1；④ 用 sqlite 把**实际在用的 db** 置
+- **开发中默认写增量 migration**：schema 变更新增 `NNN_<desc>.sql` 追加到 `MIGRATIONS` 数组、
+  `CURRENT_VERSION` 递增，每个逻辑变更独立分步（不原地改 001 DDL）。有数据的本地库由 `migrate()`
+  自动增量升级，无需手动 ALTER。
+- **发布前夕 migration 合并**（1.0.0 前可能反复执行）：① 把最新 migration 逐句并入 `001_init.sql`
+  （最终形态，表创建顺序满足 FK 引用，`user_version = 1`）；② 删除旧 migration 文件 + `sql.rs` 常量；
+  ③ `MIGRATIONS`/`CURRENT_VERSION` 重定基线为 1；④ 用 sqlite 把**实际在用的 db** 置
   `PRAGMA user_version = 1`（数据不动，schema 已是最终形态）；⑤ 清理升级路径专属 UT
   （migration 改由 ST 粗粒度测）。
-- 原则：migration 只服务于**已发布版本之间的升级**；未发布的 0.x 开发中，schema 变更直接改最新版
-  DDL + 手动同步本地测试库。
+- 原则：migration 只服务于**已发布版本之间的升级**；未发布的 0.x 开发中默认走增量 migration（见上），
+  发布前夕合并回 001 后重定基线。
