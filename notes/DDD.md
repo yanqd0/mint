@@ -161,7 +161,7 @@ hook 事件的统一入口：接收 agent 传来的原始信号，做归一化�
 
 ### FTS（全文检索）
 
-FTS5 外部内容表 + 触发器保持 `issues_fts` 与 `issues` 同步（INSERT/UPDATE/DELETE 自动维护）。**0.3.0 实现**。
+FTS5 外部内容表 + 触发器保持 `issues_fts` 与 `issues` 同步（INSERT/UPDATE/DELETE 自动维护）。**0.3.0 已实现**。实现：`tokenize='trigram'`（中文按 3 字符子串索引）、`content='issues'`/`content_rowid='id'`、ai/ad/au 触发器（`UPDATE OF title,body` 先删后插，状态流转不触发）、迁移内回填存量；`mint search <q>` 默认全状态、`ORDER BY rank`、`--project/--label/--status` 过滤、查询需 ≥3 字符（见 decisions.md D23）。
 
 ---
 

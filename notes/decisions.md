@@ -235,6 +235,20 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D23. FTS 全文搜索定案
+
+**背景**：0.3.0 FTS 功能需定搜索实现（tokenizer、同步、范围）。
+
+**决策**：SQLite FTS5 external content 表 `issues_fts`（`content='issues'`, `content_rowid='id'`），
+`tokenize='trigram'`（中文 3 字符子串索引）；ai/ad/au 三触发器同步（`UPDATE OF title,body` 先删后插，
+状态流转不触发）；迁移内回填存量。`mint search <q>` 默认全状态、`ORDER BY rank`，
+`--project/--label/--status` 可过滤；查询 <3 字符报错（trigram 限制）。bundled 默认启用 FTS5，无新增依赖。
+
+**理由**：中文场景 trigram 可搜子串；external content 省空间且保留 snippet/highlight 能力；
+全状态搜索便于 agent 查历史避免重复。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
