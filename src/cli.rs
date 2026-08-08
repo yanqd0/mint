@@ -622,24 +622,47 @@ fn fill_labels(conn: &rusqlite::Connection, issues: &mut [Issue]) -> Result<(), 
     Ok(())
 }
 
-/// 全文搜索（FTS5 trigram）：MATCH + 可选 project/label/status/priority 过滤，按相关度排序。
+/// 全文搜索（FTS5 trigram + LIKE 兜底）：≥3 字符走 MATCH，≤2 字符降级 LIKE。
+/// 可选 project/label/status/priority 过滤。
 fn cmd_search(conn: &rusqlite::Connection, s: &SearchArgs) -> Result<(), Error> {
     let q = s.query.trim();
-    if q.chars().count() < 3 {
-        return Err(Error::Other(
-            "search query too short (min 3 characters)".to_string(),
-        ));
+    if q.is_empty() {
+        return Err(Error::Other("search query must not be empty".to_string()));
     }
     let project: Option<&str> = s.project.as_deref();
     let label: Option<&str> = s.label.as_deref();
-    let status = s.status; // Option<Status>，impl ToSql（NULL=不过滤）
-    let priority = s.priority; // Option<i64>，NULL=不过滤
+    let status = s.status;
+    let priority = s.priority;
 
-    let mut stmt = conn.prepare(db::ISSUE_SEARCH)?;
-    let rows = stmt.query_map(
-        rusqlite::params![q, project, label, status, priority],
-        issue_from_row,
-    )?;
+    let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if q.chars().count() < 3 {
+        // 短查询：LIKE 兜底（title/body 模糊匹配），% 通配符由 Rust 侧拼接
+        let like = format!("%{q}%");
+        (
+            db::ISSUE_SEARCH_LIKE,
+            vec![
+                Box::new(like),
+                Box::new(project.map(|s| s.to_owned())),
+                Box::new(label.map(|s| s.to_owned())),
+                Box::new(status),
+                Box::new(priority),
+            ],
+        )
+    } else {
+        (
+            db::ISSUE_SEARCH,
+            vec![
+                Box::new(q.to_owned()),
+                Box::new(project.map(|s| s.to_owned())),
+                Box::new(label.map(|s| s.to_owned())),
+                Box::new(status),
+                Box::new(priority),
+            ],
+        )
+    };
+
+    let mut stmt = conn.prepare(sql)?;
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    let rows = stmt.query_map(param_refs.as_slice(), issue_from_row)?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;

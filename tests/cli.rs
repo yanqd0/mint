@@ -470,12 +470,29 @@ fn st_search_empty_db() {
     assert_eq!(v.as_array().unwrap().len(), 0);
 }
 
-/// search：查询 <3 字符报错。
+/// search：≤2 字符走 LIKE 兜底（不报错），命中 title/body。
 #[test]
-fn st_search_too_short() {
+fn st_search_short_like_fallback() {
     let (_dir, db) = empty_db();
-    let err = run_fail(&db, &["search", "ab"]);
-    assert!(err.contains("search query too short"), "stderr: {err}");
+    add_issue(&db, "登录问题");
+    // 2 字符中文走 LIKE 兜底
+    let v = run_json(&db, &["search", "登录", "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 1);
+    // 2 字符英文走 LIKE 兜底
+    add_issue(&db, "fix auth bug");
+    let v = run_json(&db, &["search", "au", "--json"]);
+    assert!(!v.as_array().unwrap().is_empty());
+}
+
+/// search：空查询报错。
+#[test]
+fn st_search_empty_query() {
+    let (_dir, db) = empty_db();
+    let err = run_fail(&db, &["search", ""]);
+    assert!(
+        err.contains("search query must not be empty"),
+        "stderr: {err}"
+    );
 }
 
 /// edit：更新 title/body，show 验证。
