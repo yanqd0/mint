@@ -237,6 +237,80 @@ fn st_json_output_shape() {
     }
 }
 
+/// 去重：同标题二次 add → merged、不新建、hit_count 递增。
+#[test]
+fn st_add_duplicate_merges() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "fix login bug");
+    let out = mint(&db)
+        .args(["add", "fix login bug"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(
+        text.contains(&format!("Merged into issue #{id}")),
+        "stdout: {text}"
+    );
+    // 未新建：list 仍 1 条
+    let v = run_json(&db, &["list", "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 1);
+    // hit_count 递增
+    let v = run_json(&db, &["show", &id.to_string(), "--json"]);
+    assert_eq!(v["hit_count"], 1);
+    run_json(&db, &["add", "fix login bug", "--json"]);
+    let v = run_json(&db, &["show", &id.to_string(), "--json"]);
+    assert_eq!(v["hit_count"], 2);
+}
+
+/// 去重：大小写/空白差异的标题同样命中（归一化后相等）。
+#[test]
+fn st_add_duplicate_normalized() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "Fix  Login   Bug");
+    let v = run_json(&db, &["add", "fix login bug", "--json"]);
+    assert_eq!(v["merged"], true);
+    assert_eq!(v["id"], id);
+}
+
+/// 去重：模糊相似标题命中（相似度 ≥ 阈值）。
+#[test]
+fn st_add_fuzzy_duplicate() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "add dedup feature");
+    let v = run_json(&db, &["add", "add dedup featre", "--json"]);
+    assert_eq!(v["merged"], true);
+    assert_eq!(v["id"], id);
+}
+
+/// 去重：不同 project 同名不合并（同项目查重）。
+#[test]
+fn st_add_different_project_no_merge() {
+    let (_dir, db) = empty_db();
+    let a = run_json(&db, &["add", "fix login", "--project", "proj-a", "--json"]);
+    let id_a = a["id"].as_i64().unwrap();
+    let b = run_json(&db, &["add", "fix login", "--project", "proj-b", "--json"]);
+    let id_b = b["id"].as_i64().unwrap();
+    assert_ne!(id_a, id_b, "不同 project 不应合并");
+    let v = run_json(&db, &["list", "--all", "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 2);
+}
+
+/// 去重：JSON merge 输出字段齐全（merged/id/title/project/kind/status）。
+#[test]
+fn st_add_duplicate_json_shape() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "fix login bug");
+    let v = run_json(&db, &["add", "fix login bug", "--json"]);
+    for key in ["merged", "id", "title", "project", "kind", "status"] {
+        assert!(v.get(key).is_some(), "merged JSON 缺 {key}: {v}");
+    }
+    assert_eq!(v["merged"], true);
+    assert_eq!(v["id"], id);
+}
+
 /// 全链路 add→plan→start→stage→close→done 全程 CLI 走完。
 #[test]
 fn st_state_flow_full_chain() {

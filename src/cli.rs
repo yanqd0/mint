@@ -8,6 +8,7 @@ use rusqlite::OptionalExtension;
 
 use crate::container::{self, ContainerKind};
 use crate::db;
+use crate::dedup;
 use crate::error::Error;
 use crate::git;
 use crate::label;
@@ -427,6 +428,16 @@ fn cmd_add(
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let pid = project::ensure(&tx, &pname, cwd)?;
 
+    // 去重（DDD dedup）：同项目活跃 issue 标题模糊匹配。命中则 bump hit_count、不新建，
+    // 输出 merged；未命中才走正常插入。归一化精确匹配优先，相似度阈值见 dedup::DEDUP_THRESHOLD。
+    let cands = load_dup_candidates(&tx, pid)?;
+    if let Some(hit) = dedup::find_duplicate(&a.title, &cands) {
+        tx.execute(db::ISSUE_BUMP_HIT_COUNT, rusqlite::params![hit.id])?;
+        tx.commit()?;
+        print_merge(a, &pname, hit)?;
+        return Ok(());
+    }
+
     tx.execute(
         db::ISSUE_INSERT,
         rusqlite::params![a.title.trim(), a.body, kind, status, pid, test_cmd],
@@ -452,6 +463,43 @@ fn cmd_add(
             "Created issue #{id} ({}) in project '{pname}'",
             a.title.trim()
         );
+    }
+    Ok(())
+}
+
+/// 加载同项目活跃 issue 作为去重候选（id/title/kind/status，仅非终态）。
+fn load_dup_candidates(
+    tx: &rusqlite::Transaction,
+    pid: i64,
+) -> Result<Vec<dedup::Candidate>, Error> {
+    let mut stmt = tx.prepare(db::ISSUE_ACTIVE_TITLES)?;
+    let rows = stmt.query_map(rusqlite::params![pid], |r| {
+        Ok(dedup::Candidate {
+            id: r.get(0)?,
+            title: r.get(1)?,
+            kind: r.get(2)?,
+            status: r.get(3)?,
+        })
+    })?;
+    rows.collect::<Result<_, _>>().map_err(Error::from)
+}
+
+/// 打印 merge 结果（普通/JSON，字段沿用被合并的原 issue）。
+fn print_merge(a: &AddArgs, pname: &str, hit: &dedup::Candidate) -> Result<(), Error> {
+    if a.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "merged": true,
+                "id": hit.id,
+                "title": hit.title,
+                "project": pname,
+                "kind": hit.kind,
+                "status": hit.status,
+            }))?
+        );
+    } else {
+        println!("Merged into issue #{} ({})", hit.id, hit.title);
     }
     Ok(())
 }
