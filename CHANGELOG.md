@@ -1,5 +1,30 @@
 # Change Log
 
+## 0.2.0
+
+### Features
+
+- 容器（roadmap/plan）：issue 之上的两级"容器"，`mint roadmap` / `mint plan` 子命令（create/list/show + 状态操作）。
+  - schema v2：roadmaps/plans 表 + 轻量迁移框架；层级关系 `issue→plan(plan_id)`、`plan→roadmap(roadmap_id)`、roadmap 直接挂 issue（roadmap_direct_issues，二选一）。
+  - roadmap 关键字段 `version`(UNIQUE) + `body`；plan `body`。
+  - 容器状态 5 态派生：open/running/partial/dropped/done，写后级联同步（issue→plan→roadmap）。
+- git commit 关联：`state commit`（原 `state stage` 改名合并，dev→test）必填 `--sha` 写入 `issues.last_commit_id`；删除顶层 commit 子命令。
+- issue links：`mint link create/remove/list`，`related`/`solves`/`duplicates` 带类型多对多（schema v3，单向存 + 反向派生），show 内嵌 links。
+- 时区显示修复：存储 UTC、显示转本地时区（`datetime(col,'localtime')`）。
+- `--all/-a` 短别名：所有 list 命令统一（默认隐藏 dropped/done，`-a` 全量）。
+
+### Bug Fixes
+
+- 修复旧 v2 库升级时容器表不更新：002 原地改 DDL 致跳迁移，改为 004 增量迁移重建（DROP 重建，0.2.0 未发布、容器表全空无数据丢失）。
+- 修复显示时间未转本地时区的问题。
+
+### Others
+
+- 迁移框架重构：migration 有序数组驱动 `PRAGMA user_version` 增量升级，替代单文件全量重建。
+- 文档：DDD.md 容器重写（5 态派生 + 层级 + version/body）、decisions.md D16-D20、mint-dogfood skill 命令表与约定更新、src/CLAUDE.md 数据模型 8 表约束。
+- 端到端 ST：issue links、plan 状态流程、state commit、--all/-a。
+- 版本号 bump 至 0.2.0-alpha.1。
+
 ## 0.1.0
 
 ### Features

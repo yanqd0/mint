@@ -117,7 +117,7 @@ ORDER BY i.id DESC
 
 ## 数据模型约束
 
-- 8 表：`projects` / `issues` / `tags` / `issue_tags` / `roadmaps` / `plans` / `roadmap_direct_issues` / `issue_links`（migration 有序数组驱动 `PRAGMA user_version`，当前 v3，见 `notes/DDD.md`）。
+- 8 表：`projects` / `issues` / `tags` / `issue_tags` / `roadmaps` / `plans` / `roadmap_direct_issues` / `issue_links`（migration 有序数组驱动 `PRAGMA user_version`，当前 v4，见 `notes/DDD.md`）。
 - `issues`：`kind` 限 `problem|requirement`；`status` 限 `open|planned|dev|test|done|dropped`；`last_commit_id` 记最后关联 commit；`plan_id` 外键 → plans（一对多）。
 - 容器（`roadmaps`/`plans`）：`status` 限 `open|running|partial|dropped|done`（5 态派生，写后同步，CLI 只读）；roadmaps 有 `version`(UNIQUE) + `body`；plans 有 `body` + `roadmap_id`。
 - `roadmap_direct_issues`：复合主键 `(roadmap_id,issue_id)`；issue 二选一（属 plan 后不能直接挂 roadmap）。

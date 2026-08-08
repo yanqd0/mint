@@ -1,7 +1,7 @@
 # 开发路线图
 
 > 渐进式交付：每个版本在上一版完整可运行的基础上增量添加功能。
-> 当前状态：0.1.0 已完成（2026-08-07，19 commits）。
+> 当前状态：0.2.0 已完成（2026-08-08，85 commits）。
 
 ## 发布策略
 
@@ -34,18 +34,20 @@
 - 数据落在 `$XDG_DATA_HOME/mint/mint.db`
 - 20 测试全绿；release 二进制 ~1.7MB
 
-## 0.2.0 — 容器 + git 关联
+## 0.2.0 — 容器 + git 关联（已完成）
 
 **目标**：issue 之上引入"容器"概念，串联开发链路。
 
-**范围**：
-- **roadmap 表**：版本规划（关键字段 `version` UNIQUE + body），关联 plan（plans.roadmap_id）与直接挂的 issue
+**已交付**：
+- **roadmap 表**：版本规划（关键字段 `version` UNIQUE + body），关联 plan（plans.roadmap_id）与直接挂的 issue（roadmap_direct_issues，二选一）
 - **plan 表**：编程 agent 的执行计划（body 完整 md），关联多个 issue（issues.plan_id）
-- **git commit 关联**：`issues.last_commit_id`，`state commit`（dev→test）必填 --sha 写入
-- **容器状态 5 态派生**：open/running/partial/dropped/done，写后级联同步（issue→plan→roadmap）
+- **git commit 关联**：`state commit`（dev→test）必填 `--sha` 写 `issues.last_commit_id`；原 `state stage` 改名合并为 `commit`（删除顶层 commit 子命令）
+- **容器状态 5 态派生**：open/running/partial/dropped/done（open=从未开始/running=曾运行），写后级联同步（issue→plan→roadmap）
 - **issue links**：`related`/`solves`/`duplicates` 带类型多对多关系（单向存 + 反向派生），`mint link create/remove/list`（对应 issue #16）
 - **时区显示修复**：存储 UTC、显示转本地时区（`datetime(col,'localtime')`）（对应 issue #17）
-- **--all/-a 别名**：所有 list 命令统一（对应 issue #18 重构）
+- **--all/-a 别名**：所有 list 命令统一（对应 issue #18）
+- 轻量迁移重构：migration 有序数组驱动 `PRAGMA user_version` 增量升级；修复旧 v2 库升级时容器表不更新（002 原地改 DDL 致跳迁移）
+- schema v4（8 表）；75 测试全绿（UT + IT + ST），fmt/clippy/sqruff 全过
 
 **验收**：roadmap/plan 能聚合其下 issue；agent 的 plan 可入库管理。
 
