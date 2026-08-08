@@ -844,3 +844,15 @@ fn st_delete_roadmap_detaches() {
     let v = run_json(&db, &["show", &i.to_string(), "--json"]);
     assert_eq!(v["id"].as_i64().unwrap(), i);
 }
+
+/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=1。
+#[test]
+fn st_empty_db_initialized_v1() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["list", "--json"]); // 首次运行触发 migrate
+    let conn = mint_faa::db::open(std::path::Path::new(&db)).unwrap();
+    let version: i32 = conn
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 1);
+}
