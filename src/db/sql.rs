@@ -19,6 +19,10 @@ pub const ISSUE_DELETE: &str = include_str!("queries/issue_delete.sql");
 pub const ISSUE_ACTIVE_TITLES: &str = include_str!("queries/issue_active_titles.sql");
 pub const ISSUE_BUMP_HIT_COUNT: &str = include_str!("queries/issue_bump_hit_count.sql");
 pub const ISSUE_EDIT: &str = include_str!("queries/issue_edit.sql");
+pub const ISSUE_EXISTS: &str = include_str!("queries/issue_exists.sql");
+pub const ISSUE_SELECT_PLAN_ID: &str = include_str!("queries/issue_select_plan_id.sql");
+pub const ISSUE_SET_PLAN: &str = include_str!("queries/issue_set_plan.sql");
+pub const ISSUE_UNSET_PLAN: &str = include_str!("queries/issue_unset_plan.sql");
 
 pub const ISSUE_LINK_EXISTS: &str = include_str!("queries/issue_link_exists.sql");
 pub const ISSUE_LINK_INSERT: &str = include_str!("queries/issue_link_insert.sql");
@@ -40,6 +44,8 @@ pub const ROADMAP_LIST: &str = include_str!("queries/roadmap_list.sql");
 pub const ROADMAP_SELECT: &str = include_str!("queries/roadmap_select.sql");
 pub const ROADMAP_ATTACH: &str = include_str!("queries/roadmap_attach.sql");
 pub const ROADMAP_DETACH: &str = include_str!("queries/roadmap_detach.sql");
+pub const ROADMAP_DIRECT_DELETE_BY_ISSUE: &str =
+    include_str!("queries/roadmap_direct_delete_by_issue.sql");
 pub const ROADMAP_ISSUES_FOR: &str = include_str!("queries/roadmap_issues_for.sql");
 pub const ROADMAP_UPDATE_STATUS: &str = include_str!("queries/roadmap_update_status.sql");
 pub const ROADMAP_UPDATE: &str = include_str!("queries/roadmap_update.sql");
@@ -60,10 +66,3 @@ pub const ROADMAP_DIRECT_ISSUE_STATUSES: &str =
 pub const PLAN_IDS_FOR_ISSUE: &str = include_str!("queries/plan_ids_for_issue.sql");
 pub const ROADMAP_IDS_FOR_PLAN: &str = include_str!("queries/roadmap_ids_for_plan.sql");
 pub const ROADMAP_IDS_FOR_ISSUE: &str = include_str!("queries/roadmap_ids_for_issue.sql");
-
-pub const ISSUE_EXISTS: &str = include_str!("queries/issue_exists.sql");
-pub const ISSUE_SELECT_PLAN_ID: &str = include_str!("queries/issue_select_plan_id.sql");
-pub const ROADMAP_DIRECT_DELETE_BY_ISSUE: &str =
-    include_str!("queries/roadmap_direct_delete_by_issue.sql");
-pub const ISSUE_SET_PLAN: &str = include_str!("queries/issue_set_plan.sql");
-pub const ISSUE_UNSET_PLAN: &str = include_str!("queries/issue_unset_plan.sql");
