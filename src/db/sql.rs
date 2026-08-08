@@ -21,11 +21,11 @@ pub const PROJECT_INSERT: &str = include_str!("queries/project_insert.sql");
 pub const PROJECT_SELECT_ID: &str = include_str!("queries/project_select_id.sql");
 pub const PROJECT_LIST: &str = include_str!("queries/project_list.sql");
 
-pub const TAG_INSERT: &str = include_str!("queries/tag_insert.sql");
-pub const TAG_SELECT_ID: &str = include_str!("queries/tag_select_id.sql");
-pub const TAG_ATTACH: &str = include_str!("queries/tag_attach.sql");
-pub const TAG_LIST: &str = include_str!("queries/tag_list.sql");
-pub const TAG_NAMES_FOR_ISSUE: &str = include_str!("queries/tag_names_for_issue.sql");
+pub const LABEL_INSERT: &str = include_str!("queries/label_insert.sql");
+pub const LABEL_SELECT_ID: &str = include_str!("queries/label_select_id.sql");
+pub const LABEL_ATTACH: &str = include_str!("queries/label_attach.sql");
+pub const LABEL_LIST: &str = include_str!("queries/label_list.sql");
+pub const LABEL_NAMES_FOR_ISSUE: &str = include_str!("queries/label_names_for_issue.sql");
 
 pub const ROADMAP_INSERT: &str = include_str!("queries/roadmap_insert.sql");
 pub const ROADMAP_LIST: &str = include_str!("queries/roadmap_list.sql");

@@ -12,7 +12,7 @@
 ```
 src/db/
 ├── mod.rs          # open / migrate / migrate_for_test + pub use sql::*
-├── sql.rs          # 全部 include_str! 常量（MIGRATION_001 / ISSUE_* / PROJECT_* / TAG_*）
+├── sql.rs          # 全部 include_str! 常量（MIGRATION_001 / ISSUE_* / PROJECT_* / LABEL_*）
 ├── migrations/     # 版本化迁移，命名 NNN_<desc>.sql（如 001_init.sql）
 └── queries/        # 查询/写入，命名 <table>_<action>.sql（如 issue_list.sql）
 ```
@@ -69,8 +69,8 @@ ORDER BY i.id DESC
 
 - 表创建顺序满足**外键引用**（`PRAGMA foreign_keys = ON` 下不能引用未建表）：被引用表先建。
 - `CHECK` 明确值域；`NOT NULL` 明确；时间列统一 `DEFAULT (datetime('now'))`。
-- **INSERT OR IGNORE 注意**：`project_insert.sql` / `tag_insert.sql` 用 `INSERT OR IGNORE` 幂等注册
-  （`name` NOT NULL UNIQUE）。**未来若给 `projects`/`tags` 增加 CHECK / NOT NULL / FK 约束，会被 IGNORE
+- **INSERT OR IGNORE 注意**：`project_insert.sql` / `label_insert.sql` 用 `INSERT OR IGNORE` 幂等注册
+  （`name` NOT NULL UNIQUE）。**未来若给 `projects`/`labels` 增加 CHECK / NOT NULL / FK 约束，会被 IGNORE
   静默吞掉**后落入 ensure 的 'just inserted but not found' 分支——改这些表约束时须同步审视此模式（观察项 #11）。
 
 ## 格式化与 lint（sqruff）

@@ -16,7 +16,7 @@ created_at  TEXT NOT NULL DEFAULT (datetime('now')),
 updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE tags (
+CREATE TABLE labels (
 id          INTEGER PRIMARY KEY AUTOINCREMENT,
 name        TEXT NOT NULL UNIQUE,
 description TEXT,
@@ -63,11 +63,11 @@ created_at  TEXT NOT NULL DEFAULT (datetime('now')),
 updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE issue_tags (
+CREATE TABLE issue_labels (
 issue_id    INTEGER NOT NULL REFERENCES issues(id),
-tag_id      INTEGER NOT NULL REFERENCES tags(id),
+label_id    INTEGER NOT NULL REFERENCES labels(id),
 created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-PRIMARY KEY (issue_id, tag_id)
+PRIMARY KEY (issue_id, label_id)
 );
 
 CREATE TABLE issue_links (

@@ -89,8 +89,8 @@ mod tests {
         for t in [
             "projects",
             "issues",
-            "tags",
-            "issue_tags",
+            "labels",
+            "issue_labels",
             "roadmaps",
             "plans",
             "roadmap_direct_issues",
