@@ -58,3 +58,10 @@ pub const ROADMAP_DIRECT_ISSUE_STATUSES: &str =
 pub const PLAN_IDS_FOR_ISSUE: &str = include_str!("queries/plan_ids_for_issue.sql");
 pub const ROADMAP_IDS_FOR_PLAN: &str = include_str!("queries/roadmap_ids_for_plan.sql");
 pub const ROADMAP_IDS_FOR_ISSUE: &str = include_str!("queries/roadmap_ids_for_issue.sql");
+
+pub const ISSUE_EXISTS: &str = include_str!("queries/issue_exists.sql");
+pub const ISSUE_SELECT_PLAN_ID: &str = include_str!("queries/issue_select_plan_id.sql");
+pub const ROADMAP_DIRECT_DELETE_BY_ISSUE: &str =
+    include_str!("queries/roadmap_direct_delete_by_issue.sql");
+pub const ISSUE_SET_PLAN: &str = include_str!("queries/issue_set_plan.sql");
+pub const ISSUE_UNSET_PLAN: &str = include_str!("queries/issue_unset_plan.sql");

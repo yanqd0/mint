@@ -179,7 +179,7 @@ pub fn get(conn: &Connection, kind: ContainerKind, id: i64) -> Result<Option<Con
 /// 执行删除（多语句 SQL 的关联操作）+ `after` 同步，同一 `BEGIN IMMEDIATE...COMMIT` 事务内原子提交。
 /// 任一失败整体回滚，使"删除 + 派生状态同步"不可分割；拒绝在既有事务内调用（避免误回滚外层事务）。
 /// SQL 仅单参数 `?1`；id 为自增数字，替换安全（无注入面）。
-fn delete_txn(
+pub(crate) fn delete_txn(
     conn: &Connection,
     sql: &str,
     id: i64,
@@ -233,9 +233,7 @@ pub fn delete_roadmap(conn: &Connection, id: i64) -> Result<(), Error> {
 /// 所属容器在删除前记录（删除后无法查询）。
 pub fn delete_issue(conn: &Connection, id: i64) -> Result<(), Error> {
     let exists: Option<i64> = conn
-        .query_row("SELECT 1 FROM issues WHERE id = ?1", params![id], |r| {
-            r.get(0)
-        })
+        .query_row(db::ISSUE_EXISTS, params![id], |r| r.get(0))
         .optional()
         .map_err(Error::from)?;
     if exists.is_none() {
@@ -291,11 +289,7 @@ pub fn link_direct(conn: &Connection, roadmap_id: i64, issue_id: i64) -> Result<
         return Err(Error::Other(format!("roadmap #{roadmap_id} not found")));
     }
     let plan_id: Option<Option<i64>> = conn
-        .query_row(
-            "SELECT plan_id FROM issues WHERE id = ?1",
-            params![issue_id],
-            |r| r.get(0),
-        )
+        .query_row(db::ISSUE_SELECT_PLAN_ID, params![issue_id], |r| r.get(0))
         .optional()
         .map_err(Error::from)?;
     match plan_id {
@@ -325,35 +319,22 @@ pub fn set_issue_plan(conn: &Connection, issue_id: i64, plan_id: i64) -> Result<
         return Err(Error::Other(format!("plan #{plan_id} not found")));
     }
     let exists: Option<i64> = conn
-        .query_row(
-            "SELECT 1 FROM issues WHERE id = ?1",
-            params![issue_id],
-            |r| r.get(0),
-        )
+        .query_row(db::ISSUE_EXISTS, params![issue_id], |r| r.get(0))
         .optional()
         .map_err(Error::from)?;
     if exists.is_none() {
         return Err(Error::Other(format!("issue #{issue_id} not found")));
     }
     // 若该 issue 已直接挂 roadmap，需先解除（二选一）
-    conn.execute(
-        "DELETE FROM roadmap_direct_issues WHERE issue_id = ?1",
-        params![issue_id],
-    )?;
-    conn.execute(
-        "UPDATE issues SET plan_id = ?1, updated_at = datetime('now') WHERE id = ?2",
-        params![plan_id, issue_id],
-    )?;
+    conn.execute(db::ROADMAP_DIRECT_DELETE_BY_ISSUE, params![issue_id])?;
+    conn.execute(db::ISSUE_SET_PLAN, params![plan_id, issue_id])?;
     sync_container_status(conn, issue_id)?;
     Ok(())
 }
 
 /// 解除 issue 的 plan 归属（plan_id 置 NULL）。
 pub fn unset_issue_plan(conn: &Connection, issue_id: i64) -> Result<(), Error> {
-    conn.execute(
-        "UPDATE issues SET plan_id = NULL, updated_at = datetime('now') WHERE id = ?1",
-        params![issue_id],
-    )?;
+    conn.execute(db::ISSUE_UNSET_PLAN, params![issue_id])?;
     sync_container_status(conn, issue_id)?;
     Ok(())
 }
