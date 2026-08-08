@@ -1,5 +1,5 @@
 ---
-name: mint-dogfood
+name: mint-faa
 description: >-
   用 mint 管理开发 issue 与流程（dogfooding）。定位是 mint 使用的**流程注入**（高抽象层）：
   用户用一句话描述意图（"发现一个 bug：X 导致 Y" / "有个需求：Z" / "记一个遗留问题" /
@@ -14,6 +14,14 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
 用 mint 管理开发 issue 与流程：**解析意图（描述）→ 选择流程（reference）→ 执行 mint 命令序列 → 验证**。
 
 可接收位置参数 `<description>`：一句话描述意图（可含标题/上下文/类型线索）。未传参时按对话上下文自动判断。描述不明确（类型/挂载/流程）时用 `AskUserQuestion` 澄清。
+
+## 自动捕获信号（hook 注入）
+
+Claude Code 的 `PostToolUseFailure` hook 会把工具失败信号注入上下文（"mint: 工具失败…"）。
+收到此类信号时：**判断是否值得记录**（模糊判断）→ 值得则 `mint add "<标题>" --body "<错误细节>"`。
+`add` 已内置去重（同项目标题归一化+模糊匹配），重复登记自动合并（`hit_count+1`），不会产生噪音。
+- 登记前先 `mint search` 避免重复；需求/遗留/改进点主动 `mint add --kind requirement`。
+- 状态机推进见 `references/state-machine.md`（跳过测试也走 stage，`--test-cmd` 填 `not-tested`）。
 
 ## 执行流程
 
@@ -51,7 +59,7 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
 
 ## 约束
 
-- **登记前查重**：`list --json` 标题模糊匹配，存在未关闭近似标题 → 不新建，建议 `show`/推进。
+- **去重已内置**：`add` 对同项目非终态 issue 做标题归一化+模糊匹配，重复自动合并（`hit_count+1`），无需手动查重；登记前可 `mint search` 查已有 issue。
 - **mint 管 issue（可执行待办），mem-lite 管记忆（事实/教训）**——不混；`issue#N` ↔ `memory#N` 关联见 `references/mem-lite.md`。
 - **开发完成必须 `state commit <id> --sha <SHA>`**（默认读 HEAD）；`close` 必填 `--test-cmd`（无测试填 `not-tested`）。
 - **方案 vs 单点区分**：跨模块/多步骤方案 → 建 plan + 拆 issues；单点小改动/审查发现/观察项 → 只记 issue。
