@@ -48,6 +48,8 @@ enum Commands {
     Plan(PlanArgs),
     /// Issue link subcommands
     Link(LinkArgs),
+    /// Delete data (DANGEROUS: permanent). Prefer `state drop` for issues
+    Delete(DeleteArgs),
 }
 
 #[derive(clap::Args)]
@@ -124,6 +126,22 @@ enum PlanCmd {
     Issue(PlanIssueArgs),
     /// Remove an issue from this plan
     DetachIssue(PlanIssueArgs),
+}
+
+#[derive(clap::Args)]
+struct DeleteArgs {
+    #[command(subcommand)]
+    command: DeleteCmd,
+}
+
+#[derive(Subcommand)]
+enum DeleteCmd {
+    /// Permanently delete an issue and its links/tags (DANGEROUS: prefer `state drop`)
+    Issue(ContainerIdArgs),
+    /// Delete a plan (detaches its issues; DANGEROUS)
+    Plan(ContainerIdArgs),
+    /// Delete a roadmap (detaches its plans and direct issues; DANGEROUS)
+    Roadmap(ContainerIdArgs),
 }
 
 #[derive(clap::Args)]
@@ -366,6 +384,7 @@ impl Cli {
             Commands::Roadmap(r) => cmd_roadmap(&conn, &r.command),
             Commands::Plan(p) => cmd_plan(&conn, &p.command),
             Commands::Link(l) => cmd_link(&conn, &l.command),
+            Commands::Delete(d) => cmd_delete(&conn, &d.command),
         }
     }
 
@@ -560,6 +579,34 @@ fn cmd_plan(conn: &rusqlite::Connection, cmd: &PlanCmd) -> Result<(), Error> {
             print_issue_link_json(a.id, a.issue_id, "detached", a.json)
         }
     }
+}
+
+/// delete 命令分发（危险操作：物理删除，默认不使用，见 SKILL.md 约束）。
+fn cmd_delete(conn: &rusqlite::Connection, cmd: &DeleteCmd) -> Result<(), Error> {
+    match cmd {
+        DeleteCmd::Issue(a) => {
+            container::delete_issue(conn, a.id)?;
+            print_deleted("issue", a.id, a.json)
+        }
+        DeleteCmd::Plan(a) => {
+            container::delete_plan(conn, a.id)?;
+            print_deleted("plan", a.id, a.json)
+        }
+        DeleteCmd::Roadmap(a) => {
+            container::delete_roadmap(conn, a.id)?;
+            print_deleted("roadmap", a.id, a.json)
+        }
+    }
+}
+
+/// 删除成功输出。
+fn print_deleted(kind: &str, id: i64, json: bool) -> Result<(), Error> {
+    if json {
+        println!("{}", serde_json::json!({ "deleted": id, "kind": kind }));
+    } else {
+        println!("Deleted {kind} #{id}");
+    }
+    Ok(())
 }
 
 /// roadmap create：必填 --version。

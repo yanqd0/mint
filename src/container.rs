@@ -176,6 +176,92 @@ pub fn get(conn: &Connection, kind: ContainerKind, id: i64) -> Result<Option<Con
     .map_err(Error::from)
 }
 
+/// 执行删除（多语句 SQL 的关联操作）+ `after` 同步，同一 `BEGIN IMMEDIATE...COMMIT` 事务内原子提交。
+/// 任一失败整体回滚，使"删除 + 派生状态同步"不可分割；拒绝在既有事务内调用（避免误回滚外层事务）。
+/// SQL 仅单参数 `?1`；id 为自增数字，替换安全（无注入面）。
+fn delete_txn(
+    conn: &Connection,
+    sql: &str,
+    id: i64,
+    after: impl FnOnce(&Connection) -> Result<(), Error>,
+) -> Result<(), Error> {
+    if !conn.is_autocommit() {
+        return Err(Error::Other(
+            "delete must not run inside another transaction".to_string(),
+        ));
+    }
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let result = (|| {
+        conn.execute_batch(&sql.replace("?1", &id.to_string()))?;
+        after(conn)?;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => {
+            conn.execute_batch("COMMIT")?;
+            Ok(())
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
+/// 删除 plan：关联操作（解绑其下全部 issue 的 plan_id + 删 plan）与派生状态同步在同一事务。
+pub fn delete_plan(conn: &Connection, id: i64) -> Result<(), Error> {
+    let c = get(conn, ContainerKind::Plan, id)?
+        .ok_or_else(|| Error::Other(format!("plan #{id} not found")))?;
+    let roadmap_id = c.roadmap_id;
+    delete_txn(conn, db::PLAN_DELETE, id, |conn| {
+        if let Some(rid) = roadmap_id {
+            sync_roadmap(conn, rid)?;
+        }
+        Ok(())
+    })
+}
+
+/// 删除 roadmap：关联操作（清直接挂载 + 解绑其下 plan 的 roadmap_id + 删 roadmap）在同一事务。
+pub fn delete_roadmap(conn: &Connection, id: i64) -> Result<(), Error> {
+    if get(conn, ContainerKind::Roadmap, id)?.is_none() {
+        return Err(Error::Other(format!("roadmap #{id} not found")));
+    }
+    delete_txn(conn, db::ROADMAP_DELETE, id, |_| Ok(()))
+}
+
+/// 物理删除 issue：关联操作（清 tag/links/roadmap 挂载 + 删行）与所属容器派生状态同步在同一事务。
+/// 所属容器在删除前记录（删除后无法查询）。
+pub fn delete_issue(conn: &Connection, id: i64) -> Result<(), Error> {
+    let exists: Option<i64> = conn
+        .query_row("SELECT 1 FROM issues WHERE id = ?1", params![id], |r| {
+            r.get(0)
+        })
+        .optional()
+        .map_err(Error::from)?;
+    if exists.is_none() {
+        return Err(Error::Other(format!("issue #{id} not found")));
+    }
+    let plan_ids: Vec<i64> = conn
+        .prepare(db::PLAN_IDS_FOR_ISSUE)?
+        .query_map(params![id], |r| r.get(0))?
+        .collect::<Result<_, _>>()
+        .map_err(Error::from)?;
+    let roadmap_ids: Vec<i64> = conn
+        .prepare(db::ROADMAP_IDS_FOR_ISSUE)?
+        .query_map(params![id], |r| r.get(0))?
+        .collect::<Result<_, _>>()
+        .map_err(Error::from)?;
+    delete_txn(conn, db::ISSUE_DELETE, id, |conn| {
+        for pid in &plan_ids {
+            sync_plan(conn, *pid)?;
+        }
+        for rid in &roadmap_ids {
+            sync_roadmap(conn, *rid)?;
+        }
+        Ok(())
+    })
+}
+
 /// 查询容器下的 issue 摘要。
 pub fn issues_for(
     conn: &Connection,
@@ -501,6 +587,122 @@ mod tests {
                 .unwrap()
                 .status,
             ContainerStatus::Done
+        );
+    }
+
+    /// 删除 plan：解绑其下 issue（plan_id 置 NULL），plan 消失、issue 保留。
+    #[test]
+    fn delete_plan_detaches_issues() {
+        let (conn, iid) = setup();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, None).unwrap();
+        set_issue_plan(&conn, iid, pid).unwrap();
+        delete_plan(&conn, pid).unwrap();
+        assert!(get(&conn, ContainerKind::Plan, pid).unwrap().is_none());
+        let plan_id: Option<i64> = conn
+            .query_row(
+                "SELECT plan_id FROM issues WHERE id = ?1",
+                params![iid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(plan_id, None);
+    }
+
+    /// 删除 roadmap：直接挂 issue 解绑、其下 plan 保留（roadmap_id 置 NULL）、roadmap 消失。
+    #[test]
+    fn delete_roadmap_detaches_plan_and_direct() {
+        let (conn, iid) = setup();
+        let rid = create(
+            &conn,
+            ContainerKind::Roadmap,
+            "r",
+            Some("0.1.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, Some(rid)).unwrap();
+        link_direct(&conn, rid, iid).unwrap();
+        delete_roadmap(&conn, rid).unwrap();
+        assert!(get(&conn, ContainerKind::Roadmap, rid).unwrap().is_none());
+        let p = get(&conn, ContainerKind::Plan, pid).unwrap().unwrap();
+        assert_eq!(p.roadmap_id, None);
+        let cnt: i64 = conn
+            .query_row("SELECT COUNT(*) FROM roadmap_direct_issues", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(cnt, 0);
+    }
+
+    /// 删除不存在对象报 not found。
+    #[test]
+    fn delete_missing_errors() {
+        let (conn, _) = setup();
+        let err = delete_plan(&conn, 999).unwrap_err();
+        assert!(err.to_string().contains("plan #999 not found"), "{err}");
+        let err = delete_roadmap(&conn, 999).unwrap_err();
+        assert!(err.to_string().contains("roadmap #999 not found"), "{err}");
+        let err = delete_issue(&conn, 999).unwrap_err();
+        assert!(err.to_string().contains("issue #999 not found"), "{err}");
+    }
+
+    /// 删除 plan 后，其上级 roadmap 派生状态回落（plan 不再参与派生）。
+    #[test]
+    fn delete_plan_syncs_roadmap_status() {
+        let (conn, iid) = setup();
+        let rid = create(
+            &conn,
+            ContainerKind::Roadmap,
+            "r",
+            Some("0.1.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, Some(rid)).unwrap();
+        set_issue_plan(&conn, iid, pid).unwrap();
+        set_status(&conn, iid, "done");
+        sync_container_status(&conn, iid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Roadmap, rid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Done
+        );
+        delete_plan(&conn, pid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Roadmap, rid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open
+        );
+    }
+
+    /// 物理删除属容器的 issue 后，父容器派生状态回落（done → open）。
+    #[test]
+    fn delete_issue_syncs_plan_status() {
+        let (conn, iid) = setup();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, None).unwrap();
+        set_issue_plan(&conn, iid, pid).unwrap();
+        set_status(&conn, iid, "done");
+        sync_container_status(&conn, iid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Plan, pid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Done
+        );
+        delete_issue(&conn, iid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Plan, pid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open
         );
     }
 }

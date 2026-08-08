@@ -788,3 +788,59 @@ fn st_container_derived_mixed_boundaries() {
     let v = run_json(&db, &["plan", "show", "1", "--json"]);
     assert_eq!(v["status"], "done");
 }
+
+/// 顶层 delete：物理删除 issue（行消失、关联链接清空）。
+#[test]
+fn st_delete_issue_removes_row() {
+    let (_dir, db) = empty_db();
+    let a = add_issue(&db, "a");
+    let b = add_issue(&db, "b");
+    run_json(
+        &db,
+        &[
+            "link",
+            "create",
+            &a.to_string(),
+            "related",
+            &b.to_string(),
+            "--json",
+        ],
+    );
+    run_json(&db, &["delete", "issue", &a.to_string(), "--json"]);
+    let stderr = run_fail(&db, &["show", &a.to_string()]);
+    assert!(stderr.contains("not found"), "stderr: {stderr}");
+    // b 对 a 的链接清空
+    let v = run_json(&db, &["link", "list", &b.to_string(), "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 0);
+}
+
+/// 顶层 delete：删除 plan 解绑其下 issue，plan 消失。
+#[test]
+fn st_delete_plan_detaches() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    let i = add_issue(&db, "x");
+    run_json(&db, &["plan", "issue", "1", &i.to_string(), "--json"]);
+    run_json(&db, &["delete", "plan", "1", "--json"]);
+    let v = run_json(&db, &["show", &i.to_string(), "--json"]);
+    assert_eq!(v["plan_id"], serde_json::Value::Null);
+    let stderr = run_fail(&db, &["plan", "show", "1"]);
+    assert!(stderr.contains("not found"), "stderr: {stderr}");
+}
+
+/// 顶层 delete：删除 roadmap 解绑直接挂 issue，roadmap 消失、issue 保留。
+#[test]
+fn st_delete_roadmap_detaches() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["roadmap", "create", "r", "--version", "0.1.0", "--json"],
+    );
+    let i = add_issue(&db, "x");
+    run_json(&db, &["roadmap", "issue", "1", &i.to_string(), "--json"]);
+    run_json(&db, &["delete", "roadmap", "1", "--json"]);
+    let stderr = run_fail(&db, &["roadmap", "show", "1"]);
+    assert!(stderr.contains("not found"), "stderr: {stderr}");
+    let v = run_json(&db, &["show", &i.to_string(), "--json"]);
+    assert_eq!(v["id"].as_i64().unwrap(), i);
+}
