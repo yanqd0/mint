@@ -94,22 +94,16 @@ struct RoadmapArgs {
 
 #[derive(Subcommand)]
 enum RoadmapCmd {
-    /// Create a roadmap
-    Create(ContainerCreateArgs),
-    /// List roadmaps (with issue counts)
+    /// Create a roadmap (requires --version)
+    Create(RoadmapCreateArgs),
+    /// List roadmaps (with direct issue counts)
     List(ListContainersArgs),
     /// Show a roadmap's details and its issues
     Show(ContainerIdArgs),
-    /// Link an issue to a roadmap
-    Link(ContainerLinkArgs),
-    /// Unlink an issue from a roadmap
-    Unlink(ContainerLinkArgs),
-    /// Close a roadmap (open -> done)
-    Close(ContainerStatusArgs),
-    /// Drop a roadmap (any -> dropped)
-    Drop(ContainerDropArgs),
-    /// Reopen a roadmap (done/dropped -> open)
-    Reopen(ContainerStatusArgs),
+    /// Attach an issue directly to a roadmap (must not belong to a plan)
+    Issue(RoadmapIssueArgs),
+    /// Detach an issue from a roadmap
+    DetachIssue(RoadmapIssueArgs),
 }
 
 #[derive(clap::Args)]
@@ -120,30 +114,59 @@ struct PlanArgs {
 
 #[derive(Subcommand)]
 enum PlanCmd {
-    /// Create a plan
-    Create(ContainerCreateArgs),
+    /// Create a plan (optionally under a roadmap)
+    Create(PlanCreateArgs),
     /// List plans (with issue counts)
     List(ListContainersArgs),
     /// Show a plan's details and its issues
     Show(ContainerIdArgs),
-    /// Link an issue to a plan
-    Link(ContainerLinkArgs),
-    /// Unlink an issue from a plan
-    Unlink(ContainerLinkArgs),
-    /// Close a plan (open -> done)
-    Close(ContainerStatusArgs),
-    /// Drop a plan (any -> dropped)
-    Drop(ContainerDropArgs),
-    /// Reopen a plan (done/dropped -> open)
-    Reopen(ContainerStatusArgs),
+    /// Move an issue into this plan
+    Issue(PlanIssueArgs),
+    /// Remove an issue from this plan
+    DetachIssue(PlanIssueArgs),
 }
 
 #[derive(clap::Args)]
-struct ContainerCreateArgs {
+struct RoadmapCreateArgs {
     title: String,
-    /// Optional description
+    /// Version, e.g. 0.1.0 or any user form (required)
     #[arg(long)]
-    description: Option<String>,
+    version: String,
+    /// Full body/description
+    #[arg(long)]
+    body: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct PlanCreateArgs {
+    title: String,
+    /// Full markdown body/description
+    #[arg(long)]
+    body: Option<String>,
+    /// Roadmap this plan belongs to
+    #[arg(long)]
+    roadmap: Option<i64>,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct RoadmapIssueArgs {
+    id: i64,
+    issue_id: i64,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(clap::Args)]
+struct PlanIssueArgs {
+    id: i64,
+    issue_id: i64,
     /// Output as JSON
     #[arg(long)]
     json: bool,
@@ -151,6 +174,9 @@ struct ContainerCreateArgs {
 
 #[derive(clap::Args)]
 struct ListContainersArgs {
+    /// Show all statuses (including done)
+    #[arg(long, short = 'a')]
+    all: bool,
     /// Output as JSON
     #[arg(long)]
     json: bool,
@@ -165,15 +191,6 @@ struct ContainerIdArgs {
 }
 
 #[derive(clap::Args)]
-struct ContainerLinkArgs {
-    id: i64,
-    issue_id: i64,
-    /// Output as JSON
-    #[arg(long)]
-    json: bool,
-}
-
-#[derive(clap::Args)]
 struct CommitArgs {
     id: i64,
     /// Commit SHA (default: current HEAD; required in non-git dirs)
@@ -182,25 +199,6 @@ struct CommitArgs {
     /// Optional test command (informational)
     #[arg(long)]
     test_cmd: Option<String>,
-    /// Output as JSON
-    #[arg(long)]
-    json: bool,
-}
-
-#[derive(clap::Args)]
-struct ContainerStatusArgs {
-    id: i64,
-    /// Output as JSON
-    #[arg(long)]
-    json: bool,
-}
-
-#[derive(clap::Args)]
-struct ContainerDropArgs {
-    id: i64,
-    /// Optional reason
-    #[arg(long)]
-    reason: Option<String>,
     /// Output as JSON
     #[arg(long)]
     json: bool,
@@ -362,16 +360,8 @@ impl Cli {
             Commands::Tag(t) => match &t.command {
                 TagCmd::List(l) => cmd_tag_list(&conn, l),
             },
-            Commands::Roadmap(r) => cmd_container(
-                &conn,
-                ContainerKind::Roadmap,
-                &ContainerCmdDispatch::from(&r.command),
-            ),
-            Commands::Plan(p) => cmd_container(
-                &conn,
-                ContainerKind::Plan,
-                &ContainerCmdDispatch::from(&p.command),
-            ),
+            Commands::Roadmap(r) => cmd_roadmap(&conn, &r.command),
+            Commands::Plan(p) => cmd_plan(&conn, &p.command),
             Commands::Link(l) => cmd_link(&conn, &l.command),
         }
     }
@@ -460,10 +450,11 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
             test_cmd: r.get(7)?,
             dropped_reason: r.get(8)?,
             last_commit_id: r.get(9)?,
+            plan_id: r.get(10)?,
             tags: Vec::new(),
             links: Vec::new(),
-            created_at: r.get(10)?,
-            updated_at: r.get(11)?,
+            created_at: r.get(11)?,
+            updated_at: r.get(12)?,
         })
     })?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
@@ -496,10 +487,11 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
                 test_cmd: r.get(7)?,
                 dropped_reason: r.get(8)?,
                 last_commit_id: r.get(9)?,
+                plan_id: r.get(10)?,
                 tags: Vec::new(),
                 links: Vec::new(),
-                created_at: r.get(10)?,
-                updated_at: r.get(11)?,
+                created_at: r.get(11)?,
+                updated_at: r.get(12)?,
             })
         })
         .map_err(|e| match e {
@@ -533,125 +525,108 @@ fn cmd_tag_list(conn: &rusqlite::Connection, l: &ListTagsArgs) -> Result<(), Err
     Ok(())
 }
 
-/// 容器命令分发（roadmap/plan 同构，共享 container 模块）。
-fn cmd_container(
-    conn: &rusqlite::Connection,
-    kind: ContainerKind,
-    cmd: &ContainerCmdDispatch,
-) -> Result<(), Error> {
+/// roadmap 命令分发。
+fn cmd_roadmap(conn: &rusqlite::Connection, cmd: &RoadmapCmd) -> Result<(), Error> {
     match cmd {
-        ContainerCmdDispatch::Create(a) => cmd_container_create(conn, kind, a),
-        ContainerCmdDispatch::List(a) => cmd_container_list(conn, kind, a),
-        ContainerCmdDispatch::Show(a) => cmd_container_show(conn, kind, a),
-        ContainerCmdDispatch::Link(a) => cmd_container_link(conn, kind, a, true),
-        ContainerCmdDispatch::Unlink(a) => cmd_container_link(conn, kind, a, false),
-        ContainerCmdDispatch::Close(a) => cmd_container_transition(
-            conn,
-            kind,
-            a.id,
-            container::ContainerAction::Close,
-            None,
-            a.json,
-        ),
-        ContainerCmdDispatch::Drop(a) => cmd_container_transition(
-            conn,
-            kind,
-            a.id,
-            container::ContainerAction::Drop,
-            a.reason.as_deref(),
-            a.json,
-        ),
-        ContainerCmdDispatch::Reopen(a) => cmd_container_transition(
-            conn,
-            kind,
-            a.id,
-            container::ContainerAction::Reopen,
-            None,
-            a.json,
-        ),
-    }
-}
-
-/// 容器命令的统一描述（RoadmapCmd/PlanCmd 各自转换到它）。
-enum ContainerCmdDispatch<'a> {
-    Create(&'a ContainerCreateArgs),
-    List(&'a ListContainersArgs),
-    Show(&'a ContainerIdArgs),
-    Link(&'a ContainerLinkArgs),
-    Unlink(&'a ContainerLinkArgs),
-    Close(&'a ContainerStatusArgs),
-    Drop(&'a ContainerDropArgs),
-    Reopen(&'a ContainerStatusArgs),
-}
-
-impl<'a> From<&'a RoadmapCmd> for ContainerCmdDispatch<'a> {
-    fn from(c: &'a RoadmapCmd) -> Self {
-        match c {
-            RoadmapCmd::Create(a) => ContainerCmdDispatch::Create(a),
-            RoadmapCmd::List(a) => ContainerCmdDispatch::List(a),
-            RoadmapCmd::Show(a) => ContainerCmdDispatch::Show(a),
-            RoadmapCmd::Link(a) => ContainerCmdDispatch::Link(a),
-            RoadmapCmd::Unlink(a) => ContainerCmdDispatch::Unlink(a),
-            RoadmapCmd::Close(a) => ContainerCmdDispatch::Close(a),
-            RoadmapCmd::Drop(a) => ContainerCmdDispatch::Drop(a),
-            RoadmapCmd::Reopen(a) => ContainerCmdDispatch::Reopen(a),
+        RoadmapCmd::Create(a) => cmd_roadmap_create(conn, a),
+        RoadmapCmd::List(a) => cmd_container_list(conn, ContainerKind::Roadmap, a),
+        RoadmapCmd::Show(a) => cmd_container_show(conn, ContainerKind::Roadmap, a),
+        RoadmapCmd::Issue(a) => {
+            container::link_direct(conn, a.id, a.issue_id)?;
+            print_issue_link_json(a.id, a.issue_id, "attached", a.json)
+        }
+        RoadmapCmd::DetachIssue(a) => {
+            container::unlink_direct(conn, a.id, a.issue_id)?;
+            print_issue_link_json(a.id, a.issue_id, "detached", a.json)
         }
     }
 }
 
-impl<'a> From<&'a PlanCmd> for ContainerCmdDispatch<'a> {
-    fn from(c: &'a PlanCmd) -> Self {
-        match c {
-            PlanCmd::Create(a) => ContainerCmdDispatch::Create(a),
-            PlanCmd::List(a) => ContainerCmdDispatch::List(a),
-            PlanCmd::Show(a) => ContainerCmdDispatch::Show(a),
-            PlanCmd::Link(a) => ContainerCmdDispatch::Link(a),
-            PlanCmd::Unlink(a) => ContainerCmdDispatch::Unlink(a),
-            PlanCmd::Close(a) => ContainerCmdDispatch::Close(a),
-            PlanCmd::Drop(a) => ContainerCmdDispatch::Drop(a),
-            PlanCmd::Reopen(a) => ContainerCmdDispatch::Reopen(a),
+/// plan 命令分发。
+fn cmd_plan(conn: &rusqlite::Connection, cmd: &PlanCmd) -> Result<(), Error> {
+    match cmd {
+        PlanCmd::Create(a) => cmd_plan_create(conn, a),
+        PlanCmd::List(a) => cmd_container_list(conn, ContainerKind::Plan, a),
+        PlanCmd::Show(a) => cmd_container_show(conn, ContainerKind::Plan, a),
+        PlanCmd::Issue(a) => {
+            container::set_issue_plan(conn, a.issue_id, a.id)?;
+            print_issue_link_json(a.id, a.issue_id, "attached", a.json)
+        }
+        PlanCmd::DetachIssue(a) => {
+            container::unset_issue_plan(conn, a.issue_id)?;
+            print_issue_link_json(a.id, a.issue_id, "detached", a.json)
         }
     }
 }
 
-/// create：新建容器，title 非空校验。
-fn cmd_container_create(
-    conn: &rusqlite::Connection,
-    kind: ContainerKind,
-    a: &ContainerCreateArgs,
-) -> Result<(), Error> {
+/// roadmap create：必填 --version。
+fn cmd_roadmap_create(conn: &rusqlite::Connection, a: &RoadmapCreateArgs) -> Result<(), Error> {
     if a.title.trim().is_empty() {
         return Err(Error::Other("title must not be empty".to_string()));
     }
-    let id = container::create(conn, kind, a.title.trim(), a.description.as_deref())?;
+    let id = container::create(
+        conn,
+        ContainerKind::Roadmap,
+        a.title.trim(),
+        Some(&a.version),
+        a.body.as_deref(),
+        None,
+    )?;
     if a.json {
         println!(
             "{}",
             serde_json::to_string(&serde_json::json!({
-                "id": id, "title": a.title, "status": "open",
+                "id": id, "title": a.title, "version": a.version, "status": "open",
             }))?
         );
     } else {
-        println!("Created {} #{id} ({})", kind_noun(kind), a.title);
+        println!("Created roadmap #{id} ({})", a.title);
     }
     Ok(())
 }
 
-/// list：列出全部容器（含 issue 计数）。
+/// plan create：可带 --roadmap。
+fn cmd_plan_create(conn: &rusqlite::Connection, a: &PlanCreateArgs) -> Result<(), Error> {
+    if a.title.trim().is_empty() {
+        return Err(Error::Other("title must not be empty".to_string()));
+    }
+    let id = container::create(
+        conn,
+        ContainerKind::Plan,
+        a.title.trim(),
+        None,
+        a.body.as_deref(),
+        a.roadmap,
+    )?;
+    if a.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "id": id, "title": a.title, "roadmap_id": a.roadmap, "status": "open",
+            }))?
+        );
+    } else {
+        println!("Created plan #{id} ({})", a.title);
+    }
+    Ok(())
+}
+
+/// 容器 list：默认只显非 done，--all/-a 全列。
 fn cmd_container_list(
     conn: &rusqlite::Connection,
     kind: ContainerKind,
     a: &ListContainersArgs,
 ) -> Result<(), Error> {
-    let items = container::list(conn, kind)?;
+    let items = container::list(conn, kind, a.all)?;
     if a.json {
         let json: Vec<serde_json::Value> = items
             .iter()
             .map(|(c, count)| {
                 serde_json::json!({
-                    "id": c.id, "title": c.title, "description": c.description,
-                    "status": c.status, "dropped_reason": c.dropped_reason,
-                    "issue_count": count, "created_at": c.created_at, "updated_at": c.updated_at,
+                    "id": c.id, "title": c.title, "version": c.version,
+                    "body": c.body, "roadmap_id": c.roadmap_id,
+                    "status": c.status, "issue_count": count,
+                    "created_at": c.created_at, "updated_at": c.updated_at,
                 })
             })
             .collect();
@@ -662,7 +637,7 @@ fn cmd_container_list(
     Ok(())
 }
 
-/// show：容器详情 + 其下 issue。
+/// 容器 show：详情 + 其下 issue。
 fn cmd_container_show(
     conn: &rusqlite::Connection,
     kind: ContainerKind,
@@ -675,9 +650,10 @@ fn cmd_container_show(
         println!(
             "{}",
             serde_json::to_string(&serde_json::json!({
-                "id": c.id, "title": c.title, "description": c.description,
-                "status": c.status, "dropped_reason": c.dropped_reason,
-                "issues": issues, "created_at": c.created_at, "updated_at": c.updated_at,
+                "id": c.id, "title": c.title, "version": c.version,
+                "body": c.body, "roadmap_id": c.roadmap_id,
+                "status": c.status, "issues": issues,
+                "created_at": c.created_at, "updated_at": c.updated_at,
             }))?
         );
     } else {
@@ -686,58 +662,22 @@ fn cmd_container_show(
     Ok(())
 }
 
-/// link/unlink：关联或解除 issue。
-fn cmd_container_link(
-    conn: &rusqlite::Connection,
-    kind: ContainerKind,
-    a: &ContainerLinkArgs,
-    is_link: bool,
-) -> Result<(), Error> {
-    if is_link {
-        container::link(conn, kind, a.id, a.issue_id)?;
-    } else {
-        container::unlink(conn, kind, a.id, a.issue_id)?;
-    }
-    if a.json {
-        println!(
-            "{}",
-            serde_json::to_string(&serde_json::json!({"id": a.id, "issue_id": a.issue_id}))?
-        );
-    } else if is_link {
-        println!(
-            "linked issue #{} to {} #{}",
-            a.issue_id,
-            kind_noun(kind),
-            a.id
-        );
-    } else {
-        println!(
-            "unlinked issue #{} from {} #{}",
-            a.issue_id,
-            kind_noun(kind),
-            a.id
-        );
-    }
-    Ok(())
-}
-
-/// 容器状态转换（close/drop/reopen）。
-fn cmd_container_transition(
-    conn: &rusqlite::Connection,
-    kind: ContainerKind,
-    id: i64,
-    action: container::ContainerAction,
-    reason: Option<&str>,
+/// 打印 issue 归属操作结果。
+fn print_issue_link_json(
+    container_id: i64,
+    issue_id: i64,
+    verb: &str,
     json: bool,
 ) -> Result<(), Error> {
-    let (from, to) = container::transition(conn, kind, id, action, reason)?;
     if json {
         println!(
             "{}",
-            serde_json::to_string(&serde_json::json!({"id": id, "from": from, "to": to}))?
+            serde_json::to_string(&serde_json::json!({
+                "id": container_id, "issue_id": issue_id,
+            }))?
         );
     } else {
-        println!("{} #{id}: {} -> {}", kind_noun(kind), from, to);
+        println!("{verb} issue #{issue_id}");
     }
     Ok(())
 }
@@ -750,7 +690,6 @@ fn kind_noun(kind: ContainerKind) -> &'static str {
     }
 }
 
-/// commit：记录 issue 的最后关联 commit（覆盖旧值，--sha 优先，否则读 HEAD）。
 /// link 子命令分发。
 fn cmd_link(conn: &rusqlite::Connection, cmd: &LinkCmd) -> Result<(), Error> {
     match cmd {
@@ -920,6 +859,9 @@ fn transition(
         db::ISSUE_UPDATE_TRANSITION,
         rusqlite::params![target, test_cmd, id, reset, drop_reason, reopen, commit_sha],
     )?;
+
+    // 写后级联同步：重算该 issue 所属 plan/roadmap 的派生状态
+    container::sync_container_status(conn, id)?;
 
     if json {
         let mut v = serde_json::json!({"id": id, "from": current, "to": target});

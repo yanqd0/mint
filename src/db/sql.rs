@@ -34,14 +34,18 @@ pub const ROADMAP_SELECT: &str = include_str!("queries/roadmap_select.sql");
 pub const ROADMAP_ATTACH: &str = include_str!("queries/roadmap_attach.sql");
 pub const ROADMAP_DETACH: &str = include_str!("queries/roadmap_detach.sql");
 pub const ROADMAP_ISSUES_FOR: &str = include_str!("queries/roadmap_issues_for.sql");
-pub const ROADMAP_SELECT_STATUS: &str = include_str!("queries/roadmap_select_status.sql");
 pub const ROADMAP_UPDATE_STATUS: &str = include_str!("queries/roadmap_update_status.sql");
 
 pub const PLAN_INSERT: &str = include_str!("queries/plan_insert.sql");
 pub const PLAN_LIST: &str = include_str!("queries/plan_list.sql");
 pub const PLAN_SELECT: &str = include_str!("queries/plan_select.sql");
-pub const PLAN_ATTACH: &str = include_str!("queries/plan_attach.sql");
-pub const PLAN_DETACH: &str = include_str!("queries/plan_detach.sql");
 pub const PLAN_ISSUES_FOR: &str = include_str!("queries/plan_issues_for.sql");
-pub const PLAN_SELECT_STATUS: &str = include_str!("queries/plan_select_status.sql");
 pub const PLAN_UPDATE_STATUS: &str = include_str!("queries/plan_update_status.sql");
+
+pub const PLAN_ISSUE_STATUSES: &str = include_str!("queries/plan_issue_statuses.sql");
+pub const ROADMAP_PLAN_STATUSES: &str = include_str!("queries/roadmap_plan_statuses.sql");
+pub const ROADMAP_DIRECT_ISSUE_STATUSES: &str =
+    include_str!("queries/roadmap_direct_issue_statuses.sql");
+pub const PLAN_IDS_FOR_ISSUE: &str = include_str!("queries/plan_ids_for_issue.sql");
+pub const ROADMAP_IDS_FOR_PLAN: &str = include_str!("queries/roadmap_ids_for_plan.sql");
+pub const ROADMAP_IDS_FOR_ISSUE: &str = include_str!("queries/roadmap_ids_for_issue.sql");

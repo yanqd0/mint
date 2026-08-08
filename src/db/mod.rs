@@ -84,7 +84,7 @@ mod tests {
             .unwrap()
             .map(|r| r.unwrap())
             .collect();
-        assert_eq!(tables.len(), 9);
+        assert_eq!(tables.len(), 8);
         for t in [
             "projects",
             "issues",
@@ -92,8 +92,7 @@ mod tests {
             "issue_tags",
             "roadmaps",
             "plans",
-            "roadmap_issues",
-            "plan_issues",
+            "roadmap_direct_issues",
             "issue_links",
         ] {
             assert!(tables.iter().any(|n| n == t), "missing table {t}");

@@ -122,6 +122,7 @@ pub struct Issue {
     pub test_cmd: Option<String>,
     pub dropped_reason: Option<String>,
     pub last_commit_id: Option<String>,
+    pub plan_id: Option<i64>,
     pub tags: Vec<String>,
     pub links: Vec<Link>,
     pub created_at: String,
@@ -204,21 +205,26 @@ pub struct Tag {
     pub updated_at: String,
 }
 
-/// 容器状态（roadmap/plan 共享）：open/done/dropped，独立于 issue 6 态。
+/// 容器状态（roadmap/plan 共享，5 态派生）：open/running/partial/dropped/done。
+/// open=从未开始；running=曾/正运行；partial=done+dropped 混合无活跃。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum ContainerStatus {
     Open,
-    Done,
+    Running,
+    Partial,
     Dropped,
+    Done,
 }
 
 impl ContainerStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             ContainerStatus::Open => "open",
-            ContainerStatus::Done => "done",
+            ContainerStatus::Running => "running",
+            ContainerStatus::Partial => "partial",
             ContainerStatus::Dropped => "dropped",
+            ContainerStatus::Done => "done",
         }
     }
 }
@@ -239,8 +245,10 @@ impl rusqlite::types::FromSql for ContainerStatus {
     fn column_result(v: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         match v.as_str()? {
             "open" => Ok(ContainerStatus::Open),
-            "done" => Ok(ContainerStatus::Done),
+            "running" => Ok(ContainerStatus::Running),
+            "partial" => Ok(ContainerStatus::Partial),
             "dropped" => Ok(ContainerStatus::Dropped),
+            "done" => Ok(ContainerStatus::Done),
             other => Err(rusqlite::types::FromSqlError::Other(
                 format!("invalid container status: {other}").into(),
             )),
@@ -248,14 +256,15 @@ impl rusqlite::types::FromSql for ContainerStatus {
     }
 }
 
-/// 容器（roadmap/plan 共享模型）：聚合多个 issue。
+/// 容器（roadmap/plan 共享模型）：roadmap 有 version，plan 有 roadmap_id。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Container {
     pub id: i64,
     pub title: String,
-    pub description: Option<String>,
+    pub version: Option<String>,
+    pub body: Option<String>,
+    pub roadmap_id: Option<i64>,
     pub status: ContainerStatus,
-    pub dropped_reason: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

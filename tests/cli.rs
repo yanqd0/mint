@@ -280,79 +280,114 @@ fn st_project_autodetect_explicit() {
     assert_eq!(v["project"], "mint");
 }
 
-/// roadmap crud：create 2 个、list 带计数、show 聚合其下 issue。
+/// roadmap crud：create（必填 version）、list 带计数、show 聚合直接挂的 issue。
 #[test]
 fn st_roadmap_crud() {
     let (_dir, db) = empty_db();
     let v = run_json(
         &db,
-        &["roadmap", "create", "r1", "--description", "d", "--json"],
+        &["roadmap", "create", "r1", "--version", "0.1.0", "--json"],
     );
     assert_eq!(v["status"], "open");
-    run_json(&db, &["roadmap", "create", "r2", "--json"]);
+    run_json(
+        &db,
+        &["roadmap", "create", "r2", "--version", "0.2.0", "--json"],
+    );
 
     let v = run_json(&db, &["roadmap", "list", "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 2);
     assert_eq!(v[0]["issue_count"], 0);
 
-    // link 两个 issue 后 show 聚合
+    // 直接挂两个 issue 后 show 聚合
     let i1 = add_issue(&db, "a");
     let i2 = add_issue(&db, "b");
-    run_json(&db, &["roadmap", "link", "1", &i1.to_string(), "--json"]);
-    run_json(&db, &["roadmap", "link", "1", &i2.to_string(), "--json"]);
+    run_json(&db, &["roadmap", "issue", "1", &i1.to_string(), "--json"]);
+    run_json(&db, &["roadmap", "issue", "1", &i2.to_string(), "--json"]);
     let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 2);
 }
 
-/// roadmap link/unlink 幂等：重复 link 仍 1 条；unlink 归零。
+/// roadmap 直接挂/解挂 issue；show 聚合归零。
 #[test]
-fn st_roadmap_link_unlink_idempotent() {
+fn st_roadmap_issue_detach() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "x");
-    run_json(&db, &["roadmap", "create", "r", "--json"]);
-    run_json(&db, &["roadmap", "link", "1", &id.to_string(), "--json"]);
-    run_json(&db, &["roadmap", "link", "1", &id.to_string(), "--json"]); // 幂等
+    run_json(
+        &db,
+        &["roadmap", "create", "r", "--version", "0.1.0", "--json"],
+    );
+    run_json(&db, &["roadmap", "issue", "1", &id.to_string(), "--json"]);
     let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 1);
-    run_json(&db, &["roadmap", "unlink", "1", &id.to_string(), "--json"]);
+    run_json(
+        &db,
+        &["roadmap", "detach-issue", "1", &id.to_string(), "--json"],
+    );
     let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 0);
 }
 
-/// link 不存在的 roadmap/issue → 干净报错。
+/// roadmap create 必填 version；不存在的 roadmap/issue 报错。
 #[test]
-fn st_roadmap_link_missing_ids() {
+fn st_roadmap_create_requires_version_and_missing() {
     let (_dir, db) = empty_db();
+    let stderr = run_fail(&db, &["roadmap", "create", "r", "--json"]);
+    assert!(stderr.contains("--version"), "stderr: {stderr}");
+    run_json(
+        &db,
+        &["roadmap", "create", "r", "--version", "0.1.0", "--json"],
+    );
     let id = add_issue(&db, "x");
-    let stderr = run_fail(&db, &["roadmap", "link", "999", &id.to_string()]);
+    let stderr = run_fail(&db, &["roadmap", "issue", "999", &id.to_string()]);
     assert!(
         stderr.contains("roadmap #999 not found"),
         "stderr: {stderr}"
     );
-    run_json(&db, &["roadmap", "create", "r", "--json"]);
-    let stderr = run_fail(&db, &["roadmap", "link", "1", "999"]);
-    assert!(stderr.contains("issue #999 not found"), "stderr: {stderr}");
 }
 
-/// plan 状态流程：create → link → close(done) → reopen → drop，共享状态机。
+/// plan crud：create、挂 issue、派生状态（open→running→done）。
 #[test]
-fn st_plan_crud_and_status() {
+fn st_plan_create_link_derived() {
     let (_dir, db) = empty_db();
     let iid = add_issue(&db, "x");
     run_json(&db, &["plan", "create", "p", "--json"]);
-    run_json(&db, &["plan", "link", "1", &iid.to_string(), "--json"]);
+    run_json(&db, &["plan", "issue", "1", &iid.to_string(), "--json"]);
 
-    let v = run_json(&db, &["plan", "close", "1", "--json"]);
-    assert_eq!(v["to"], "done");
-    run_json(&db, &["plan", "reopen", "1", "--json"]);
-    let v = run_json(
-        &db,
-        &["plan", "drop", "1", "--reason", "superseded", "--json"],
-    );
-    assert_eq!(v["to"], "dropped");
+    // open（issue 未推进）
     let v = run_json(&db, &["plan", "show", "1", "--json"]);
-    assert_eq!(v["status"], "dropped");
-    assert_eq!(v["dropped_reason"], "superseded");
+    assert_eq!(v["status"], "open");
+
+    // 推进 issue 到 dev → plan running
+    run_json(&db, &["state", "plan", &iid.to_string(), "--json"]);
+    run_json(&db, &["state", "start", &iid.to_string(), "--json"]);
+    let v = run_json(&db, &["plan", "show", "1", "--json"]);
+    assert_eq!(v["status"], "running");
+
+    // issue 到 done → plan done
+    run_json(
+        &db,
+        &[
+            "state",
+            "commit",
+            &iid.to_string(),
+            "--sha",
+            "abc",
+            "--json",
+        ],
+    );
+    run_json(
+        &db,
+        &[
+            "state",
+            "close",
+            &iid.to_string(),
+            "--test-cmd",
+            "t",
+            "--json",
+        ],
+    );
+    let v = run_json(&db, &["plan", "show", "1", "--json"]);
+    assert_eq!(v["status"], "done");
 }
 
 /// state commit --sha：dev→test 并记录 last_commit_id。

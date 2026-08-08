@@ -1,3 +1,5 @@
--- 为 roadmap 关联 issue（幂等：重复 link 忽略）。
+-- roadmap 直接挂 issue（仅接受 plan_id IS NULL 的 issue，二选一；幂等）。
 -- ?1: roadmap_id, ?2: issue_id
-INSERT OR IGNORE INTO roadmap_issues (roadmap_id, issue_id) VALUES (?1, ?2);
+INSERT OR IGNORE INTO roadmap_direct_issues (roadmap_id,
+issue_id) VALUES (?1,
+?2);

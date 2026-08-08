@@ -62,17 +62,23 @@ pub fn format_issue(i: &Issue) -> String {
     out
 }
 
-/// 渲染容器列表（人类可读，每行一个，含 issue 计数）。
+/// 渲染容器列表（人类可读，每行一个，含子项计数）。
 pub fn format_container_list(items: &[(Container, i64)]) -> String {
     let mut out = String::new();
     for (c, count) in items {
+        let version = c
+            .version
+            .as_deref()
+            .map(|v| format!(" ({v})"))
+            .unwrap_or_default();
         out.push_str(&format!(
-            "#{:<4} {:<10} {:<8} {}{} issues\n",
+            "#{:<4} {:<10} {:<8} {}{} issues{}\n",
             c.id,
             c.status.as_str(),
             count,
             c.title,
-            if *count == 1 { "" } else { "s" }
+            if *count == 1 { "" } else { "s" },
+            version
         ));
     }
     out
@@ -83,11 +89,14 @@ pub fn format_container_show(c: &Container, issues: &[IssueSummary]) -> String {
     let mut out = String::new();
     out.push_str(&format!("#{} {}\n", c.id, c.title));
     out.push_str(&format!("  status:  {}\n", c.status.as_str()));
-    if let Some(d) = &c.description {
-        out.push_str(&format!("  desc:    {d}\n"));
+    if let Some(v) = &c.version {
+        out.push_str(&format!("  version: {v}\n"));
     }
-    if let Some(dr) = &c.dropped_reason {
-        out.push_str(&format!("  dropped: {dr}\n"));
+    if let Some(rid) = c.roadmap_id {
+        out.push_str(&format!("  roadmap: #{rid}\n"));
+    }
+    if let Some(b) = &c.body {
+        out.push_str(&format!("  body:    {b}\n"));
     }
     out.push_str(&format!("  issues:  {}\n", issues.len()));
     for i in issues {
