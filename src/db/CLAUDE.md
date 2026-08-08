@@ -86,6 +86,9 @@ ORDER BY i.id DESC
 ## 迁移方案哲学
 
 - **跨版本必须有 migration**：`PRAGMA user_version` 驱动的增量迁移，**不可随意改既有 DDL**。
+- **表改名注意**：`ALTER TABLE RENAME` 只改表/列名，**不更新其它表 CREATE 语句里的外键 `REFERENCES` 文本**
+  （schema 是文本存储）——改表名后必须重建引用方表（DROP+CREATE，事务内 `PRAGMA foreign_keys=OFF`，数据保留），
+  否则外键运行时按旧名查找报 `no such table`。
 - **同版本业务代码必须原地修改**：同一版本内 schema 改动直接改最新 DDL，**不固化 migration**
   （未发布前本地测试空库可删除重建）。
 - **本地有数据的 db**：开发阶段需要临时 SQL 手动迁移（有数据不能删），不要依赖自动 migration。

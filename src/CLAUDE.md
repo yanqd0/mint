@@ -61,6 +61,7 @@ use crate::label;
 - [ ] `cargo clippy --all-targets -- -D warnings` 零警告
 - [ ] `sqruff lint`（SQL 文件，src/db/**/*.sql，见 `src/db/CLAUDE.md`）
 - [ ] `cargo test` 全绿（UT + IT + ST）
+- [ ] **commit 自洽**：拆分跨模块重构为多个 commit 时，每个 commit 必须可编译、测试绿（测试层改动紧跟对应代码层，不留坏节点）
 - [ ] 生产代码无 `unwrap()`/`expect()`（仅 `#[cfg(test)]` 内可用）；无 `todo!()`/`unimplemented!()`
 - [ ] 无超过 300 行的 `.rs` 文件（`find src tests -name '*.rs' | xargs wc -l | sort -rn | head`）
 

@@ -59,4 +59,5 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
 - **link**：被别的修改引入 → `link create <issue> solves <引入它的需求>`。
 - **delete 是危险/不可逆操作**：默认不使用，极窄场景 + 用户显式确认；issue 优先 `state drop`。
 - 默认库 `~/.local/share/mint/mint.db`；验证性操作优先 `MINT_DB_PATH=<临时>`。
+- **验证产物清理**：若验证性操作在真实库进行，产生的临时 issue/plan/roadmap 验证后 `state drop` 清理（附 reason），不残留噪音。
 - **PATH 软链接**：`~/bin/mint` → `target/release/mint`，开发中常 `cargo build --release` 更新。
