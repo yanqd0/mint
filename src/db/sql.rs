@@ -4,6 +4,7 @@
 //! 动态查询用参数化模板（`?N IS NULL OR ...`），禁止字符串拼接 WHERE。
 
 pub const MIGRATION_001: &str = include_str!("migrations/001_init.sql");
+pub const MIGRATION_002: &str = include_str!("migrations/002_issue_hit_count.sql");
 
 pub const ISSUE_INSERT: &str = include_str!("queries/issue_insert.sql");
 pub const ISSUE_LIST: &str = include_str!("queries/issue_list.sql");

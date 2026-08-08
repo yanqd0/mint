@@ -476,10 +476,11 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
             dropped_reason: r.get(8)?,
             last_commit_id: r.get(9)?,
             plan_id: r.get(10)?,
+            hit_count: r.get(11)?,
             labels: Vec::new(),
             links: Vec::new(),
-            created_at: r.get(11)?,
-            updated_at: r.get(12)?,
+            created_at: r.get(12)?,
+            updated_at: r.get(13)?,
         })
     })?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
@@ -513,10 +514,11 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
                 dropped_reason: r.get(8)?,
                 last_commit_id: r.get(9)?,
                 plan_id: r.get(10)?,
+                hit_count: r.get(11)?,
                 labels: Vec::new(),
                 links: Vec::new(),
-                created_at: r.get(11)?,
-                updated_at: r.get(12)?,
+                created_at: r.get(12)?,
+                updated_at: r.get(13)?,
             })
         })
         .map_err(|e| match e {

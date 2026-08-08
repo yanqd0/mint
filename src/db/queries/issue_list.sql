@@ -16,6 +16,7 @@ SELECT
     i.dropped_reason,
     i.last_commit_id,
     i.plan_id,
+    i.hit_count,
     datetime(i.created_at, 'localtime') AS created_at,
     datetime(i.updated_at, 'localtime') AS updated_at
 FROM issues i

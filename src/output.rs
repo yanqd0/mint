@@ -36,6 +36,9 @@ pub fn format_issue(i: &Issue) -> String {
     if let Some(b) = &i.body {
         out.push_str(&format!("  body:    {b}\n"));
     }
+    if i.hit_count > 0 {
+        out.push_str(&format!("  hit:     {}\n", i.hit_count));
+    }
     if let Some(tc) = &i.test_cmd {
         out.push_str(&format!("  test:    {tc}\n"));
     }
@@ -144,6 +147,7 @@ mod tests {
             dropped_reason: dropped.map(Into::into),
             last_commit_id: commit.map(Into::into),
             plan_id: None,
+            hit_count: 0,
             labels: labels.iter().map(|s| s.to_string()).collect(),
             links,
             created_at: "2026-01-01 00:00:00".into(),
@@ -269,6 +273,28 @@ mod tests {
         for a in absent {
             assert!(!out.contains(a), "不应含 {a}:\n{out}");
         }
+    }
+
+    /// format_issue：hit_count 仅在 >0 时显示（去重命中计数）。
+    #[rstest]
+    #[case(0, false)]
+    #[case(3, true)]
+    fn format_issue_hit_count(#[case] n: i64, #[case] show: bool) {
+        let mut i = mk_issue(
+            1,
+            "t",
+            Kind::Problem,
+            Status::Open,
+            None,
+            None,
+            None,
+            None,
+            &[],
+            vec![],
+        );
+        i.hit_count = n;
+        let out = format_issue(&i);
+        assert_eq!(out.contains("hit:"), show, "hit_count={n} 显示: {out}");
     }
 
     /// format_container_list：行数、version 括号出现、count 显示（空列表无 count）。

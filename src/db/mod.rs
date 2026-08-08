@@ -10,11 +10,12 @@ pub mod sql;
 
 /// 有序迁移：每项 (目标版本, 迁移 SQL)。从当前 user_version 逐级升到最新。
 /// 每个迁移 SQL 自带 BEGIN/COMMIT，末尾 `PRAGMA user_version = <目标版本>`，失败整体回滚。
-const MIGRATIONS: &[(i32, &str)] = &[(1, MIGRATION_001)];
+const MIGRATIONS: &[(i32, &str)] = &[(1, MIGRATION_001), (2, MIGRATION_002)];
 
 /// 数据库当前 schema 版本（须与 MIGRATIONS 最后一个目标版本一致）。
-/// 未发布阶段 migration 可合并重定基线（1.0.0 前可能反复合并），见 src/CLAUDE.md 迁移哲学。
-const CURRENT_VERSION: i32 = 1;
+/// 开发期默认写增量 migration（002/003…每逻辑变更独立）；发布前夕合并回 001 后重定基线，
+/// 见 src/db/CLAUDE.md 迁移哲学。
+const CURRENT_VERSION: i32 = 2;
 
 /// 打开（必要时创建）SQLite 数据库并迁移到最新版本。
 /// 父目录不存在时自动创建（首次运行的真实场景）。
@@ -74,7 +75,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
 
         let tables: Vec<String> = conn
             .prepare(
@@ -98,6 +99,16 @@ mod tests {
         ] {
             assert!(tables.iter().any(|n| n == t), "missing table {t}");
         }
+
+        // 002 加列：issues.hit_count 存在
+        let cols: Vec<String> = conn
+            .prepare("PRAGMA table_info(issues)")
+            .unwrap()
+            .query_map([], |r| r.get(1))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(cols.iter().any(|c| c == "hit_count"), "missing hit_count");
     }
 
     /// 外键约束生效（默认关闭，需 PRAGMA foreign_keys）。
