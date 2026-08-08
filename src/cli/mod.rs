@@ -14,11 +14,8 @@ pub mod issue;
 pub mod plan;
 pub mod roadmap;
 
-use issue::add::AddArgs;
-use issue::link::LinkArgs;
 use issue::list::{ListArgs, SearchArgs, ShowArgs};
-use issue::set_get::EditArgs;
-use issue::state::StateArgs;
+use issue::IssueArgs;
 
 // ── 共享 clap args（plan/roadmap 共用）────────────────────────────
 
@@ -116,27 +113,21 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Create a new issue
-    Add(AddArgs),
-    /// List issues (open/planned/dev/test by default)
+    /// Issue operations (add/list/show/get/set/state/link)
+    Issue(IssueArgs),
+    /// List issues (open/planned/dev/test by default) — shortcut for `issue list`
     List(ListArgs),
+    /// Show an issue's details — shortcut for `issue show`
+    Show(ShowArgs),
     /// Full-text search issues (FTS5)
     Search(SearchArgs),
-    /// Show an issue's details
-    Show(ShowArgs),
-    /// Edit an issue's title/body
-    Edit(EditArgs),
-    /// State transitions
-    State(StateArgs),
     /// Label subcommands
     Label(LabelArgs),
     /// Roadmap container subcommands
     Roadmap(RoadmapArgs),
     /// Plan container subcommands
     Plan(PlanArgs),
-    /// Issue link subcommands
-    Link(LinkArgs),
-    /// Delete data (DANGEROUS: permanent). Prefer `state drop` for issues
+    /// Delete data (DANGEROUS: permanent). Prefer `issue state drop` for issues
     Delete(DeleteArgs),
 }
 
@@ -218,18 +209,15 @@ impl Cli {
         let mut conn = crate::db::open(&path)?;
 
         match &self.command {
-            Commands::Add(a) => issue::add::cmd_add(&mut conn, &cwd, a),
+            Commands::Issue(i) => issue::dispatch(&mut conn, &cwd, &i.command),
             Commands::List(l) => issue::list::cmd_list(&conn, l),
-            Commands::Search(s) => issue::list::cmd_search(&conn, s),
             Commands::Show(s) => issue::list::cmd_show(&conn, s),
-            Commands::Edit(e) => issue::set_get::cmd_edit(&conn, e),
-            Commands::State(st) => issue::state::dispatch(&conn, &cwd, &st.command),
+            Commands::Search(s) => issue::list::cmd_search(&conn, s),
             Commands::Label(t) => match &t.command {
                 LabelCmd::List(l) => cmd_label_list(&conn, l),
             },
             Commands::Roadmap(r) => roadmap::dispatch(&conn, &r.command),
             Commands::Plan(p) => plan::dispatch(&conn, &p.command),
-            Commands::Link(l) => issue::link::dispatch(&conn, &l.command),
             Commands::Delete(d) => delete::dispatch(&conn, &d.command),
         }
     }

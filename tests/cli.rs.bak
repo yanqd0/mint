@@ -44,18 +44,17 @@ fn run_fail(db: &str, args: &[&str]) -> String {
 
 /// add 一条 issue，返回 id。
 fn add_issue(db: &str, title: &str) -> i64 {
-    let v = run_json(db, &["issue", "add", title, "--json"]);
+    let v = run_json(db, &["add", title, "--json"]);
     v["id"].as_i64().expect("add 应返回 id")
 }
 
 /// 全链路推进到 done。
 fn advance_to_done(db: &str, id: i64) {
-    run_json(db, &["issue", "state", "plan", &id.to_string(), "--json"]);
-    run_json(db, &["issue", "state", "start", &id.to_string(), "--json"]);
+    run_json(db, &["state", "plan", &id.to_string(), "--json"]);
+    run_json(db, &["state", "start", &id.to_string(), "--json"]);
     run_json(
         db,
         &[
-            "issue",
             "state",
             "commit",
             &id.to_string(),
@@ -69,7 +68,6 @@ fn advance_to_done(db: &str, id: i64) {
     run_json(
         db,
         &[
-            "issue",
             "state",
             "close",
             &id.to_string(),
@@ -132,7 +130,7 @@ fn st_list_status_done_bypasses_active_filter() {
 fn st_transition_illegal_rejected() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "illegal");
-    let stderr = run_fail(&db, &["issue", "state", "close", &id.to_string(), "--test-cmd", "x"]);
+    let stderr = run_fail(&db, &["state", "close", &id.to_string(), "--test-cmd", "x"]);
     assert!(stderr.contains("invalid transition"), "stderr: {stderr}");
 }
 
@@ -141,7 +139,7 @@ fn st_transition_illegal_rejected() {
 fn st_illegal_close_without_test_cmd_reports_invalid_transition() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "no-cmd");
-    let stderr = run_fail(&db, &["issue", "state", "close", &id.to_string()]);
+    let stderr = run_fail(&db, &["state", "close", &id.to_string()]);
     assert!(
         stderr.contains("invalid transition"),
         "应报 invalid transition，实际: {stderr}"
@@ -156,12 +154,12 @@ fn st_illegal_close_without_test_cmd_reports_invalid_transition() {
 #[test]
 fn st_add_rejects_empty_title_and_project() {
     let (_dir, db) = empty_db();
-    let stderr = run_fail(&db, &["issue", "add", ""]);
+    let stderr = run_fail(&db, &["add", ""]);
     assert!(
         stderr.contains("title must not be empty"),
         "stderr: {stderr}"
     );
-    let stderr = run_fail(&db, &["issue", "add", "ok", "--project", ""]);
+    let stderr = run_fail(&db, &["add", "ok", "--project", ""]);
     assert!(
         stderr.contains("--project must not be empty"),
         "stderr: {stderr}"
@@ -173,12 +171,11 @@ fn st_add_rejects_empty_title_and_project() {
 fn st_close_requires_test_cmd() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "notest");
-    run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
-    run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
+    run_json(&db, &["state", "plan", &id.to_string(), "--json"]);
+    run_json(&db, &["state", "start", &id.to_string(), "--json"]);
     run_json(
         &db,
         &[
-            "issue",
             "state",
             "commit",
             &id.to_string(),
@@ -189,7 +186,7 @@ fn st_close_requires_test_cmd() {
             "--json",
         ],
     );
-    let stderr = run_fail(&db, &["issue", "state", "close", &id.to_string()]);
+    let stderr = run_fail(&db, &["state", "close", &id.to_string()]);
     assert!(
         stderr.contains("close requires --test-cmd"),
         "stderr: {stderr}"
@@ -203,7 +200,6 @@ fn st_list_filters() {
     run_json(
         &db,
         &[
-            "issue",
             "add",
             "with-bug",
             "--project",
@@ -213,7 +209,7 @@ fn st_list_filters() {
             "--json",
         ],
     );
-    run_json(&db, &["issue", "add", "plain", "--project", "p1", "--json"]);
+    run_json(&db, &["add", "plain", "--project", "p1", "--json"]);
 
     let v = run_json(&db, &["list", "--label", "bug", "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 1);
@@ -230,12 +226,12 @@ fn st_list_filters() {
 #[test]
 fn st_json_output_shape() {
     let (_dir, db) = empty_db();
-    let v = run_json(&db, &["issue", "add", "shape", "--json"]);
+    let v = run_json(&db, &["add", "shape", "--json"]);
     for key in ["id", "title", "project", "kind", "status"] {
         assert!(v.get(key).is_some(), "add 缺字段 {key}: {v}");
     }
     let id = v["id"].as_i64().expect("add 应返回 id");
-    let v = run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
+    let v = run_json(&db, &["state", "plan", &id.to_string(), "--json"]);
     for key in ["id", "from", "to"] {
         assert!(v.get(key).is_some(), "state 缺字段 {key}: {v}");
     }
@@ -247,7 +243,7 @@ fn st_add_duplicate_merges() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "fix login bug");
     let out = mint(&db)
-        .args(["issue", "add", "fix login bug"])
+        .args(["add", "fix login bug"])
         .assert()
         .success()
         .get_output()
@@ -264,7 +260,7 @@ fn st_add_duplicate_merges() {
     // hit_count 递增
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["hit_count"], 1);
-    run_json(&db, &["issue", "add", "fix login bug", "--json"]);
+    run_json(&db, &["add", "fix login bug", "--json"]);
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["hit_count"], 2);
 }
@@ -276,7 +272,7 @@ fn st_add_duplicate_merges_labels() {
     let id = add_issue(&db, "fix login bug");
     run_json(
         &db,
-        &["issue", "add", "fix login bug", "--label", "urgent", "--json"],
+        &["add", "fix login bug", "--label", "urgent", "--json"],
     );
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert!(
@@ -294,7 +290,7 @@ fn st_add_duplicate_merges_labels() {
 fn st_add_duplicate_normalized() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "Fix  Login   Bug");
-    let v = run_json(&db, &["issue", "add", "fix login bug", "--json"]);
+    let v = run_json(&db, &["add", "fix login bug", "--json"]);
     assert_eq!(v["merged"], true);
     assert_eq!(v["id"], id);
 }
@@ -304,7 +300,7 @@ fn st_add_duplicate_normalized() {
 fn st_add_fuzzy_duplicate() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "add dedup feature");
-    let v = run_json(&db, &["issue", "add", "add dedup featre", "--json"]);
+    let v = run_json(&db, &["add", "add dedup featre", "--json"]);
     assert_eq!(v["merged"], true);
     assert_eq!(v["id"], id);
 }
@@ -313,9 +309,9 @@ fn st_add_fuzzy_duplicate() {
 #[test]
 fn st_add_different_project_no_merge() {
     let (_dir, db) = empty_db();
-    let a = run_json(&db, &["issue", "add", "fix login", "--project", "proj-a", "--json"]);
+    let a = run_json(&db, &["add", "fix login", "--project", "proj-a", "--json"]);
     let id_a = a["id"].as_i64().unwrap();
-    let b = run_json(&db, &["issue", "add", "fix login", "--project", "proj-b", "--json"]);
+    let b = run_json(&db, &["add", "fix login", "--project", "proj-b", "--json"]);
     let id_b = b["id"].as_i64().unwrap();
     assert_ne!(id_a, id_b, "不同 project 不应合并");
     let v = run_json(&db, &["list", "--all", "--json"]);
@@ -327,7 +323,7 @@ fn st_add_different_project_no_merge() {
 fn st_add_duplicate_json_shape() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "fix login bug");
-    let v = run_json(&db, &["issue", "add", "fix login bug", "--json"]);
+    let v = run_json(&db, &["add", "fix login bug", "--json"]);
     for key in ["merged", "id", "title", "project", "kind", "status"] {
         assert!(v.get(key).is_some(), "merged JSON 缺 {key}: {v}");
     }
@@ -357,7 +353,6 @@ fn st_search_matches_body() {
     run_json(
         &db,
         &[
-            "issue",
             "add",
             "some title",
             "--body",
@@ -391,8 +386,8 @@ fn st_search_trigger_sync() {
         1
     );
     // 状态推进（title/body 不变，不触发 FTS update）
-    run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
-    run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
+    run_json(&db, &["state", "plan", &id.to_string(), "--json"]);
+    run_json(&db, &["state", "start", &id.to_string(), "--json"]);
     assert_eq!(
         run_json(&db, &["search", "searchable", "--json"])
             .as_array()
@@ -418,7 +413,6 @@ fn st_search_filters() {
     run_json(
         &db,
         &[
-            "issue",
             "add",
             "filter target",
             "--project",
@@ -509,8 +503,7 @@ fn st_edit_title_and_body() {
     run_json(
         &db,
         &[
-            "issue",
-            "set",
+            "edit",
             &id.to_string(),
             "--title",
             "new title",
@@ -528,11 +521,11 @@ fn st_edit_title_and_body() {
 #[test]
 fn st_edit_title_preserves_body() {
     let (_dir, db) = empty_db();
-    let v = run_json(&db, &["issue", "add", "t", "--body", "keep body", "--json"]);
+    let v = run_json(&db, &["add", "t", "--body", "keep body", "--json"]);
     let id = v["id"].as_i64().unwrap();
     run_json(
         &db,
-        &["issue", "set", &id.to_string(), "--title", "new t", "--json"],
+        &["edit", &id.to_string(), "--title", "new t", "--json"],
     );
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["title"], "new t");
@@ -543,9 +536,9 @@ fn st_edit_title_preserves_body() {
 #[test]
 fn st_edit_body_clear() {
     let (_dir, db) = empty_db();
-    let v = run_json(&db, &["issue", "add", "t", "--body", "some body", "--json"]);
+    let v = run_json(&db, &["add", "t", "--body", "some body", "--json"]);
     let id = v["id"].as_i64().unwrap();
-    run_json(&db, &["issue", "set", &id.to_string(), "--body", "", "--json"]);
+    run_json(&db, &["edit", &id.to_string(), "--body", "", "--json"]);
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["body"], "");
 }
@@ -555,9 +548,9 @@ fn st_edit_body_clear() {
 fn st_edit_requires_field() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "t");
-    let err = run_fail(&db, &["issue", "set", &id.to_string()]);
+    let err = run_fail(&db, &["edit", &id.to_string()]);
     assert!(
-        err.contains("set requires --title, --body, or --priority"),
+        err.contains("edit requires --title, --body, or --priority"),
         "stderr: {err}"
     );
 }
@@ -566,7 +559,7 @@ fn st_edit_requires_field() {
 #[test]
 fn st_edit_not_found() {
     let (_dir, db) = empty_db();
-    let err = run_fail(&db, &["issue", "set", "999", "--title", "x"]);
+    let err = run_fail(&db, &["edit", "999", "--title", "x"]);
     assert!(err.contains("issue #999 not found"), "stderr: {err}");
 }
 
@@ -578,8 +571,7 @@ fn st_edit_triggers_fts() {
     run_json(
         &db,
         &[
-            "issue",
-            "set",
+            "edit",
             &id.to_string(),
             "--title",
             "newkeyword thing",
@@ -621,7 +613,6 @@ fn st_reopen_clears_dropped_reason() {
     run_json(
         &db,
         &[
-            "issue",
             "state",
             "drop",
             &id.to_string(),
@@ -632,7 +623,7 @@ fn st_reopen_clears_dropped_reason() {
     );
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["dropped_reason"], "obsolete");
-    run_json(&db, &["issue", "state", "reopen", &id.to_string(), "--json"]);
+    run_json(&db, &["state", "reopen", &id.to_string(), "--json"]);
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["status"], "open");
     assert_eq!(v["dropped_reason"], serde_json::Value::Null);
@@ -642,7 +633,7 @@ fn st_reopen_clears_dropped_reason() {
 #[test]
 fn st_project_autodetect_explicit() {
     let (_dir, db) = empty_db();
-    let v = run_json(&db, &["issue", "add", "explicit", "--project", "mint", "--json"]);
+    let v = run_json(&db, &["add", "explicit", "--project", "mint", "--json"]);
     assert_eq!(v["project"], "mint");
 }
 
@@ -724,8 +715,8 @@ fn st_plan_create_link_derived() {
     assert_eq!(v["status"], "open");
 
     // 推进 issue 到 dev → plan running
-    run_json(&db, &["issue", "state", "plan", &iid.to_string(), "--json"]);
-    run_json(&db, &["issue", "state", "start", &iid.to_string(), "--json"]);
+    run_json(&db, &["state", "plan", &iid.to_string(), "--json"]);
+    run_json(&db, &["state", "start", &iid.to_string(), "--json"]);
     let v = run_json(&db, &["plan", "show", "1", "--json"]);
     assert_eq!(v["status"], "running");
 
@@ -733,7 +724,6 @@ fn st_plan_create_link_derived() {
     run_json(
         &db,
         &[
-            "issue",
             "state",
             "commit",
             &iid.to_string(),
@@ -745,7 +735,6 @@ fn st_plan_create_link_derived() {
     run_json(
         &db,
         &[
-            "issue",
             "state",
             "close",
             &iid.to_string(),
@@ -763,12 +752,11 @@ fn st_plan_create_link_derived() {
 fn st_state_commit_records_sha() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "c");
-    run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
-    run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
+    run_json(&db, &["state", "plan", &id.to_string(), "--json"]);
+    run_json(&db, &["state", "start", &id.to_string(), "--json"]);
     let v = run_json(
         &db,
         &[
-            "issue",
             "state",
             "commit",
             &id.to_string(),
@@ -791,7 +779,7 @@ fn st_state_commit_illegal_from_open() {
     let id = add_issue(&db, "c");
     let stderr = run_fail(
         &db,
-        &["issue", "state", "commit", &id.to_string(), "--sha", "abc123"],
+        &["state", "commit", &id.to_string(), "--sha", "abc123"],
     );
     assert!(stderr.contains("invalid transition"), "stderr: {stderr}");
 }
@@ -801,11 +789,11 @@ fn st_state_commit_illegal_from_open() {
 fn st_state_commit_head_requires_git() {
     let (dir, db) = empty_db();
     let id = add_issue(&db, "c");
-    run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
-    run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
+    run_json(&db, &["state", "plan", &id.to_string(), "--json"]);
+    run_json(&db, &["state", "start", &id.to_string(), "--json"]);
     let stderr = mint(&db)
         .current_dir(dir.path())
-        .args(["issue", "state", "commit", &id.to_string()])
+        .args(["state", "commit", &id.to_string()])
         .assert()
         .failure()
         .get_output()
@@ -925,7 +913,7 @@ fn st_timestamps_stored_utc_unchanged() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "u");
     // 推进一个状态触发 updated_at 写入
-    run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
+    run_json(&db, &["state", "plan", &id.to_string(), "--json"]);
 
     let v_utc: Value = serde_json::from_slice(
         &mint(&db)
@@ -964,7 +952,6 @@ fn st_link_create_and_list() {
     let v = run_json(
         &db,
         &[
-            "issue",
             "link",
             "create",
             &a.to_string(),
@@ -974,7 +961,7 @@ fn st_link_create_and_list() {
         ],
     );
     assert_eq!(v["type"], "solves");
-    let v = run_json(&db, &["issue", "link", "list", &a.to_string(), "--json"]);
+    let v = run_json(&db, &["link", "list", &a.to_string(), "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 1);
     assert_eq!(v[0]["other_id"], b);
     assert_eq!(v[0]["rel"], "solves");
@@ -989,7 +976,6 @@ fn st_link_related_symmetric() {
     run_json(
         &db,
         &[
-            "issue",
             "link",
             "create",
             &a.to_string(),
@@ -1001,7 +987,6 @@ fn st_link_related_symmetric() {
     run_json(
         &db,
         &[
-            "issue",
             "link",
             "create",
             &b.to_string(),
@@ -1010,7 +995,7 @@ fn st_link_related_symmetric() {
             "--json",
         ],
     );
-    let v = run_json(&db, &["issue", "link", "list", &a.to_string(), "--json"]);
+    let v = run_json(&db, &["link", "list", &a.to_string(), "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 1);
 }
 
@@ -1023,7 +1008,6 @@ fn st_link_solves_reverse_conflict() {
     run_json(
         &db,
         &[
-            "issue",
             "link",
             "create",
             &a.to_string(),
@@ -1034,7 +1018,7 @@ fn st_link_solves_reverse_conflict() {
     );
     let stderr = run_fail(
         &db,
-        &["issue", "link", "create", &b.to_string(), "solves", &a.to_string()],
+        &["link", "create", &b.to_string(), "solves", &a.to_string()],
     );
     assert!(stderr.contains("already linked"), "stderr: {stderr}");
 }
@@ -1048,7 +1032,6 @@ fn st_link_unlink_symmetric() {
     run_json(
         &db,
         &[
-            "issue",
             "link",
             "create",
             &a.to_string(),
@@ -1060,7 +1043,6 @@ fn st_link_unlink_symmetric() {
     run_json(
         &db,
         &[
-            "issue",
             "link",
             "remove",
             &b.to_string(),
@@ -1069,7 +1051,7 @@ fn st_link_unlink_symmetric() {
             "--json",
         ],
     );
-    let v = run_json(&db, &["issue", "link", "list", &a.to_string(), "--json"]);
+    let v = run_json(&db, &["link", "list", &a.to_string(), "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 0);
 }
 
@@ -1080,10 +1062,10 @@ fn st_link_missing_ids() {
     let a = add_issue(&db, "a");
     let stderr = run_fail(
         &db,
-        &["issue", "link", "create", &a.to_string(), "related", &a.to_string()],
+        &["link", "create", &a.to_string(), "related", &a.to_string()],
     );
     assert!(stderr.contains("to itself"), "stderr: {stderr}");
-    let stderr = run_fail(&db, &["issue", "link", "create", &a.to_string(), "related", "999"]);
+    let stderr = run_fail(&db, &["link", "create", &a.to_string(), "related", "999"]);
     assert!(stderr.contains("issue #999 not found"), "stderr: {stderr}");
 }
 
@@ -1096,7 +1078,6 @@ fn st_show_embeds_links() {
     run_json(
         &db,
         &[
-            "issue",
             "link",
             "create",
             &a.to_string(),
@@ -1110,7 +1091,7 @@ fn st_show_embeds_links() {
     // 非法 type 被 clap 拒绝
     let stderr = run_fail(
         &db,
-        &["issue", "link", "create", &a.to_string(), "bogus", &b.to_string()],
+        &["link", "create", &a.to_string(), "bogus", &b.to_string()],
     );
     assert!(!stderr.is_empty());
 }
@@ -1175,7 +1156,6 @@ fn st_delete_issue_removes_row() {
     run_json(
         &db,
         &[
-            "issue",
             "link",
             "create",
             &a.to_string(),
@@ -1188,7 +1168,7 @@ fn st_delete_issue_removes_row() {
     let stderr = run_fail(&db, &["show", &a.to_string()]);
     assert!(stderr.contains("not found"), "stderr: {stderr}");
     // b 对 a 的链接清空
-    let v = run_json(&db, &["issue", "link", "list", &b.to_string(), "--json"]);
+    let v = run_json(&db, &["link", "list", &b.to_string(), "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 0);
 }
 
