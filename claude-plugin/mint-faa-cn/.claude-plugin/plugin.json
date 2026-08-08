@@ -2,7 +2,9 @@
   "name": "mint-faa-cn",
   "version": "0.3.0",
   "description": "mint issue 追踪（中文）— 用 mint CLI 管理开发 issue 与流程。",
-  "author": "yanqd0",
+  "author": {
+    "name": "yanqd0"
+  },
   "license": "MIT",
   "skills": "./skills/"
 }

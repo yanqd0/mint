@@ -2,7 +2,9 @@
   "name": "mint-faa",
   "version": "0.3.0",
   "description": "mint issue tracker — record and manage development issues via the mint CLI.",
-  "author": "yanqd0",
+  "author": {
+    "name": "yanqd0"
+  },
   "license": "MIT",
   "skills": "./skills/"
 }
