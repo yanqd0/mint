@@ -97,6 +97,12 @@ ORDER BY i.id DESC
 
 `rusqlite::params!` 支持 `Option<T: ToSql>`（NULL 即不过滤），可完全消除 `Vec<Box<dyn ToSql>>` 与字符串拼接。
 
+### INSERT OR IGNORE 注意
+
+`project_insert.sql` / `tag_insert.sql` 用 `INSERT OR IGNORE` 幂等注册（`name` NOT NULL UNIQUE）。
+**未来若给 `projects`/`tags` 增加 CHECK / NOT NULL / FK 约束，会被 IGNORE 静默吞掉**后落入
+ensure 的 'just inserted but not found' 分支——改这些表约束时须同步审视此模式（观察项 #11）。
+
 ### sqruff 格式化 / lint
 
 - 工具：**sqruff**（Rust 单二进制，`cargo install sqruff`，dialect=sqlite），配置在根 `sqruff.toml`（扫描 `src/db/**/*.sql`）。
