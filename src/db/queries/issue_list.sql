@@ -5,7 +5,12 @@
 -- ?3: tag 名过滤（NULL=不过滤）
 -- ?4: project 名过滤（NULL=不过滤）
 SELECT
-    i.id, i.title, i.body, i.kind, i.status, i.project_id,
+    i.id,
+    i.title,
+    i.body,
+    i.kind,
+    i.status,
+    i.project_id,
     p.name AS project,
     i.test_cmd,
     i.dropped_reason,

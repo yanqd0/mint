@@ -2,7 +2,12 @@
 -- 显示层：created_at/updated_at 转本地时区（存储仍为 UTC）。
 -- ?1: issue id
 SELECT
-    i.id, i.title, i.body, i.kind, i.status, i.project_id,
+    i.id,
+    i.title,
+    i.body,
+    i.kind,
+    i.status,
+    i.project_id,
     p.name AS project,
     i.test_cmd,
     i.dropped_reason,

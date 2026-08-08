@@ -2,7 +2,11 @@
 -- 显示层：status 为派生值；created_at/updated_at 转本地时区。
 -- ?1: 是否列出所有状态（1=含 done，0=只显非 done）
 SELECT
-    p.id, p.title, NULL AS version, p.body, p.roadmap_id,
+    p.id,
+    p.title,
+    NULL AS version,
+    p.body,
+    p.roadmap_id,
     p.status,
     datetime(p.created_at, 'localtime') AS created_at,
     datetime(p.updated_at, 'localtime') AS updated_at,
