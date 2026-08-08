@@ -93,7 +93,7 @@ fn st_add_issue_creates_row() {
 #[test]
 fn st_empty_db_list_ok() {
     let (_dir, db) = empty_db();
-    let v = run_json(&db, &["list", "--all", "--json"]);
+    let v = run_json(&db, &["list", "--all-states", "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 0);
 }
 
@@ -109,7 +109,7 @@ fn st_list_default_filters_active() {
     advance_to_done(&db, id);
     let v = run_json(&db, &["list", "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 0);
-    let v = run_json(&db, &["list", "--all", "--json"]);
+    let v = run_json(&db, &["list", "--all-states", "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 1);
 }
 
@@ -123,7 +123,7 @@ fn st_list_status_done_bypasses_active_filter() {
     let v = run_json(&db, &["list", "--status", "done", "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 1);
     // 带 --all 结果不变
-    let v = run_json(&db, &["list", "--status", "done", "--all", "--json"]);
+    let v = run_json(&db, &["list", "--status", "done", "--all-states", "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 1);
 }
 
@@ -341,7 +341,7 @@ fn st_add_different_project_no_merge() {
     );
     let id_b = b["id"].as_i64().unwrap();
     assert_ne!(id_a, id_b, "不同 project 不应合并");
-    let v = run_json(&db, &["list", "--all", "--json"]);
+    let v = run_json(&db, &["list", "--all-states", "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 2);
 }
 

@@ -22,8 +22,14 @@ use issue::list::{ListArgs, SearchArgs, ShowArgs};
 #[derive(clap::Args)]
 pub struct ListContainersArgs {
     /// Show all statuses (including done)
-    #[arg(long, short = 'a')]
+    #[arg(long = "all-states", short = 'a')]
     pub all: bool,
+    /// Page number (1-based)
+    #[arg(long)]
+    pub page: Option<u32>,
+    /// Items per page (default 5)
+    #[arg(long, default_value = "5")]
+    pub page_size: u32,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -127,9 +133,15 @@ pub struct RoadmapSetArgs {
 
 #[derive(clap::Args)]
 pub struct ListLabelsArgs {
-    /// Show all (kept for uniform --all/-a; no state dimension)
-    #[arg(long, short = 'a')]
+    /// Show all (kept for uniform --all-states/-a; no state dimension)
+    #[arg(long = "all-states", short = 'a')]
     pub all: bool,
+    /// Page number (1-based)
+    #[arg(long)]
+    pub page: Option<u32>,
+    /// Items per page (default 5)
+    #[arg(long, default_value = "5")]
+    pub page_size: u32,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -309,6 +321,8 @@ pub(crate) fn cmd_container_list(
     a: &ListContainersArgs,
 ) -> Result<(), Error> {
     let items = container::list(conn, kind, a.all)?;
+    let total = items.len();
+    let items = issue::list::paginate(items, a.page, a.page_size);
     if a.json {
         let json: Vec<serde_json::Value> = items
             .iter()
@@ -324,6 +338,14 @@ pub(crate) fn cmd_container_list(
         println!("{}", serde_json::to_string(&json)?);
     } else {
         print!("{}", output::format_container_list(&items));
+    }
+    if a.page.is_some() {
+        eprintln!(
+            "--- Page {}/{} ({} per page) ---",
+            a.page.unwrap_or(1),
+            total.div_ceil(a.page_size as usize).max(1),
+            a.page_size
+        );
     }
     Ok(())
 }
@@ -386,6 +408,8 @@ pub(crate) fn kind_noun(kind: ContainerKind) -> &'static str {
 /// label list：列出所有 label（含关联 issue 数）。
 fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
     let labels = crate::label::list(conn)?;
+    let total = labels.len();
+    let labels = issue::list::paginate(labels, l.page, l.page_size);
     if l.json {
         println!("{}", serde_json::to_string(&labels)?);
     } else {
@@ -393,6 +417,14 @@ fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
             let desc = t.description.as_deref().unwrap_or("");
             println!("{:<16} {:>5} issues  {}", t.name, count, desc);
         }
+    }
+    if l.page.is_some() {
+        eprintln!(
+            "--- Page {}/{} ({} per page) ---",
+            l.page.unwrap_or(1),
+            total.div_ceil(l.page_size as usize).max(1),
+            l.page_size
+        );
     }
     Ok(())
 }

@@ -12,7 +12,7 @@ use crate::output;
 #[derive(clap::Args)]
 pub struct ListArgs {
     /// Show all statuses (including done/dropped)
-    #[arg(long, short = 'a')]
+    #[arg(long = "all-states", short = 'a')]
     pub all: bool,
     /// Filter by status
     #[arg(long, value_enum)]
@@ -26,6 +26,15 @@ pub struct ListArgs {
     /// Filter by project name
     #[arg(long)]
     pub project: Option<String>,
+    /// Page number (1-based, requires --page-size)
+    #[arg(long)]
+    pub page: Option<u32>,
+    /// Items per page (default 5)
+    #[arg(long, default_value = "5")]
+    pub page_size: u32,
+    /// Include body in JSON output (omitted by default)
+    #[arg(long)]
+    pub body: bool,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -47,6 +56,15 @@ pub struct SearchArgs {
     /// Filter by priority (0=highest, 3=lowest)
     #[arg(long, value_parser = clap::value_parser!(i64).range(0..=3))]
     pub priority: Option<i64>,
+    /// Page number (1-based, requires --page-size)
+    #[arg(long)]
+    pub page: Option<u32>,
+    /// Items per page (default 5)
+    #[arg(long, default_value = "5")]
+    pub page_size: u32,
+    /// Include body in JSON output (omitted by default)
+    #[arg(long)]
+    pub body: bool,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -75,11 +93,23 @@ pub fn cmd_list(conn: &Connection, l: &ListArgs) -> Result<(), Error> {
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;
+    let total = issues.len();
+    let issues = paginate(issues, l.page, l.page_size);
 
     if l.json {
-        println!("{}", serde_json::to_string(&issues)?);
+        let json: Vec<serde_json::Value> =
+            issues.iter().map(|i| issue_to_json(i, l.body)).collect();
+        println!("{}", serde_json::to_string(&json)?);
     } else {
         print!("{}", output::format_list(&issues));
+    }
+    if l.page.is_some() {
+        eprintln!(
+            "--- Page {}/{} ({} per page) ---",
+            l.page.unwrap_or(1),
+            total.div_ceil(l.page_size as usize).max(1),
+            l.page_size
+        );
     }
     Ok(())
 }
@@ -157,13 +187,52 @@ pub fn cmd_search(conn: &Connection, s: &SearchArgs) -> Result<(), Error> {
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;
+    let total = issues.len();
+    let issues = paginate(issues, s.page, s.page_size);
 
     if s.json {
-        println!("{}", serde_json::to_string(&issues)?);
+        let json: Vec<serde_json::Value> =
+            issues.iter().map(|i| issue_to_json(i, s.body)).collect();
+        println!("{}", serde_json::to_string(&json)?);
     } else {
         print!("{}", output::format_list(&issues));
     }
+    if s.page.is_some() {
+        eprintln!(
+            "--- Page {}/{} ({} per page) ---",
+            s.page.unwrap_or(1),
+            total.div_ceil(s.page_size as usize).max(1),
+            s.page_size
+        );
+    }
     Ok(())
+}
+
+/// Rust-side pagination：fetch all → slice。
+pub(crate) fn paginate<T>(items: Vec<T>, page: Option<u32>, page_size: u32) -> Vec<T> {
+    let p = page.unwrap_or(1).max(1);
+    let offset = ((p - 1) * page_size) as usize;
+    if offset >= items.len() {
+        return Vec::new();
+    }
+    let end = (offset + page_size as usize).min(items.len());
+    items.into_iter().skip(offset).take(end - offset).collect()
+}
+
+/// JSON 序列化 issue，可选省略 body。
+fn issue_to_json(i: &Issue, include_body: bool) -> serde_json::Value {
+    let mut obj = serde_json::json!({
+        "id": i.id, "title": i.title, "kind": i.kind, "status": i.status,
+        "priority": i.priority, "project_id": i.project_id, "project": i.project,
+        "test_cmd": i.test_cmd, "dropped_reason": i.dropped_reason,
+        "last_commit_id": i.last_commit_id, "plan_id": i.plan_id,
+        "hit_count": i.hit_count, "labels": i.labels, "links": i.links,
+        "created_at": i.created_at, "updated_at": i.updated_at,
+    });
+    if include_body {
+        obj["body"] = serde_json::Value::String(i.body.clone().unwrap_or_default());
+    }
+    obj
 }
 
 pub fn cmd_show(conn: &Connection, s: &ShowArgs) -> Result<(), Error> {
