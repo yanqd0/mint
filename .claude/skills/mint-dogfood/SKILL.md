@@ -104,6 +104,9 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
   方向内拆执行计划必须 `plan create <title> --body <BODY> --roadmap <ID>`；
   issue 归属：`plan issue <PLAN> <ISSUE>`（或 `roadmap issue <RM> <ISSUE>`，二选一——属 plan 后不能再直接挂 roadmap）。
   容器状态由子项派生（无 close/drop/reopen 命令）；多版本方向用 `roadmap` 承载。
+- **`delete` 是危险/不可逆操作**（`mint delete issue|plan|roadmap <id>`，仅顶层命令、容器子命令无 delete）：
+  **默认不使用**。仅限极窄场景——清理误建/残留容器、用户明确指示物理移除数据；
+  issue 删除优先 `state drop`（软删除，保审计）；使用前向用户显式确认，不主动建议。
 - 默认库是全局共享的 `~/.local/share/mint/mint.db`；验证性/演示性操作优先设
   `MINT_DB_PATH=<临时文件>` 避免污染真实库。
 - 探测到的相对路径前缀（`./target/release/mint`）首次调用可能触发权限确认，属正常，允许一次即可。

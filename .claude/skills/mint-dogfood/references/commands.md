@@ -28,6 +28,7 @@
 | `link create <FROM> <TYPE> <TO> [--json]` | 建 issue 链接；TYPE: related\|solves\|duplicates；solves/duplicates 反向互斥报错 |
 | `link remove <FROM> <TYPE> <TO> [--json]` | 删链接（对称：任一端表述都能删） |
 | `link list <ID> [--json]` | 列某 issue 的全部链接（出向 + 入向反向派生） |
+| `delete issue\|plan\|roadmap <ID> [--json]` | **危险/不可逆**：物理删除。issue 含 tags/links/roadmap 挂载关联一并清；plan/roadmap 解绑关联后删。默认不用，issue 优先 `state drop` |
 
 ## --json 字段
 
