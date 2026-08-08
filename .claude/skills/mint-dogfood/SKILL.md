@@ -6,7 +6,7 @@ description: >-
   收到审查/复查报告（code-reviewer/security-auditor/tester）中的观察项或技术债 /
   把某个 issue 推进到 plan/start/commit/close/reset/drop/reopen / 开始做/测试/关闭/放弃
   某件事 / 本次改动值得记一条 / 规划下一个版本 / 路线图 / roadmap / 拆解执行计划 /
-  plan / 里程碑 / 排期 / 版本规划"等意图时自动触发；也支持手动 /mint-dogfood。
+  plan / 里程碑 / 排期 / 版本规划 / 执行一个方案 / 方案计划 / 按计划实施"等意图时自动触发；也支持手动 /mint-dogfood。
   基于 0.2.0 现有命令（add/list/show/state/tag/roadmap/plan/link，无 dedup/FTS——登记前先 list 查重标题防噪音）。
   数据落全局 SQLite（~/.local/share/mint/mint.db，MINT_DB_PATH 可覆盖）。
   本技能是 0.3.0 Claude Code 适配器（capture/context/dedup）的早期实验。
@@ -40,6 +40,11 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
      拆解执行计划 → `$MINT plan create "<计划标题>" --body "<body>" --roadmap <RM_ID>`，
        相关 issue 用 `$MINT plan issue <PLAN> <ISSUE>` 挂入（二选一：属 plan 后不再直接挂 roadmap）。
      未触发规划意图则跳过本子节。
+   - **方案执行登记**：当对话在**执行一个方案/计划**（plan mode 产出的 `.claude/plans/*.md` 方案，
+     或用户显式给出的多步骤开发任务）时，**第一步先登记**再动手——
+     `$MINT plan create "<方案标题>" --body "<方案摘要>" --roadmap <RM_ID>`（方案归属的版本 roadmap），
+     按方案子任务逐个 `$MINT add`（kind=requirement，tag `<版本>,dev-clean`）并 `plan issue` 挂入；
+     随后执行方案，每个 issue 完成时走状态机到 done（关联对应 commit）。
    - **登记 issue（add）**：先查重——运行 `$MINT list --json`（默认列 open/planned/dev/test）取标题，
      与拟登记标题做模糊匹配：
      - 存在未关闭的近似标题 → **不新建**，报告"已存在 #id"，建议 `show <id>` 查看或 `state plan <id>` 推进；
@@ -104,6 +109,8 @@ allowed-tools: Bash(mint:*) Bash(./target/release/mint:*) Bash(./target/debug/mi
   方向内拆执行计划必须 `plan create <title> --body <BODY> --roadmap <ID>`；
   issue 归属：`plan issue <PLAN> <ISSUE>`（或 `roadmap issue <RM> <ISSUE>`，二选一——属 plan 后不能再直接挂 roadmap）。
   容器状态由子项派生（无 close/drop/reopen 命令）；多版本方向用 `roadmap` 承载。
+- **方案 vs 单点登记的区分**：跨模块/多步骤方案（含 plan mode 产出的方案）→ **建 plan + 拆多个 issue**；
+  单点小改动 / 审查发现 / 观察项 → **只记 issue**（不建 plan）。
 - **`delete` 是危险/不可逆操作**（`mint delete issue|plan|roadmap <id>`，仅顶层命令、容器子命令无 delete）：
   **默认不使用**。仅限极窄场景——清理误建/残留容器、用户明确指示物理移除数据；
   issue 删除优先 `state drop`（软删除，保审计）；使用前向用户显式确认，不主动建议。
