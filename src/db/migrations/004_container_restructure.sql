@@ -1,6 +1,7 @@
 -- 004_container_restructure.sql：容器重构为 5 态派生 + 层级关系（v4）
 -- 旧容器 schema（002：roadmaps/plans 3 态 + roadmap_issues/plan_issues 关联表）
--- 重建为：roadmaps/plans 5 态 + plans.roadmap_id + roadmap_direct_issues + issues.plan_id。
+-- 重建为：roadmaps/plans 5 态 + plans.roadmap_id
+-- + roadmap_direct_issues + issues.plan_id。
 -- 0.2.0 未发布、容器表全空，直接 DROP 重建无数据丢失。
 
 BEGIN;
