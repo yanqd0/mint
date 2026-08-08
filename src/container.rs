@@ -363,8 +363,7 @@ pub fn unset_issue_plan(conn: &Connection, issue_id: i64) -> Result<(), Error> {
 pub fn sync_container_status(conn: &Connection, issue_id: i64) -> Result<(), Error> {
     // plan 同步
     let plan_ids: Vec<i64> = conn
-        .prepare(db::PLAN_IDS_FOR_ISSUE)
-        .unwrap()
+        .prepare(db::PLAN_IDS_FOR_ISSUE)?
         .query_map(params![issue_id], |r| r.get(0))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(Error::from)?;
@@ -373,8 +372,7 @@ pub fn sync_container_status(conn: &Connection, issue_id: i64) -> Result<(), Err
     }
     // roadmap 直接挂的同步
     let r_ids: Vec<i64> = conn
-        .prepare(db::ROADMAP_IDS_FOR_ISSUE)
-        .unwrap()
+        .prepare(db::ROADMAP_IDS_FOR_ISSUE)?
         .query_map(params![issue_id], |r| r.get(0))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(Error::from)?;
@@ -391,8 +389,7 @@ fn sync_plan(conn: &Connection, plan_id: i64) -> Result<(), Error> {
     conn.execute(db::PLAN_UPDATE_STATUS, params![st, plan_id])?;
     // plan 变更 → 检查 roadmap
     let roadmap_ids: Vec<i64> = conn
-        .prepare(db::ROADMAP_IDS_FOR_PLAN)
-        .unwrap()
+        .prepare(db::ROADMAP_IDS_FOR_PLAN)?
         .query_map(params![plan_id], |r| r.get(0))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(Error::from)?;

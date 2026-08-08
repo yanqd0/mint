@@ -429,7 +429,7 @@ fn cmd_add(
 
     tx.execute(
         db::ISSUE_INSERT,
-        rusqlite::params![a.title, a.body, kind, status, pid, test_cmd],
+        rusqlite::params![a.title.trim(), a.body, kind, status, pid, test_cmd],
     )?;
     let id = tx.last_insert_rowid();
 
@@ -443,12 +443,15 @@ fn cmd_add(
         println!(
             "{}",
             serde_json::to_string(&serde_json::json!({
-                "id": id, "title": a.title, "project": pname,
+                "id": id, "title": a.title.trim(), "project": pname,
                 "kind": kind, "status": status,
             }))?
         );
     } else {
-        println!("Created issue #{id} ({}) in project '{pname}'", a.title);
+        println!(
+            "Created issue #{id} ({}) in project '{pname}'",
+            a.title.trim()
+        );
     }
     Ok(())
 }
@@ -905,13 +908,26 @@ fn transition(
     let reset = action == Action::Reset;
     let reopen = action == Action::Reopen;
     let drop_reason: Option<&str> = if action == Action::Drop { reason } else { None };
-    conn.execute(
-        db::ISSUE_UPDATE_TRANSITION,
-        rusqlite::params![target, test_cmd, id, reset, drop_reason, reopen, commit_sha],
-    )?;
-
-    // 写后级联同步：重算该 issue 所属 plan/roadmap 的派生状态
-    container::sync_container_status(conn, id)?;
+    // 事务：状态转换 + 派生状态同步原子提交（与 cmd_add/delete_txn 一致），失败整体回滚
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let result = (|| {
+        conn.execute(
+            db::ISSUE_UPDATE_TRANSITION,
+            rusqlite::params![target, test_cmd, id, reset, drop_reason, reopen, commit_sha],
+        )?;
+        // 写后级联同步：重算该 issue 所属 plan/roadmap 的派生状态
+        container::sync_container_status(conn, id)?;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => {
+            conn.execute_batch("COMMIT")?;
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            return Err(e);
+        }
+    }
 
     if json {
         let mut v = serde_json::json!({"id": id, "from": current, "to": target});

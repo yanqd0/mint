@@ -32,7 +32,7 @@ sqruff lint src/db                           # SQL 检查（需已安装 sqruff�
 |---|---|---|
 | `src/db/**`（mod.rs/sql.rs/migrations/queries） | `cargo test` + `sqruff lint src/db` | SQL 语义改动 → `cargo test --test cli` |
 | `src/cli.rs` | `cargo test` | `cargo test --test cli` |
-| `src/project.rs` / `src/tag.rs` / `src/state.rs` | `cargo test` | — |
+| `src/project.rs` / `src/label.rs` / `src/state.rs` | `cargo test` | — |
 | `src/models.rs` / `src/output.rs` / `src/error.rs` / `src/lib.rs` | `cargo test` | — |
 | `tests/integration.rs` | `cargo test --test integration` | — |
 | `tests/cli.rs` | `cargo test --test cli` | — |
