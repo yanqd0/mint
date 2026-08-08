@@ -45,29 +45,29 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 
 ```bash
 # 记录 issue（去重内置）
-mint add "登录按钮点击无响应" --body "Firefox 上点击无反馈，控制台 500" --kind problem --priority 0 --label bug
+mint issue add "登录按钮点击无响应" --body "Firefox 上点击无反馈，控制台 500" --kind problem --priority 0 --label bug
 
 # 查看与搜索
 mint list --status open --priority 0
 mint search "登录" --project mint --json
 
 # 状态机（逐态推进）
-mint state plan 42
-mint state start 42
-mint state commit 42 --sha $(git rev-parse HEAD)
-mint state close 42 --test-cmd "cargo test"
-mint state drop 42 --reason "不再需要"
+mint issue state plan 42
+mint issue state start 42
+mint issue state commit 42 --sha $(git rev-parse HEAD)
+mint issue state close 42 --test-cmd "cargo test"
+mint issue state drop 42 --reason "不再需要"
 
 # 编辑
-mint edit 42 --title "新标题" --priority 1
+mint issue set 42 --title "新标题" --priority 1
 
 # 链接（blocks = 阻塞依赖）
-mint link create 42 solves 10
-mint link create 42 blocked_by 55
+mint issue link create 42 solves 10
+mint issue link create 42 blocked_by 55
 
 # 计划（plan/sprint 挂 roadmap/milestone）
 mint plan create "sprint-1" --body "目标…" --roadmap 4
-mint plan issue 12 42
+mint plan attach 12 42
 ```
 
 详细用法见 `references/commands.md` 及各子命令 `mint <sub> --help`。

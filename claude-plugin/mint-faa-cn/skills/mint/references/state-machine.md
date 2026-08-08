@@ -7,13 +7,13 @@
 
 | 当前状态 | 动作 | 目标状态 | 命令 | 约束 |
 |---|---|---|---|---|
-| open | plan | planned | `state plan <id>` | — |
-| planned | start | dev | `state start <id>` | — |
-| dev | commit | test | `state commit <id> --sha <SHA>` | **`--sha` 必填**（默认读 HEAD），写 last_commit_id |
-| test | close | done | `state close <id> --test-cmd "<CMD>"` | **`--test-cmd` 必填**；测试全绿才推进 |
-| planned/dev/test | reset | open | `state reset <id>` | 打回重做，**清空 test_cmd**（需重测） |
-| done/dropped | reopen | open | `state reopen <id>` | 重开 |
-| 任意 | drop | dropped | `state drop <id> --reason "<TEXT>"` | 可附理由，写入 dropped_reason |
+| open | plan | planned | `mint issue state plan <id>` | — |
+| planned | start | dev | `mint issue state start <id>` | — |
+| dev | commit | test | `mint issue state commit <id> --sha <SHA>` | **`--sha` 必填**（默认读 HEAD），写 last_commit_id |
+| test | close | done | `mint issue state close <id> --test-cmd "<CMD>"` | **`--test-cmd` 必填**；测试全绿才推进 |
+| planned/dev/test | reset | open | `mint issue state reset <id>` | 打回重做，**清空 test_cmd**（需重测） |
+| done/dropped | reopen | open | `mint issue state reopen <id>` | 重开 |
+| 任意 | drop | dropped | `mint issue state drop <id> --reason "<TEXT>"` | 可附理由，写入 dropped_reason |
 
 ## 硬约束（违反会被 CLI 拒绝 / 语义错误）
 
@@ -29,7 +29,7 @@
 ## 校验与示例
 
 - 每次 `state` 操作后看退出码与 `{id,from,to}`；失败时 `stderr` 含原因，
-  先 `show <id>` 确认当前状态再校正动作。
+  先 `mint show <id>` 确认当前状态再校正动作。
 - 合法正向链路示例：
-  `add` → `state plan N` → `state start N` → `state commit N --sha <SHA>` → `state close N --test-cmd "cargo test"` → done。
-- 放弃链路示例：`state drop N --reason "superseded by #12"` → dropped。
+  `mint issue add` → `mint issue state plan N` → `mint issue state start N` → `mint issue state commit N --sha <SHA>` → `mint issue state close N --test-cmd "cargo test"` → done。
+- 放弃链路示例：`mint issue state drop N --reason "superseded by #12"` → dropped。

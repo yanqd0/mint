@@ -6,7 +6,7 @@ Use `mint <sub> --help` for full options.
 ## add
 
 ```bash
-mint add "title" \
+mint issue add "title" \
   --body "detailed description" \
   --kind problem \
   --priority 0 \
@@ -42,30 +42,30 @@ mint search "keyword" --label bug --priority 0
 ## state
 
 ```bash
-mint state plan 42                           # open → planned
-mint state start 42                          # planned → dev
-mint state commit 42 --sha $(git rev-parse HEAD)  # dev → test
-mint state close 42 --test-cmd "cargo test"  # test → done
-mint state drop 42 --reason "no longer needed"    # any → dropped
-mint state reopen 42                         # done/dropped → open
-mint state reset 42                          # planned/dev/test → open
+mint issue state plan 42                           # open → planned
+mint issue state start 42                          # planned → dev
+mint issue state commit 42 --sha $(git rev-parse HEAD)  # dev → test
+mint issue state close 42 --test-cmd "cargo test"  # test → done
+mint issue state drop 42 --reason "no longer needed"    # any → dropped
+mint issue state reopen 42                         # done/dropped → open
+mint issue state reset 42                          # planned/dev/test → open
 ```
 
 ## edit
 
 ```bash
-mint edit 42 --title "new title"
-mint edit 42 --body "" --priority 1
+mint issue set 42 --title "new title"
+mint issue set 42 --body "" --priority 1
 ```
 
 ## link
 
 ```bash
-mint link create 42 solves 10               # 42 solves 10
-mint link create 42 blocked_by 55           # 42 blocked by 55
-mint link create 42 related 30              # 42 related to 30
-mint link list 42
-mint link remove 42 related 10
+mint issue link create 42 solves 10               # 42 solves 10
+mint issue link create 42 blocked_by 55           # 42 blocked by 55
+mint issue link create 42 related 30              # 42 related to 30
+mint issue link list 42
+mint issue link remove 42 related 10
 ```
 
 Link types: `related` / `solves` / `duplicates` / `blocked_by` / `blocks`.
@@ -84,10 +84,10 @@ mint roadmap create "v0.4 TUI" --version 0.4.0 --body "scope…"
 mint plan create "sprint-1" --body "goal…" --roadmap 4
 mint roadmap show 4
 mint plan show 12
-mint plan issue 12 42                        # attach issue to plan
-mint plan detach-issue 12 42                 # detach
-mint roadmap issue 4 42                      # attach issue directly to roadmap
-mint roadmap detach-issue 4 42               # detach
+mint plan attach 12 42                        # attach issue to plan
+mint plan detach 12 42                 # detach
+mint roadmap attach 4 42                      # attach issue directly to roadmap
+mint roadmap detach 4 42               # detach
 ```
 
 ## delete

@@ -6,8 +6,8 @@
 
 | 场景 | 动作 |
 |---|---|
-| 有关联 plan（正在开发的计划） | `plan issue <PLAN> <ISSUE>` |
-| 无 plan 但有目标版本 | `roadmap issue <RM> <ISSUE>`（直接挂 roadmap） |
+| 有关联 plan（正在开发的计划） | `plan attach <PLAN> <ISSUE>` |
+| 无 plan 但有目标版本 | `roadmap attach <RM> <ISSUE>`（直接挂 roadmap） |
 | 都不确定 / 独立项 | 不挂（独立 issue，后续排期） |
 
 ## 测试分支（close 的 test_cmd 必填）

@@ -7,6 +7,6 @@
 1. **登记**：先 `list --json` 查重 → `add "<需求标题>" --body "<目标/范围>" --kind requirement`。
 2. **排期**：确定目标版本 → 挂载（flow-conditions 决策表）：
    - 拆入执行计划 → `plan create "<执行计划>" --body "<body>" --roadmap <RM>` + `plan issue`。
-   - 直接挂版本 → `roadmap issue <RM> <ISSUE>`。
+   - 直接挂版本 → `roadmap attach <RM> <ISSUE>`。
    - 未定 → 不挂，`state plan` 标记已排期。
 3. **推进**：开发时 `state start` → commit → close（同 bug 流程，含无测试/非 git 分支）。

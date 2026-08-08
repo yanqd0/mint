@@ -45,29 +45,29 @@ When called without `<description>`, enters takeover mode to replace initial thi
 
 ```bash
 # Record issue (built-in dedup)
-mint add "login button unresponsive" --body "Firefox click no feedback, console 500" --kind problem --priority 0 --label bug
+mint issue add "login button unresponsive" --body "Firefox click no feedback, console 500" --kind problem --priority 0 --label bug
 
 # View & search
 mint list --status open --priority 0
 mint search "login" --project mint --json
 
 # State machine (step by step)
-mint state plan 42
-mint state start 42
-mint state commit 42 --sha $(git rev-parse HEAD)
-mint state close 42 --test-cmd "cargo test"
-mint state drop 42 --reason "no longer needed"
+mint issue state plan 42
+mint issue state start 42
+mint issue state commit 42 --sha $(git rev-parse HEAD)
+mint issue state close 42 --test-cmd "cargo test"
+mint issue state drop 42 --reason "no longer needed"
 
 # Edit
-mint edit 42 --title "new title" --priority 1
+mint issue set 42 --title "new title" --priority 1
 
 # Links (blocks = dependency)
-mint link create 42 solves 10
-mint link create 42 blocked_by 55
+mint issue link create 42 solves 10
+mint issue link create 42 blocked_by 55
 
 # Plans (plan/sprint under roadmap/milestone)
 mint plan create "sprint-1" --body "goal…" --roadmap 4
-mint plan issue 12 42
+mint plan attach 12 42
 ```
 
 See `references/commands.md` for the full command reference and `mint <sub> --help` for per-command details.
