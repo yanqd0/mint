@@ -14,7 +14,7 @@ mint = **M**inimal **I**ssue & **N**eeds **T**racker。一个全局、单机、S
 - **单机、无守护进程**：每次调用即 CLI 进程，毫秒级启动。
 - **project 是标签而非隔离边界**：单一全局库，跨项目经 `refs` 互引。
 - **dogfooding**：用 mint 管理 mint 自己的开发 issue。
-- **小步快跑、小提交**：每个逻辑变更独立 commit（用 my-git-commit）。
+- **小步快跑、小提交**：每个逻辑变更独立 commit。
 - **push 类远程修改仅用户手动执行**：本地 commit/tag 可做，远程发布动作交给用户。
 - **用户侧输出全英文**（i18n 前）：CLI help/错误/输出无中文；代码注释与 notes/ 文档用中文（标识符英文）。
 - **6 态状态机**：`open/planned/dev/test/done/dropped`；`close` 必填 `test_cmd`（跳过测试填"没测"），无 dev→done 捷径——见 `notes/DDD.md`。
