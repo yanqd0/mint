@@ -1,5 +1,5 @@
 ---
-name: mint-faa
+name: mint
 description: >-
   Manage development issues with the mint CLI. Auto-triggered when the user
   reports bugs, problems, requirements, TODOs, leftovers, review findings, or

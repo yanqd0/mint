@@ -1,5 +1,5 @@
 ---
-name: mint-faa
+name: mint
 description: >-
   用 mint CLI 管理开发 issue 与流程。当用户描述 bug/问题/需求/遗留项/TODO/观察项/
   审查发现/计划/里程碑/milestone/sprint 等值得记录的内容时自动触发；无参数调用时

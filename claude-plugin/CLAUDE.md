@@ -20,7 +20,7 @@ claude-plugin/
 │   │   ├── inject_context.sh
 │   │   └── inject_signal.py
 │   └── skills/
-│       └── mint-faa/
+│       └── mint/
 │           ├── SKILL.md
 │           └── references/
 └── mint-faa-cn/            # 中文版（主版本）
@@ -31,7 +31,7 @@ claude-plugin/
 
 - 文件：`skills/<name>/SKILL.md`
 - YAML frontmatter 必填：
-  - `name`：skill 名称（两个 plugin 同为 `mint-faa`）
+  - `name`：skill 名称（两个 plugin 同为 `mint`）
   - `description`：触发条件 + 一句话功能描述（≤4 行）
   - `allowed-tools`：精准声明所需工具权限
 - 正文：Markdown 格式，含执行流程、接管模式、常用命令示例、约束

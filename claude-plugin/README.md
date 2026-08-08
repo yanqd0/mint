@@ -4,11 +4,11 @@ mint（Minimal Issue & Needs Tracker）的 Claude Code 适配。两个 plugin，
 
 | plugin | 语言 | skill | 说明 |
 |---|---|---|---|
-| `mint-faa` | English | `mint-faa` | search-first / add（内置去重）/ 6 态状态机 |
-| `mint-faa-cn` | 中文 | `mint-faa` | 中文流程注入（含 `/mint-dogfood` 兼容软链接） |
+| `mint-faa` | English | `mint` | search-first / add（内置去重）/ 6 态状态机 |
+| `mint-faa-cn` | 中文 | `mint` | 中文流程注入（含 `/mint-dogfood` 兼容软链接） |
 
 两者都提供：
-- `mint-faa` skill（登记前先 `mint search`、`mint add` 内置去重、状态机推进）
+- `mint` skill（登记前先 `mint search`、`mint add` 内置去重、状态机推进）
 - hooks：`PostToolUseFailure` 注入失败信号供 LLM 判断；`SessionStart` 注入当前项目活跃 issue（top 8）
 
 前置：mint 已安装且在 `$PATH`（`cargo install mint-faa` 或 `cargo build --release` + `~/bin/mint` 软链接）。
