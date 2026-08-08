@@ -30,3 +30,4 @@ tags
 !.claude/settings.json
 !.claude/skills
 
+__pycache__/
