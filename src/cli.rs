@@ -471,6 +471,11 @@ fn cmd_add(
     let cands = load_dup_candidates(&tx, pid)?;
     if let Some(hit) = dedup::find_duplicate(&a.title, &cands) {
         tx.execute(db::ISSUE_BUMP_HIT_COUNT, rusqlite::params![hit.id])?;
+        // 合并保留新 label（幂等 attach）；body 不覆盖既有 issue（避免污染）。
+        let specs = label::parse_specs(&a.label);
+        if !specs.is_empty() {
+            label::attach(&tx, hit.id, &specs)?;
+        }
         tx.commit()?;
         print_merge(a, &pname, hit)?;
         return Ok(());
@@ -657,11 +662,18 @@ fn cmd_edit(conn: &rusqlite::Connection, e: &EditArgs) -> Result<(), Error> {
         return Err(Error::Other(format!("issue #{} not found", e.id)));
     }
     if e.json {
+        // 只输出实际提供的字段（未提供的字段已保留原值，不输出 null 误导）。
+        let mut obj = serde_json::Map::new();
+        obj.insert("id".into(), serde_json::Value::from(e.id));
+        if let Some(t) = title {
+            obj.insert("title".into(), serde_json::Value::from(t));
+        }
+        if let Some(b) = body {
+            obj.insert("body".into(), serde_json::Value::from(b));
+        }
         println!(
             "{}",
-            serde_json::to_string(&serde_json::json!({
-                "id": e.id, "title": title, "body": body,
-            }))?
+            serde_json::to_string(&serde_json::Value::Object(obj))?
         );
     } else {
         println!("Updated issue #{}", e.id);

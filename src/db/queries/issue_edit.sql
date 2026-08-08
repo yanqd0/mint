@@ -3,8 +3,7 @@
 -- ?1: issue id
 -- ?2: 新 title（NULL=不更新；空字符串已由 CLI 拒绝）
 -- ?3: 新 body（NULL=不更新，空字符串可清空）
-UPDATE issues
-SET title = COALESCE(?2, title),
-    body = COALESCE(?3, body),
-    updated_at = datetime('now')
+UPDATE issues SET title = CASE WHEN ?2 IS NOT NULL THEN ?2 ELSE title END,
+body = CASE WHEN ?3 IS NOT NULL THEN ?3 ELSE body END,
+updated_at = datetime('now')
 WHERE id = ?1;

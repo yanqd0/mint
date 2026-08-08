@@ -265,6 +265,26 @@ fn st_add_duplicate_merges() {
     assert_eq!(v["hit_count"], 2);
 }
 
+/// 去重：合并时新 add 的 label 幂等附加到既有 issue。
+#[test]
+fn st_add_duplicate_merges_labels() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "fix login bug");
+    run_json(
+        &db,
+        &["add", "fix login bug", "--label", "urgent", "--json"],
+    );
+    let v = run_json(&db, &["show", &id.to_string(), "--json"]);
+    assert!(
+        v["labels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|l| l == "urgent"),
+        "合并应保留新 label: {v}"
+    );
+}
+
 /// 去重：大小写/空白差异的标题同样命中（归一化后相等）。
 #[test]
 fn st_add_duplicate_normalized() {

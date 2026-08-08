@@ -21,9 +21,25 @@ const CURRENT_VERSION: i32 = 3;
 /// 父目录不存在时自动创建（首次运行的真实场景）。
 pub fn open(path: &Path) -> Result<rusqlite::Connection, Error> {
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        // 目录 0700：DB 及 WAL/SHM 伴生文件仅本用户可访问（内容含 issue 正文/commit SHA 等敏感开发数据）。
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(parent)?;
+        }
+        #[cfg(not(unix))]
         std::fs::create_dir_all(parent)?;
     }
     let conn = rusqlite::Connection::open(path)?;
+    // 文件 0600：纵深防御（目录 0700 已拦访问，此处收敛文件本身；跳过内存库 `:memory:`）。
+    #[cfg(unix)]
+    if path != Path::new(":memory:") {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
     // 多进程（多 agent）并发写：busy_timeout 让写锁竞争等待而非立即报 database is locked
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
@@ -48,15 +64,22 @@ fn migrate(conn: &rusqlite::Connection) -> Result<(), Error> {
         if version < *target {
             let result = conn.execute_batch(sql);
             if let Err(err) = result {
-                // 并发竞争：重读版本，若已达标则视为另一进程完成，否则返回原始错误
+                // 并发竞争：重读版本，若该迁移已被他进程应用则跳过继续（处理中间态），否则返回原始错误
                 let now: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-                if now >= CURRENT_VERSION {
-                    return Ok(());
+                if now >= *target {
+                    version = *target;
+                    continue;
                 }
                 return Err(Error::from(err));
             }
             version = *target;
         }
+    }
+    // 防御：迁移应达到当前版本（MIGRATIONS 最后一个目标与 CURRENT_VERSION 一致）。
+    if version < CURRENT_VERSION {
+        return Err(Error::Other(format!(
+            "migration incomplete: at v{version}, expected v{CURRENT_VERSION}"
+        )));
     }
     Ok(())
 }
@@ -110,6 +133,26 @@ mod tests {
             .map(|r| r.unwrap())
             .collect();
         assert!(cols.iter().any(|c| c == "hit_count"), "missing hit_count");
+    }
+
+    /// 目录 0700 + 文件 0600：DB 权限收敛（敏感开发数据仅本用户可读）。
+    #[test]
+    fn open_restricts_db_permissions() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("nested/m.db");
+        open(&db).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir_mode = std::fs::metadata(dir.path().join("nested"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(dir_mode, 0o700, "目录应为 0700");
+            let file_mode = std::fs::metadata(&db).unwrap().permissions().mode() & 0o777;
+            assert_eq!(file_mode, 0o600, "文件应为 0600");
+        }
     }
 
     /// 外键约束生效（默认关闭，需 PRAGMA foreign_keys）。
