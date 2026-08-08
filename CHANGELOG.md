@@ -1,5 +1,23 @@
 # Change Log
 
+## 0.3.0
+
+### Features
+
+- 去重：`add` 自动合并同项目重复 issue（标题归一化 + 模糊匹配，重复计入 `hit_count`）。
+- 全文搜索：`mint search <q>`（FTS5 trigram，中文按子串检索，支持 project/label/status 过滤）。
+- Claude Code 插件适配：双语 skill `mint-faa` / `mint-faa-cn` + hooks（失败信号注入、SessionStart 注入待办）+ 私有 marketplace。
+- `mint edit <ID>`：更新 issue 标题/正文（未提供字段保留，标题/正文变更同步搜索索引）。
+
+### Bug Fixes
+
+- 修正插件 marketplace 结构（统一私有市场，`claude plugin validate` 通过）。
+
+### Others
+
+- 决策记录：去重算法（D22）、FTS 定案（D23）、多 agent 适配（D24）。
+- skill 本体迁移与命令参考同步；schema 迁移改增量式（发布前合并回基线）。
+
 ## 0.2.0
 
 ### Features
