@@ -333,6 +333,9 @@ struct EditArgs {
     /// New body (omit to keep; empty string clears)
     #[arg(long)]
     body: Option<String>,
+    /// New priority: 0 (highest) to 3 (lowest)
+    #[arg(long, value_parser = clap::value_parser!(i64).range(0..=3))]
+    priority: Option<i64>,
     /// Output as JSON
     #[arg(long)]
     json: bool,
@@ -347,6 +350,9 @@ struct AddArgs {
     /// kind: problem (default) or requirement
     #[arg(long, value_enum, default_value = "problem")]
     kind: Kind,
+    /// Priority: 0 (highest) to 3 (lowest, default)
+    #[arg(long, default_value = "3", value_parser = clap::value_parser!(i64).range(0..=3))]
+    priority: i64,
     /// Project name (default: auto-detect from git/dir)
     #[arg(long)]
     project: Option<String>,
@@ -366,6 +372,9 @@ struct ListArgs {
     /// Filter by status
     #[arg(long, value_enum)]
     status: Option<Status>,
+    /// Filter by priority (0=highest, 3=lowest)
+    #[arg(long, value_parser = clap::value_parser!(i64).range(0..=3))]
+    priority: Option<i64>,
     /// Filter by label name
     #[arg(long)]
     label: Option<String>,
@@ -379,7 +388,7 @@ struct ListArgs {
 
 #[derive(clap::Args)]
 struct SearchArgs {
-    /// FTS5 query (trigram tokenizer, at least 3 characters)
+    /// FTS5 query (trigram tokenizer, at least 3 characters; ≤2 chars falls back to LIKE)
     query: String,
     /// Filter by project name
     #[arg(long)]
@@ -390,6 +399,9 @@ struct SearchArgs {
     /// Filter by status
     #[arg(long, value_enum)]
     status: Option<Status>,
+    /// Filter by priority (0=highest, 3=lowest)
+    #[arg(long, value_parser = clap::value_parser!(i64).range(0..=3))]
+    priority: Option<i64>,
     /// Output as JSON
     #[arg(long)]
     json: bool,
@@ -483,7 +495,15 @@ fn cmd_add(
 
     tx.execute(
         db::ISSUE_INSERT,
-        rusqlite::params![a.title.trim(), a.body, kind, status, pid, test_cmd],
+        rusqlite::params![
+            a.title.trim(),
+            a.body,
+            kind,
+            status,
+            pid,
+            test_cmd,
+            a.priority
+        ],
     )?;
     let id = tx.last_insert_rowid();
 
@@ -552,10 +572,11 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
     let status = l.status; // Option<Status>，impl ToSql（NULL=不过滤）
     let label: Option<&str> = l.label.as_deref();
     let project: Option<&str> = l.project.as_deref();
+    let priority = l.priority; // Option<i64>，NULL=不过滤
 
     let mut stmt = conn.prepare(db::ISSUE_LIST)?;
     let rows = stmt.query_map(
-        rusqlite::params![all, status, label, project],
+        rusqlite::params![all, status, label, project, priority],
         issue_from_row,
     )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
@@ -570,7 +591,7 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
     Ok(())
 }
 
-/// 行 → Issue 映射（14 列，与 issue_list/issue_show/issue_search 列序一致）。
+/// 行 → Issue 映射（15 列，与 issue_list/issue_show/issue_search 列序一致）。
 fn issue_from_row(r: &rusqlite::Row) -> rusqlite::Result<Issue> {
     Ok(Issue {
         id: r.get(0)?,
@@ -578,17 +599,18 @@ fn issue_from_row(r: &rusqlite::Row) -> rusqlite::Result<Issue> {
         body: r.get(2)?,
         kind: r.get(3)?,
         status: r.get(4)?,
-        project_id: r.get(5)?,
-        project: r.get(6)?,
-        test_cmd: r.get(7)?,
-        dropped_reason: r.get(8)?,
-        last_commit_id: r.get(9)?,
-        plan_id: r.get(10)?,
-        hit_count: r.get(11)?,
+        priority: r.get(5)?,
+        project_id: r.get(6)?,
+        project: r.get(7)?,
+        test_cmd: r.get(8)?,
+        dropped_reason: r.get(9)?,
+        last_commit_id: r.get(10)?,
+        plan_id: r.get(11)?,
+        hit_count: r.get(12)?,
         labels: Vec::new(),
         links: Vec::new(),
-        created_at: r.get(12)?,
-        updated_at: r.get(13)?,
+        created_at: r.get(13)?,
+        updated_at: r.get(14)?,
     })
 }
 
@@ -600,7 +622,7 @@ fn fill_labels(conn: &rusqlite::Connection, issues: &mut [Issue]) -> Result<(), 
     Ok(())
 }
 
-/// 全文搜索（FTS5 trigram）：MATCH + 可选 project/label/status 过滤，按相关度排序。
+/// 全文搜索（FTS5 trigram）：MATCH + 可选 project/label/status/priority 过滤，按相关度排序。
 fn cmd_search(conn: &rusqlite::Connection, s: &SearchArgs) -> Result<(), Error> {
     let q = s.query.trim();
     if q.chars().count() < 3 {
@@ -611,9 +633,13 @@ fn cmd_search(conn: &rusqlite::Connection, s: &SearchArgs) -> Result<(), Error> 
     let project: Option<&str> = s.project.as_deref();
     let label: Option<&str> = s.label.as_deref();
     let status = s.status; // Option<Status>，impl ToSql（NULL=不过滤）
+    let priority = s.priority; // Option<i64>，NULL=不过滤
 
     let mut stmt = conn.prepare(db::ISSUE_SEARCH)?;
-    let rows = stmt.query_map(rusqlite::params![q, project, label, status], issue_from_row)?;
+    let rows = stmt.query_map(
+        rusqlite::params![q, project, label, status, priority],
+        issue_from_row,
+    )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;
@@ -647,17 +673,23 @@ fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
     Ok(())
 }
 
-/// 更新 issue 的 title/body（COALESCE 保留未提供字段；title/body 变更触发 FTS 同步触发器）。
+/// 更新 issue 的 title/body/priority（COALESCE 保留未提供字段；title/body 变更触发 FTS 同步触发器）。
 fn cmd_edit(conn: &rusqlite::Connection, e: &EditArgs) -> Result<(), Error> {
     let title = e.title.as_deref().map(str::trim);
     let body = e.body.as_deref();
-    if title.is_none() && body.is_none() {
-        return Err(Error::Other("edit requires --title or --body".to_string()));
+    let priority = e.priority;
+    if title.is_none() && body.is_none() && priority.is_none() {
+        return Err(Error::Other(
+            "edit requires --title, --body, or --priority".to_string(),
+        ));
     }
     if title.is_some_and(|t| t.is_empty()) {
         return Err(Error::Other("title must not be empty".to_string()));
     }
-    let affected = conn.execute(db::ISSUE_EDIT, rusqlite::params![e.id, title, body])?;
+    let affected = conn.execute(
+        db::ISSUE_EDIT,
+        rusqlite::params![e.id, title, body, priority],
+    )?;
     if affected == 0 {
         return Err(Error::Other(format!("issue #{} not found", e.id)));
     }
@@ -670,6 +702,9 @@ fn cmd_edit(conn: &rusqlite::Connection, e: &EditArgs) -> Result<(), Error> {
         }
         if let Some(b) = body {
             obj.insert("body".into(), serde_json::Value::from(b));
+        }
+        if let Some(p) = priority {
+            obj.insert("priority".into(), serde_json::Value::from(p));
         }
         println!(
             "{}",

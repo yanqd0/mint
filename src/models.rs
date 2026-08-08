@@ -117,6 +117,7 @@ pub struct Issue {
     pub body: Option<String>,
     pub kind: Kind,
     pub status: Status,
+    pub priority: i64,
     pub project_id: i64,
     pub project: Option<String>,
     pub test_cmd: Option<String>,
@@ -130,13 +131,18 @@ pub struct Issue {
     pub updated_at: String,
 }
 
-/// issue 链接类型：related（相关）/ solves（解决）/ duplicates（重复）。
+/// issue 链接类型：related（相关）/ solves（解决）/ duplicates（重复）/
+/// blocked_by（被阻塞）/ blocks（阻塞）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum LinkType {
     Related,
     Solves,
     Duplicates,
+    #[serde(rename = "blocked_by")]
+    BlockedBy,
+    #[serde(rename = "blocks")]
+    Blocks,
 }
 
 impl LinkType {
@@ -145,16 +151,21 @@ impl LinkType {
             LinkType::Related => "related",
             LinkType::Solves => "solves",
             LinkType::Duplicates => "duplicates",
+            LinkType::BlockedBy => "blocked_by",
+            LinkType::Blocks => "blocks",
         }
     }
 
     /// 反向类型的字符串表示（仅显示用，不落库）：
-    /// solves → "solved-by"，duplicates → "duplicated-by"，related 对称仍为 "related"。
+    /// solves → "solved-by"，duplicates → "duplicated-by"，
+    /// blocked_by ↔ blocks 互逆，related 对称仍为 "related"。
     pub fn reverse(&self) -> &'static str {
         match self {
             LinkType::Related => "related",
             LinkType::Solves => "solved-by",
             LinkType::Duplicates => "duplicated-by",
+            LinkType::BlockedBy => "blocks",
+            LinkType::Blocks => "blocked_by",
         }
     }
 }
@@ -177,6 +188,8 @@ impl rusqlite::types::FromSql for LinkType {
             "related" => Ok(LinkType::Related),
             "solves" => Ok(LinkType::Solves),
             "duplicates" => Ok(LinkType::Duplicates),
+            "blocked_by" => Ok(LinkType::BlockedBy),
+            "blocks" => Ok(LinkType::Blocks),
             other => Err(rusqlite::types::FromSqlError::Other(
                 format!("invalid link type: {other}").into(),
             )),
@@ -322,6 +335,8 @@ mod tests {
     #[case(LinkType::Related, "related", "related")]
     #[case(LinkType::Solves, "solves", "solved-by")]
     #[case(LinkType::Duplicates, "duplicates", "duplicated-by")]
+    #[case(LinkType::BlockedBy, "blocked_by", "blocks")]
+    #[case(LinkType::Blocks, "blocks", "blocked_by")]
     fn link_type_str_reverse_roundtrip(
         #[case] ty: LinkType,
         #[case] text: &str,
@@ -387,6 +402,7 @@ mod tests {
     #[rstest]
     #[case("bogus")]
     #[case("solved-by")] // 反向字符串不落库
+    #[case("blocked-by")] // 反向字符串不落库
     fn link_type_invalid_errors(#[case] val: &str) {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         conn.execute("CREATE TABLE t (x TEXT)", []).unwrap();

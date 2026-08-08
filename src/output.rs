@@ -12,8 +12,9 @@ pub fn format_list(issues: &[Issue]) -> String {
             format!(" [{}]", i.labels.join(","))
         };
         out.push_str(&format!(
-            "#{:<4} {:<10} {:<14} {}{}\n",
+            "#{:<4} P{} {:<10} {:<14} {}{}\n",
             i.id,
+            i.priority,
             i.kind.as_str(),
             i.status.as_str(),
             i.title,
@@ -29,6 +30,7 @@ pub fn format_issue(i: &Issue) -> String {
     out.push_str(&format!("#{} {}\n", i.id, i.title));
     out.push_str(&format!("  status:  {}\n", i.status.as_str()));
     out.push_str(&format!("  kind:    {}\n", i.kind.as_str()));
+    out.push_str(&format!("  priority: {}\n", i.priority));
     out.push_str(&format!(
         "  project: {}\n",
         i.project.as_deref().unwrap_or("?")
@@ -141,6 +143,7 @@ mod tests {
             body: body.map(Into::into),
             kind,
             status,
+            priority: 3,
             project_id: 1,
             project: Some("mint".into()),
             test_cmd: test_cmd.map(Into::into),

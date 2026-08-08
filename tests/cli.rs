@@ -526,14 +526,14 @@ fn st_edit_body_clear() {
     assert_eq!(v["body"], "");
 }
 
-/// edit：缺 --title/--body 报错。
+/// edit：缺 --title/--body/--priority 报错。
 #[test]
 fn st_edit_requires_field() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "t");
     let err = run_fail(&db, &["edit", &id.to_string()]);
     assert!(
-        err.contains("edit requires --title or --body"),
+        err.contains("edit requires --title, --body, or --priority"),
         "stderr: {err}"
     );
 }
@@ -805,7 +805,8 @@ fn st_list_on_seeded_db_perf() {
                     "problem",
                     "open",
                     pid,
-                    None::<String>
+                    None::<String>,
+                    3i64
                 ],
             )
             .unwrap();
@@ -1185,7 +1186,7 @@ fn st_delete_roadmap_detaches() {
     assert_eq!(v["id"].as_i64().unwrap(), i);
 }
 
-/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=3（001+002+003）。
+/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=4（001+002+003+004）。
 #[test]
 fn st_empty_db_initialized_v1() {
     let (_dir, db) = empty_db();
@@ -1194,5 +1195,5 @@ fn st_empty_db_initialized_v1() {
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
 }

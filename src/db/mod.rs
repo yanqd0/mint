@@ -10,12 +10,17 @@ pub mod sql;
 
 /// 有序迁移：每项 (目标版本, 迁移 SQL)。从当前 user_version 逐级升到最新。
 /// 每个迁移 SQL 自带 BEGIN/COMMIT，末尾 `PRAGMA user_version = <目标版本>`，失败整体回滚。
-const MIGRATIONS: &[(i32, &str)] = &[(1, MIGRATION_001), (2, MIGRATION_002), (3, MIGRATION_003)];
+const MIGRATIONS: &[(i32, &str)] = &[
+    (1, MIGRATION_001),
+    (2, MIGRATION_002),
+    (3, MIGRATION_003),
+    (4, MIGRATION_004),
+];
 
 /// 数据库当前 schema 版本（须与 MIGRATIONS 最后一个目标版本一致）。
 /// 开发期默认写增量 migration（002/003…每逻辑变更独立）；发布前夕合并回 001 后重定基线，
 /// 见 src/db/CLAUDE.md 迁移哲学。
-const CURRENT_VERSION: i32 = 3;
+const CURRENT_VERSION: i32 = 4;
 
 /// 打开（必要时创建）SQLite 数据库并迁移到最新版本。
 /// 父目录不存在时自动创建（首次运行的真实场景）。
@@ -88,7 +93,7 @@ fn migrate(conn: &rusqlite::Connection) -> Result<(), Error> {
 mod tests {
     use super::*;
 
-    /// 迁移幂等：重复打开不报错，8 表齐全，user_version 正确。
+    /// 迁移幂等：重复打开不报错，9 表齐全，user_version 正确。
     #[test]
     fn migrate_creates_tables_and_sets_version() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
@@ -98,7 +103,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
 
         let tables: Vec<String> = conn
             .prepare(
@@ -133,6 +138,8 @@ mod tests {
             .map(|r| r.unwrap())
             .collect();
         assert!(cols.iter().any(|c| c == "hit_count"), "missing hit_count");
+        // 004 加列：issues.priority 存在
+        assert!(cols.iter().any(|c| c == "priority"), "missing priority");
     }
 
     /// 目录 0700 + 文件 0600：DB 权限收敛（敏感开发数据仅本用户可读）。

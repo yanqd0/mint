@@ -7,6 +7,7 @@ SELECT
     i.body,
     i.kind,
     i.status,
+    i.priority,
     i.project_id,
     p.name AS project,
     i.test_cmd,

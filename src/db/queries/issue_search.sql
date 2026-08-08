@@ -1,15 +1,18 @@
 -- 全文搜索：issues_fts MATCH + 过滤参数（NULL=不过滤），按相关度 rank 排序。
--- 输出 14 列与 issue_list.sql 列序一致（复用 Issue 行映射）。
+-- 输出 15 列与 issue_list.sql 列序一致（复用 Issue 行映射）。
+-- ≤2 字符查询由 issue_search_like.sql LIKE 兜底。
 -- ?1: FTS5 MATCH 查询串（trigram tokenizer，需 ≥3 字符）
 -- ?2: project 名过滤（NULL=不过滤）
 -- ?3: label 名过滤（NULL=不过滤）
 -- ?4: 状态过滤（NULL=不过滤）
+-- ?5: priority 过滤（NULL=不过滤）
 SELECT
     i.id,
     i.title,
     i.body,
     i.kind,
     i.status,
+    i.priority,
     i.project_id,
     p.name AS project,
     i.test_cmd,
@@ -34,4 +37,5 @@ WHERE it.issue_id = i.id
 AND lb.name = ?3
 ))
 AND (?4 IS NULL OR i.status = ?4)
+AND (?5 IS NULL OR i.priority = ?5)
 ORDER BY rank;

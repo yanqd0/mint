@@ -1,7 +1,8 @@
-//! issue 间链接：related / solves / duplicates。单向存 + 反向查询自动派生。
+//! issue 间链接：related / solves / duplicates / blocked_by / blocks。单向存 + 反向查询自动派生。
 //!
 //! - `related` 对称：方向归一化（min,max），反向 no-op。
-//! - `solves` / `duplicates` 有向：同类型反向端点互斥，应用层报错。
+//! - `solves` / `duplicates` / `blocked_by` / `blocks` 有向：同类型反向端点互斥，应用层报错。
+//! - `blocked_by` 归一到 `blocks`（方向互换）：A blocked_by B → 存 (B, blocks, A)。
 //! - 复用 issue_labels 的 INSERT OR IGNORE 幂等模式（D9）。
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -10,7 +11,8 @@ use crate::db;
 use crate::error::Error;
 use crate::models::{Link, LinkType};
 
-/// 建立 issue 链接（含冲突校验）。related 归一化方向；solves/duplicates 反向互斥。
+/// 建立 issue 链接（含冲突校验）。related 归一化方向；solves/duplicates 反向互斥；
+/// blocked_by 归一化为 blocks（方向互换），反向冲突报错。
 pub fn create(conn: &Connection, from_id: i64, ty: LinkType, to_id: i64) -> Result<(), Error> {
     if from_id == to_id {
         return Err(Error::Other(format!(
@@ -20,11 +22,18 @@ pub fn create(conn: &Connection, from_id: i64, ty: LinkType, to_id: i64) -> Resu
     ensure_issue(conn, from_id)?;
     ensure_issue(conn, to_id)?;
 
+    // blocked_by → blocks 归一化（方向互换）：A blocked_by B → 存 (B, blocks, A)
+    let (from, ty, to) = if ty == LinkType::BlockedBy {
+        (to_id, LinkType::Blocks, from_id)
+    } else {
+        (from_id, ty, to_id)
+    };
+
     // related 对称：归一化方向（谁小在前）
     let (from, to) = if ty == LinkType::Related {
-        (from_id.min(to_id), from_id.max(to_id))
+        (from.min(to), from.max(to))
     } else {
-        (from_id, to_id)
+        (from, to)
     };
 
     // 同向已存在 → 幂等 no-op
@@ -138,6 +147,7 @@ mod tests {
     #[case(LinkType::Related, "related", "related")]
     #[case(LinkType::Solves, "solves", "solved-by")]
     #[case(LinkType::Duplicates, "duplicates", "duplicated-by")]
+    #[case(LinkType::Blocks, "blocks", "blocked_by")]
     fn create_links_for_roundtrip(#[case] ty: LinkType, #[case] rel: &str, #[case] reverse: &str) {
         let (conn, a, b) = setup();
         create(&conn, a, ty, b).unwrap();
@@ -158,6 +168,7 @@ mod tests {
     #[case(LinkType::Related)]
     #[case(LinkType::Solves)]
     #[case(LinkType::Duplicates)]
+    #[case(LinkType::Blocks)]
     fn create_same_direction_idempotent(#[case] ty: LinkType) {
         let (conn, a, b) = setup();
         create(&conn, a, ty, b).unwrap();
@@ -180,10 +191,11 @@ mod tests {
         assert_eq!(cnt, 1);
     }
 
-    /// 反向冲突报错（solves/duplicates 有向类型反向互斥）。
+    /// 反向冲突报错（solves/duplicates/blocks 有向类型反向互斥）。
     #[rstest]
     #[case(LinkType::Solves)]
     #[case(LinkType::Duplicates)]
+    #[case(LinkType::Blocks)]
     fn create_reverse_directional_conflict(#[case] ty: LinkType) {
         let (conn, a, b) = setup();
         create(&conn, a, ty, b).unwrap();
@@ -222,6 +234,32 @@ mod tests {
         assert_eq!(cnt, 0);
         // 再 remove no-op
         remove(&conn, b, LinkType::Related, a).unwrap();
+    }
+
+    /// blocked_by 归一化为 blocks（方向互换）：A blocked_by B ≡ B blocks A（幂等）。
+    #[test]
+    fn blocked_by_normalizes_to_blocks_idempotent() {
+        let (conn, a, b) = setup();
+        create(&conn, a, LinkType::BlockedBy, b).unwrap();
+        // 库中存储：A blocked_by B 归一化为 (B, blocks, A)
+        let cnt: i64 = conn
+            .query_row("SELECT COUNT(*) FROM issue_links", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cnt, 1);
+        // A 视角（入向 reverse）：blocked_by B
+        let la = links_for(&conn, a).unwrap();
+        assert_eq!(la[0].rel, "blocked_by");
+        assert_eq!(la[0].other_id, b);
+        // B 视角（出向）：blocks A
+        let lb = links_for(&conn, b).unwrap();
+        assert_eq!(lb[0].rel, "blocks");
+        assert_eq!(lb[0].other_id, a);
+        // B blocks A 再调 → 幂等（库中同向已存在）
+        create(&conn, b, LinkType::Blocks, a).unwrap();
+        let cnt2: i64 = conn
+            .query_row("SELECT COUNT(*) FROM issue_links", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cnt2, 1);
     }
 
     /// 多类型混合聚合 + 排序（出向在前、入向在后）。
