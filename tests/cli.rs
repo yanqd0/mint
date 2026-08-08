@@ -311,6 +311,153 @@ fn st_add_duplicate_json_shape() {
     assert_eq!(v["id"], id);
 }
 
+/// search：标题关键词命中。
+#[test]
+fn st_search_matches_title() {
+    let (_dir, db) = empty_db();
+    add_issue(&db, "fix timeout bug");
+    let v = run_json(&db, &["search", "timeout", "--json"]);
+    let ids: Vec<i64> = v
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["id"].as_i64().unwrap())
+        .collect();
+    assert!(ids.contains(&1), "应命中 #1: {v}");
+}
+
+/// search：body 命中（trigram 也索引 body）。
+#[test]
+fn st_search_matches_body() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &[
+            "add",
+            "some title",
+            "--body",
+            "database locked error",
+            "--json",
+        ],
+    );
+    let v = run_json(&db, &["search", "database", "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 1, "body 关键词应命中: {v}");
+}
+
+/// search：中文子串（trigram，查询 ≥3 字符）。
+#[test]
+fn st_search_chinese_trigram() {
+    let (_dir, db) = empty_db();
+    add_issue(&db, "修复登录 bug");
+    let v = run_json(&db, &["search", "修复登录", "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 1, "中文子串应命中: {v}");
+}
+
+/// search：触发器同步（add 可搜、状态推进仍可搜、delete 后不可搜）。
+#[test]
+fn st_search_trigger_sync() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "sync searchable item");
+    assert_eq!(
+        run_json(&db, &["search", "searchable", "--json"])
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    // 状态推进（title/body 不变，不触发 FTS update）
+    run_json(&db, &["state", "plan", &id.to_string(), "--json"]);
+    run_json(&db, &["state", "start", &id.to_string(), "--json"]);
+    assert_eq!(
+        run_json(&db, &["search", "searchable", "--json"])
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    // delete 后不可搜（issues_fts_ad 触发器清索引）
+    run_json(&db, &["delete", "issue", &id.to_string(), "--json"]);
+    assert_eq!(
+        run_json(&db, &["search", "searchable", "--json"])
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+}
+
+/// search：project/label/status 过滤生效。
+#[test]
+fn st_search_filters() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &[
+            "add",
+            "filter target",
+            "--project",
+            "proj-a",
+            "--label",
+            "dev",
+            "--json",
+        ],
+    );
+    // project 过滤：proj-b 不含
+    assert_eq!(
+        run_json(&db, &["search", "filter", "--project", "proj-b", "--json"])
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    // label 过滤
+    assert_eq!(
+        run_json(&db, &["search", "filter", "--label", "dev", "--json"])
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        run_json(&db, &["search", "filter", "--label", "other", "--json"])
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    // status 过滤：open 命中、done 不命中
+    assert_eq!(
+        run_json(&db, &["search", "filter", "--status", "open", "--json"])
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        run_json(&db, &["search", "filter", "--status", "done", "--json"])
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+}
+
+/// search：空库返回空数组。
+#[test]
+fn st_search_empty_db() {
+    let (_dir, db) = empty_db();
+    let v = run_json(&db, &["search", "anything", "--json"]);
+    assert_eq!(v.as_array().unwrap().len(), 0);
+}
+
+/// search：查询 <3 字符报错。
+#[test]
+fn st_search_too_short() {
+    let (_dir, db) = empty_db();
+    let err = run_fail(&db, &["search", "ab"]);
+    assert!(err.contains("search query too short"), "stderr: {err}");
+}
+
 /// 全链路 add→plan→start→stage→close→done 全程 CLI 走完。
 #[test]
 fn st_state_flow_full_chain() {

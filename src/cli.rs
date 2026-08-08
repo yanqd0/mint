@@ -37,6 +37,8 @@ enum Commands {
     Add(AddArgs),
     /// List issues (open/planned/dev/test by default)
     List(ListArgs),
+    /// Full-text search issues (FTS5)
+    Search(SearchArgs),
     /// Show an issue's details
     Show(ShowArgs),
     /// State transitions
@@ -359,6 +361,24 @@ struct ListArgs {
     json: bool,
 }
 
+#[derive(clap::Args)]
+struct SearchArgs {
+    /// FTS5 query (trigram tokenizer, at least 3 characters)
+    query: String,
+    /// Filter by project name
+    #[arg(long)]
+    project: Option<String>,
+    /// Filter by label name
+    #[arg(long)]
+    label: Option<String>,
+    /// Filter by status
+    #[arg(long, value_enum)]
+    status: Option<Status>,
+    /// Output as JSON
+    #[arg(long)]
+    json: bool,
+}
+
 impl Cli {
     /// 执行命令分发。返回 true 表示有输出已打印。
     pub fn run(&self) -> Result<(), Error> {
@@ -369,6 +389,7 @@ impl Cli {
         match &self.command {
             Commands::Add(a) => cmd_add(&mut conn, &cwd, a),
             Commands::List(l) => cmd_list(&conn, l),
+            Commands::Search(s) => cmd_search(&conn, s),
             Commands::Show(s) => cmd_show(&conn, s),
             Commands::State(st) => match &st.command {
                 StateCmd::Plan(t) => cmd_trans(&conn, t, Action::Plan),
@@ -511,34 +532,71 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
     let project: Option<&str> = l.project.as_deref();
 
     let mut stmt = conn.prepare(db::ISSUE_LIST)?;
-    let rows = stmt.query_map(rusqlite::params![all, status, label, project], |r| {
-        Ok(Issue {
-            id: r.get(0)?,
-            title: r.get(1)?,
-            body: r.get(2)?,
-            kind: r.get(3)?,
-            status: r.get(4)?,
-            project_id: r.get(5)?,
-            project: r.get(6)?,
-            test_cmd: r.get(7)?,
-            dropped_reason: r.get(8)?,
-            last_commit_id: r.get(9)?,
-            plan_id: r.get(10)?,
-            hit_count: r.get(11)?,
-            labels: Vec::new(),
-            links: Vec::new(),
-            created_at: r.get(12)?,
-            updated_at: r.get(13)?,
-        })
-    })?;
+    let rows = stmt.query_map(
+        rusqlite::params![all, status, label, project],
+        issue_from_row,
+    )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
-    // 填充 labels（每个 issue 一次查询，量小可接受）
-    for issue in &mut issues {
-        issue.labels = label::names_for_issue(conn, issue.id)?;
-    }
+    fill_labels(conn, &mut issues)?;
 
     if l.json {
+        println!("{}", serde_json::to_string(&issues)?);
+    } else {
+        print!("{}", output::format_list(&issues));
+    }
+    Ok(())
+}
+
+/// 行 → Issue 映射（14 列，与 issue_list/issue_show/issue_search 列序一致）。
+fn issue_from_row(r: &rusqlite::Row) -> rusqlite::Result<Issue> {
+    Ok(Issue {
+        id: r.get(0)?,
+        title: r.get(1)?,
+        body: r.get(2)?,
+        kind: r.get(3)?,
+        status: r.get(4)?,
+        project_id: r.get(5)?,
+        project: r.get(6)?,
+        test_cmd: r.get(7)?,
+        dropped_reason: r.get(8)?,
+        last_commit_id: r.get(9)?,
+        plan_id: r.get(10)?,
+        hit_count: r.get(11)?,
+        labels: Vec::new(),
+        links: Vec::new(),
+        created_at: r.get(12)?,
+        updated_at: r.get(13)?,
+    })
+}
+
+/// 填充 issue 的 labels（每 issue 一次查询，量小可接受）。
+fn fill_labels(conn: &rusqlite::Connection, issues: &mut [Issue]) -> Result<(), Error> {
+    for issue in issues {
+        issue.labels = label::names_for_issue(conn, issue.id)?;
+    }
+    Ok(())
+}
+
+/// 全文搜索（FTS5 trigram）：MATCH + 可选 project/label/status 过滤，按相关度排序。
+fn cmd_search(conn: &rusqlite::Connection, s: &SearchArgs) -> Result<(), Error> {
+    let q = s.query.trim();
+    if q.chars().count() < 3 {
+        return Err(Error::Other(
+            "search query too short (min 3 characters)".to_string(),
+        ));
+    }
+    let project: Option<&str> = s.project.as_deref();
+    let label: Option<&str> = s.label.as_deref();
+    let status = s.status; // Option<Status>，impl ToSql（NULL=不过滤）
+
+    let mut stmt = conn.prepare(db::ISSUE_SEARCH)?;
+    let rows = stmt.query_map(rusqlite::params![q, project, label, status], issue_from_row)?;
+    let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
+
+    fill_labels(conn, &mut issues)?;
+
+    if s.json {
         println!("{}", serde_json::to_string(&issues)?);
     } else {
         print!("{}", output::format_list(&issues));
@@ -549,26 +607,7 @@ fn cmd_list(conn: &rusqlite::Connection, l: &ListArgs) -> Result<(), Error> {
 fn cmd_show(conn: &rusqlite::Connection, s: &ShowArgs) -> Result<(), Error> {
     let id = s.id;
     let issue = conn
-        .query_row(db::ISSUE_SHOW, rusqlite::params![id], |r| {
-            Ok(Issue {
-                id: r.get(0)?,
-                title: r.get(1)?,
-                body: r.get(2)?,
-                kind: r.get(3)?,
-                status: r.get(4)?,
-                project_id: r.get(5)?,
-                project: r.get(6)?,
-                test_cmd: r.get(7)?,
-                dropped_reason: r.get(8)?,
-                last_commit_id: r.get(9)?,
-                plan_id: r.get(10)?,
-                hit_count: r.get(11)?,
-                labels: Vec::new(),
-                links: Vec::new(),
-                created_at: r.get(12)?,
-                updated_at: r.get(13)?,
-            })
-        })
+        .query_row(db::ISSUE_SHOW, rusqlite::params![id], issue_from_row)
         .map_err(|e| match e {
             rusqlite::Error::QueryReturnedNoRows => Error::Other(format!("issue #{id} not found")),
             other => Error::from(other),
