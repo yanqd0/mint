@@ -113,6 +113,7 @@ ensure 的 'just inserted but not found' 分支——改这些表约束时须同
 ## UT 测试规范
 
 - **单测**写在源文件内 `#[cfg(test)] mod tests`；**集成测试**放 `tests/`。
+- **参数化优先**：枚举/状态组合/输入-输出表用 **rstest**（`#[values]` 笛卡尔积穷举、`#[case]` 表驱动），提高覆盖率并覆盖边缘用例（如 state 6×7 全矩阵、枚举 as_str 往返）；纯函数格式化（output.rs）必测字段有无组合。覆盖率工具 `cargo llvm-cov --workspace`（baseline 85%→目标 90%+）。
 - **测试用临时路径**：db 层用临时 SQLite（`:memory:` 或 `tempfile`），**禁止写绝对路径**；断言不依赖环境。
 - **必测项**：
   - 状态机合法性（非法转换拒绝，如 `open→done` 直接 close）。
