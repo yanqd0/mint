@@ -193,7 +193,7 @@ fn st_close_requires_test_cmd() {
     );
 }
 
-/// 三种过滤：--status / --tag / --project。
+/// 三种过滤：--status / --label / --project。
 #[test]
 fn st_list_filters() {
     let (_dir, db) = empty_db();
@@ -204,14 +204,14 @@ fn st_list_filters() {
             "with-bug",
             "--project",
             "p1",
-            "--tag",
+            "--label",
             "bug:缺陷",
             "--json",
         ],
     );
     run_json(&db, &["add", "plain", "--project", "p1", "--json"]);
 
-    let v = run_json(&db, &["list", "--tag", "bug", "--json"]);
+    let v = run_json(&db, &["list", "--label", "bug", "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 1);
     assert_eq!(v[0]["title"], "with-bug");
 

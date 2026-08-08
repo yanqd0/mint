@@ -5,10 +5,10 @@
 use tempfile::TempDir;
 
 use mint_faa::db;
+use mint_faa::label;
 use mint_faa::models::Status;
 use mint_faa::project;
 use mint_faa::state::{self, Action};
-use mint_faa::tag;
 
 /// 建库 + 注册项目，返回 (连接, TempDir, 项目 id)。
 /// TempDir 必须随返回存活——否则数据库文件被删除，连接指向只读空库。
@@ -98,29 +98,29 @@ fn project_auto_register_and_idempotent() {
     assert_eq!(names, vec!["alpha", "beta"]);
 }
 
-/// tag 关联 + 过滤：attach 幂等、names_for_issue 正确。
+/// label 关联 + 过滤：attach 幂等、names_for_issue 正确。
 #[test]
-fn tag_attach_and_query() {
+fn label_attach_and_query() {
     let (conn, _dir, pid) = setup();
     let id = add_issue(&conn, pid, "tagged");
 
-    let specs = tag::parse_specs(&["bug:缺陷".to_string(), "storage".to_string()]);
-    tag::attach(&conn, id, &specs).unwrap();
-    tag::attach(&conn, id, &specs).unwrap(); // 幂等
+    let specs = label::parse_specs(&["bug:缺陷".to_string(), "storage".to_string()]);
+    label::attach(&conn, id, &specs).unwrap();
+    label::attach(&conn, id, &specs).unwrap(); // 幂等
 
-    let names = tag::names_for_issue(&conn, id).unwrap();
+    let names = label::names_for_issue(&conn, id).unwrap();
     assert_eq!(names, vec!["bug", "storage"]);
 
     // 只有 1 条关联（幂等生效）
     let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM issue_tags", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM issue_labels", [], |r| r.get(0))
         .unwrap();
     assert_eq!(count, 2);
 
-    // tag list 带计数
-    let tags = tag::list(&conn).unwrap();
-    assert_eq!(tags.len(), 2);
-    assert!(tags.iter().all(|(_, c)| *c == 1));
+    // label list 带计数
+    let labels = label::list(&conn).unwrap();
+    assert_eq!(labels.len(), 2);
+    assert!(labels.iter().all(|(_, c)| *c == 1));
 }
 
 /// test_cmd 必填：close 无 test_cmd 校验失败；'没测' 通过。
