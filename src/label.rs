@@ -75,6 +75,13 @@ pub fn list(conn: &Connection) -> Result<Vec<(Label, i64)>, Error> {
     rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
 }
 
+/// 删除 label（按 name 查找 id），同步清关联 issue_labels 行，事务内原子提交。
+pub fn delete(conn: &Connection, name: &str) -> Result<(), Error> {
+    let id =
+        query_id(conn, name)?.ok_or_else(|| Error::Other(format!("label '{name}' not found")))?;
+    crate::container::delete_txn(conn, db::LABEL_DELETE, id, |_| Ok(()))
+}
+
 /// 查询某 issue 的 label 名列表（按 name 排序）。
 pub fn names_for_issue(conn: &Connection, issue_id: i64) -> Result<Vec<String>, Error> {
     let mut stmt = conn.prepare(db::LABEL_NAMES_FOR_ISSUE)?;
@@ -149,6 +156,42 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM issue_labels", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    /// delete 删除 label 及其 issue 关联，关联标签消失。
+    #[test]
+    fn delete_removes_label_and_links() {
+        let (conn, iid) = setup();
+        ensure(&conn, "bug", Some("缺陷")).unwrap();
+        attach(&conn, iid, &[("bug".to_string(), None)]).unwrap();
+        delete(&conn, "bug").unwrap();
+        // label 行已删除
+        let cnt: i64 = conn
+            .query_row("SELECT COUNT(*) FROM labels WHERE name='bug'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(cnt, 0);
+        // 关联行已清
+        let ic: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM issue_labels WHERE issue_id = ?1",
+                params![iid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(ic, 0);
+    }
+
+    /// delete 不存在的 label 报 not found。
+    #[test]
+    fn delete_missing_errors() {
+        let (conn, _) = setup();
+        let err = delete(&conn, "nosuch").unwrap_err();
+        assert!(
+            err.to_string().contains("label 'nosuch' not found"),
+            "{err}"
+        );
     }
 
     /// 查询 issue 的 label 名。

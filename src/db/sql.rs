@@ -38,6 +38,7 @@ pub const LABEL_SELECT_ID: &str = include_str!("queries/label_select_id.sql");
 pub const LABEL_ATTACH: &str = include_str!("queries/label_attach.sql");
 pub const LABEL_LIST: &str = include_str!("queries/label_list.sql");
 pub const LABEL_NAMES_FOR_ISSUE: &str = include_str!("queries/label_names_for_issue.sql");
+pub const LABEL_DELETE: &str = include_str!("queries/label_delete.sql");
 
 pub const ROADMAP_INSERT: &str = include_str!("queries/roadmap_insert.sql");
 pub const ROADMAP_LIST: &str = include_str!("queries/roadmap_list.sql");
