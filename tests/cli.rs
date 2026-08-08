@@ -751,3 +751,40 @@ fn st_list_alias_short_a() {
     let v = run_json(&db, &["list", "-a", "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 1);
 }
+
+/// roadmap version 重复创建冲突（UNIQUE 约束报错）。
+#[test]
+fn st_roadmap_version_duplicate_conflict() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["roadmap", "create", "r1", "--version", "0.1.0", "--json"],
+    );
+    let stderr = run_fail(&db, &["roadmap", "create", "r2", "--version", "0.1.0"]);
+    assert!(stderr.contains("UNIQUE"), "stderr: {stderr}");
+}
+
+/// 容器派生状态：多 issue 混合边界（部分 done → running；全 done → done）。
+#[test]
+fn st_container_derived_mixed_boundaries() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    let i1 = add_issue(&db, "a");
+    let i2 = add_issue(&db, "b");
+    run_json(&db, &["plan", "issue", "1", &i1.to_string(), "--json"]);
+    run_json(&db, &["plan", "issue", "1", &i2.to_string(), "--json"]);
+
+    // 全 open → open
+    let v = run_json(&db, &["plan", "show", "1", "--json"]);
+    assert_eq!(v["status"], "open");
+
+    // 一个 done、一个 open → running（非全 done）
+    advance_to_done(&db, i1);
+    let v = run_json(&db, &["plan", "show", "1", "--json"]);
+    assert_eq!(v["status"], "running");
+
+    // 全 done → done
+    advance_to_done(&db, i2);
+    let v = run_json(&db, &["plan", "show", "1", "--json"]);
+    assert_eq!(v["status"], "done");
+}
