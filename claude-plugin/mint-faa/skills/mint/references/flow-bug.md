@@ -1,5 +1,7 @@
 # Bug handling flow (flow-bug)
 
+> Title/body templates: `title-templates/issue.md + body-templates/1.md`
+
 Trigger: user describes finding a bug/problem ("found a bug: X causes Y"). kind=problem.
 
 ## Steps

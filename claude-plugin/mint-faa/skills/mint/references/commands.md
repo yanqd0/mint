@@ -1,5 +1,7 @@
 # mint Command Reference
 
+> Title/body templates: `title-templates/ + body-templates/ (add/plan/milestone title & body examples)`
+
 All commands support `--json`. Global `--db <PATH>` (or `MINT_DB_PATH`) overrides the default database.
 Use `mint <sub> --help` for full options.
 

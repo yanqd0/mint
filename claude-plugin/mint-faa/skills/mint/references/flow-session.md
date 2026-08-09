@@ -1,5 +1,7 @@
 # Takeover init flow (flow-session)
 
+> Title/body templates: `title-templates/issue.md + body-templates/4.md`
+
 Trigger: skill called without a `<description>` argument (takeover mode).
 Goal: let the user know immediately what to develop next — mint replaces initialization thinking.
 

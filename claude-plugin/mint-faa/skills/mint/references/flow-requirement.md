@@ -1,5 +1,7 @@
 # Requirement handling flow (flow-requirement)
 
+> Title/body templates: `title-templates/issue.md + body-templates/2.md, 6.md`
+
 Trigger: user describes a requirement/improvement ("need to do Z"). kind=requirement.
 
 ## Steps

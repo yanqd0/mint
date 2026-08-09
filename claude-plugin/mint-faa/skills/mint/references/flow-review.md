@@ -1,5 +1,7 @@
 # Review/audit report handling flow (flow-review)
 
+> Title/body templates: `title-templates/issue.md + body-templates/5.md`
+
 Trigger: receiving a report from code-reviewer / security-auditor / tester.
 
 ## Steps

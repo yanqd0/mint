@@ -1,5 +1,7 @@
 # Leftover / TODO / observation handling flow (flow-todo)
 
+> Title/body templates: `title-templates/issue.md + body-templates/4.md`
+
 Trigger: user mentions leftovers / TODOs / improvements / observations / tech debt.
 
 ## Steps

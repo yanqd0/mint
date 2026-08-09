@@ -1,5 +1,7 @@
 # Conditional branch decision table (flow-conditions)
 
+> Title/body templates: `body-templates/11.md, 14.md`
+
 Used by all flows when recording or advancing, to choose the right action per scenario.
 
 ## Mount rules (issue is either-or: can't directly mount a milestone after belonging to a plan)

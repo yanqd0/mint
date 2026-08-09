@@ -1,5 +1,7 @@
 # Version planning & execution plan flow (flow-planning)
 
+> Title/body templates: `title-templates/plan.md, milestone.md + body-templates/7.md, 8.md, 15.md`
+
 Trigger: version / plan / milestone / milestone / sprint / milestone / execution plan.
 
 ## Steps

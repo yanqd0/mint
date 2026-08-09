@@ -94,6 +94,19 @@ mint plan attach 12 42
 
 See `references/commands.md` for the full command reference and `mint <sub> --help` for per-command details.
 
+## Title & Body Templates (token-saving)
+
+Follow templates for issue/plan/milestone title & body, **record only what the LLM does not know**:
+
+- **Do not state known facts**: common knowledge/skills/commonsense (e.g. "an issue is a todo item") is not recorded
+- **Do not guess**: for unclear info, write `? TODO confirm <brief>` tail instead of inventing; readers confirm with the user or infer accurately from context
+- **Title**: ≤60 chars (~30 CJK); semantics per `references/title-templates/` (issue=kind summary, plan=implementation goal, milestone=business goal); **a good title can omit body**
+- **Body**: use `references/body-templates/N.md`, ≤4 fields, ≤1 sentence per field, bullet points with `-`. Common:
+  - T1 bug: `**Symptom** / **Location**`
+  - T2 requirement: `**Goal** / **Points**`
+  - T6 plan: `## Goal / ## Steps / ## Acceptance`
+- Each flow marks its template (mini index); full list in `references/title-templates/` + `references/body-templates/`
+
 ## Constraints
 
 - **Dedup built-in**: `add` performs same-project normalized-title fuzzy matching; duplicates auto-merge (bumping `hit_count+1`).
