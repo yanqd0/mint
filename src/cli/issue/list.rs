@@ -85,6 +85,10 @@ pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Er
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;
+    if l.tui {
+        let (headers, rows) = crate::tui::rows::issues(&issues);
+        return crate::tui::run_list("Issues", headers, rows, l.page_size);
+    }
     let (issues, total, page) = paginate(issues, l.page, l.page_size);
 
     if l.json {

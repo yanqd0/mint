@@ -1360,3 +1360,89 @@ fn st_empty_db_initialized_v1() {
         .unwrap();
     assert_eq!(version, 4);
 }
+
+// ── --tui（list 表格浏览）────────────────────────────────────────
+
+/// --tui 非 TTY 降级：单页表格文本输出（表头 + 数据 + 页码 footer）。
+#[test]
+fn st_tui_issue_list_single_page() {
+    let (_dir, db) = empty_db();
+    add_issue(&db, "login broken");
+    let out = mint(&db)
+        .args(["list", "--tui"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("ID"), "表头缺 ID: {text}");
+    assert!(text.contains("login broken"), "缺数据行: {text}");
+    assert!(text.contains("Page 1/1"), "缺页码 footer: {text}");
+}
+
+/// plan/roadmap/label 三个 list 的 --tui 降级。
+#[test]
+fn st_tui_containers_and_label() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["plan", "create", "sprint-1", "--json"]);
+    run_json(
+        &db,
+        &["roadmap", "create", "v0.4", "--version", "0.4.0", "--json"],
+    );
+    let out = mint(&db)
+        .args(["plan", "list", "--tui"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert!(
+        String::from_utf8_lossy(&out).contains("sprint-1"),
+        "plan --tui 缺数据"
+    );
+    let out = mint(&db)
+        .args(["roadmap", "list", "--tui"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert!(
+        String::from_utf8_lossy(&out).contains("v0.4"),
+        "roadmap --tui 缺数据"
+    );
+    let out = mint(&db)
+        .args(["label", "list", "--tui"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert!(
+        String::from_utf8_lossy(&out).contains("Name"),
+        "label --tui 表头"
+    );
+}
+
+/// --tui 与 --json 互斥（clap conflicts_with 解析期拒绝）。
+#[test]
+fn st_tui_conflicts_json() {
+    let (_dir, db) = empty_db();
+    let stderr = run_fail(&db, &["list", "--tui", "--json"]);
+    assert!(stderr.contains("cannot be used with"), "stderr: {stderr}");
+}
+
+/// help 展示 --tui 标志。
+#[test]
+fn st_tui_flag_in_help() {
+    let (_dir, db) = empty_db();
+    let out = mint(&db)
+        .args(["list", "--help"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert!(String::from_utf8_lossy(&out).contains("--tui"));
+}

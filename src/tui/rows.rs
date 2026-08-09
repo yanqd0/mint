@@ -126,10 +126,7 @@ mod tests {
         i.labels = vec!["dev".into(), "urgent".into()];
         let (headers, rows) = issues(&[i]);
         assert_eq!(headers.join(","), "ID,P,Kind,Status,Title,Labels");
-        assert_eq!(
-            rows[0].join(","),
-            "3,0,problem,done,hello,dev,urgent"
-        );
+        assert_eq!(rows[0].join(","), "3,0,problem,done,hello,dev,urgent");
     }
 
     #[test]

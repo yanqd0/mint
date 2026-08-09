@@ -18,12 +18,7 @@ pub struct ListModel {
 }
 
 impl ListModel {
-    pub fn new(
-        title: &str,
-        headers: Vec<String>,
-        rows: Vec<Vec<String>>,
-        page_size: u32,
-    ) -> Self {
+    pub fn new(title: &str, headers: Vec<String>, rows: Vec<Vec<String>>, page_size: u32) -> Self {
         Self {
             title: title.to_string(),
             headers,

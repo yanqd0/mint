@@ -431,6 +431,14 @@ pub(crate) fn cmd_container_list(
     a: &ListContainersArgs,
 ) -> Result<(), Error> {
     let items = container::list(conn, kind, a.all)?;
+    if a.tui {
+        let (headers, rows) = crate::tui::rows::containers(&items);
+        let title = match kind {
+            ContainerKind::Roadmap => "Roadmaps",
+            ContainerKind::Plan => "Plans",
+        };
+        return crate::tui::run_list(title, headers, rows, a.page_size);
+    }
     let (items, total, page) = paginate(items, a.page, a.page_size);
     if a.json {
         let arr: Vec<serde_json::Value> = items
@@ -510,6 +518,10 @@ pub(crate) fn kind_noun(kind: ContainerKind) -> &'static str {
 /// label list：列出所有 label（含关联 issue 数）。
 fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
     let labels = crate::label::list(conn)?;
+    if l.tui {
+        let (headers, rows) = crate::tui::rows::labels(&labels);
+        return crate::tui::run_list("Labels", headers, rows, l.page_size);
+    }
     let (labels, total, page) = paginate(labels, l.page, l.page_size);
     if l.json {
         let arr: Vec<serde_json::Value> = labels

@@ -2,11 +2,12 @@
 //!
 //! `draw` 供交互路径（`DefaultTerminal`）与非 TTY 降级（`TestBackend`）共用。
 
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Paragraph, Row, Table, TableState};
-use ratatui::Frame;
+use unicode_width::UnicodeWidthStr;
 
 use crate::tui::model::ListModel;
 
@@ -14,8 +15,8 @@ use crate::tui::model::ListModel;
 pub fn draw(frame: &mut Frame, m: &ListModel) {
     let block = Block::bordered().title(m.title.clone());
     let widths = column_widths(&m.headers, m.visible_rows());
-    let header = Row::new(m.headers.iter().cloned())
-        .style(Style::new().add_modifier(Modifier::BOLD));
+    let header =
+        Row::new(m.headers.iter().cloned()).style(Style::new().add_modifier(Modifier::BOLD));
     let rows: Vec<Row> = m
         .visible_rows()
         .iter()
@@ -47,10 +48,10 @@ pub fn column_widths(headers: &[String], rows: &[Vec<String>]) -> Vec<Constraint
         .map(|c| {
             let max_cell = rows
                 .iter()
-                .map(|r| r.get(c).map_or(0, |s| s.chars().count()))
+                .map(|r| r.get(c).map_or(0, |s| UnicodeWidthStr::width(s.as_str())))
                 .max()
                 .unwrap_or(0);
-            let w = max_cell.max(headers[c].chars().count()) as u16 + 2;
+            let w = max_cell.max(UnicodeWidthStr::width(headers[c].as_str())) as u16 + 2;
             if c == n - 1 {
                 Constraint::Min(w)
             } else {
@@ -62,8 +63,8 @@ pub fn column_widths(headers: &[String], rows: &[Vec<String>]) -> Vec<Constraint
 
 #[cfg(test)]
 mod tests {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
 
     use super::*;
 
@@ -111,9 +112,15 @@ mod tests {
         terminal.draw(|f| draw(f, &m)).unwrap();
         let text = buffer_lines(terminal.backend().buffer());
         assert!(text.iter().any(|l| l.contains("Issues")), "标题: {text:?}");
-        assert!(text.iter().any(|l| l.contains("ID") && l.contains("Title")), "表头: {text:?}");
+        assert!(
+            text.iter().any(|l| l.contains("ID") && l.contains("Title")),
+            "表头: {text:?}"
+        );
         assert!(text.iter().any(|l| l.contains("hello")), "数据行: {text:?}");
-        assert!(text.iter().any(|l| l.contains("Page 1/1")), "footer: {text:?}");
+        assert!(
+            text.iter().any(|l| l.contains("Page 1/1")),
+            "footer: {text:?}"
+        );
     }
 
     #[test]
@@ -123,6 +130,9 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.draw(|f| draw(f, &m)).unwrap();
         let text = buffer_lines(terminal.backend().buffer());
-        assert!(text.iter().any(|l| l.contains("Page 1/1")), "footer: {text:?}");
+        assert!(
+            text.iter().any(|l| l.contains("Page 1/1")),
+            "footer: {text:?}"
+        );
     }
 }
