@@ -22,6 +22,7 @@ pub mod dashboard_run;
 pub mod dashboard_types;
 pub mod draw;
 pub mod model;
+pub mod panel;
 
 /// 事件源抽象：生产 = crossterm，测试可注入脚本序列。
 pub trait EventSource {
