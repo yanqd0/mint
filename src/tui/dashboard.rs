@@ -160,7 +160,7 @@ impl DashboardModel {
     pub fn handle_key(&mut self, key: KeyCode) -> bool {
         match key {
             KeyCode::Char('j') | KeyCode::Down => {
-                let len = self.page_issues().len();
+                let len = self.current_page_len();
                 if self.selected + 1 < len {
                     self.selected += 1;
                 }
@@ -177,7 +177,11 @@ impl DashboardModel {
                 }
             }
             KeyCode::Char('l') | KeyCode::Right | KeyCode::PageDown => {
-                if self.page + 1 < self.pages() {
+                let pages = match self.view {
+                    View::Milestone { .. } => self.plan_pages(),
+                    _ => self.pages(),
+                };
+                if self.page + 1 < pages {
                     self.page += 1;
                     self.selected = 0;
                 }
@@ -187,6 +191,15 @@ impl DashboardModel {
             }
             KeyCode::Enter => {
                 if self.detail.is_none()
+                    && let View::Milestone { .. } = self.view
+                {
+                    // milestone 面板：进入选中的 plan 面板
+                    if let Some((plan, _)) = self.page_plans().get(self.selected) {
+                        self.view = View::Plan { plan_id: plan.id };
+                        self.page = 0;
+                        self.selected = 0;
+                    }
+                } else if self.detail.is_none()
                     && let Some(i) = self.page_issues().get(self.selected)
                 {
                     self.detail = Some(i.id);
@@ -255,7 +268,7 @@ impl DashboardModel {
 
     /// 面板切换后校正选中（避免越界）。
     fn clamp_selected(&mut self) {
-        let len = self.page_issues().len();
+        let len = self.current_page_len();
         if self.selected >= len {
             self.selected = len.saturating_sub(1);
         }
@@ -277,10 +290,47 @@ impl DashboardModel {
         self.visible_issues().len().div_ceil(self.page_size).max(1)
     }
 
+    /// Milestone 面板当前页的 plan 行。
+    pub fn page_plans(&self) -> Vec<&(Container, i64)> {
+        let View::Milestone { milestone_id } = self.view else {
+            return Vec::new();
+        };
+        let all = self.visible_plans(milestone_id);
+        let start = self.page * self.page_size;
+        if start >= all.len() {
+            return Vec::new();
+        }
+        let end = (start + self.page_size).min(all.len());
+        all[start..end].to_vec()
+    }
+
+    /// Milestone 面板总页数（至少 1）。
+    pub fn plan_pages(&self) -> usize {
+        let View::Milestone { milestone_id } = self.view else {
+            return 1;
+        };
+        self.visible_plans(milestone_id)
+            .len()
+            .div_ceil(self.page_size)
+            .max(1)
+    }
+
+    /// 当前面板一页的行数（issue 或 plan 行，随视图切换）。
+    fn current_page_len(&self) -> usize {
+        match self.view {
+            View::Milestone { .. } => self.page_plans().len(),
+            _ => self.page_issues().len(),
+        }
+    }
+
     /// 面板数据变化后校正页号（避免越界）。
     fn clamp_page(&mut self) {
-        if self.page >= self.pages() {
-            self.page = self.pages().saturating_sub(1);
+        let pages = match self.view {
+            View::Milestone { .. } => self.plan_pages(),
+            _ => self.pages(),
+        };
+        if self.page >= pages {
+            self.page = pages.saturating_sub(1);
         }
     }
 
@@ -583,6 +633,21 @@ mod tests {
         m.handle_key(KeyCode::Char('p'));
         assert_eq!(m.view, View::Milestone { milestone_id: 4 });
         m.handle_key(KeyCode::Tab);
+        assert_eq!(m.view, View::Issue);
+    }
+
+    #[test]
+    fn milestone_enter_opens_selected_plan() {
+        let mut m = DashboardModel::new();
+        m.init(snap(
+            vec![mk_issue(1, Status::Dev, Some(7), "1")],
+            vec![(mk_plan(7, Some(4), "1"), 0)],
+        ));
+        m.milestones = vec![(mk_container(4), 0)];
+        m.view = View::Milestone { milestone_id: 4 };
+        m.handle_key(KeyCode::Enter);
+        assert_eq!(m.view, View::Plan { plan_id: 7 });
+        m.handle_key(KeyCode::Esc);
         assert_eq!(m.view, View::Issue);
     }
 

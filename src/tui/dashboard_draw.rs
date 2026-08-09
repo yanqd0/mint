@@ -61,6 +61,15 @@ pub fn progress_bar(issues: &[&Issue]) -> Line<'static> {
     Line::from(spans)
 }
 
+/// 迷你进度条：固定宽度，█ 填充完成比例（milestone 面板每行 plan 用）。
+fn mini_bar(done: usize, total: usize, width: usize) -> String {
+    if total == 0 {
+        return "░".repeat(width);
+    }
+    let filled = done.saturating_mul(width).checked_div(total).unwrap_or(0);
+    "█".repeat(filled) + &"░".repeat(width - filled)
+}
+
 /// 面板标题。
 fn panel_title(m: &DashboardModel) -> String {
     match m.view {
@@ -122,10 +131,61 @@ fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64) {
     );
 }
 
+/// 渲染 milestone 面板：自身标题 + 其下 plan 行列表（每行迷你进度条 + done/total）。
+fn draw_milestone(frame: &mut Frame, m: &DashboardModel) {
+    let View::Milestone { milestone_id } = m.view else {
+        return;
+    };
+    let title = m
+        .milestones
+        .iter()
+        .find(|(c, _)| c.id == milestone_id)
+        .map(|(c, _)| match &c.version {
+            Some(v) => format!("{} ({v})", c.title),
+            None => c.title.clone(),
+        })
+        .unwrap_or_else(|| format!("#{milestone_id}"));
+
+    let mut lines: Vec<Line> = Vec::new();
+    for (idx, (plan, _)) in m.page_plans().iter().enumerate() {
+        let (done, total) = m.plan_progress(plan.id);
+        let selected = idx == m.selected;
+        let style = if selected {
+            Style::new().add_modifier(Modifier::REVERSED)
+        } else {
+            Style::new()
+        };
+        let bar = mini_bar(done, total, 20);
+        lines.push(Line::from(vec![
+            Span::styled(format!("#{:<3}", plan.id), style),
+            Span::styled(format!("[{bar}]"), style),
+            Span::styled(format!(" {done}/{total}  {}", plan.title), style),
+        ]));
+    }
+    if lines.is_empty() {
+        lines.push(Line::from("(no plans in this milestone)"));
+    }
+
+    let footer = format!(
+        "j/k ↑↓ plan · h/l PgUp/PgDn page · Enter plan · Esc back · q quit · Page {}/{}",
+        m.page + 1,
+        m.plan_pages()
+    );
+    let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(frame.area());
+    frame.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title(format!("mint · milestone {title}"))),
+        chunks[0],
+    );
+    frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
+}
+
 /// 渲染 dashboard：详情视图或面板（进度条 + 状态点列表）+ footer。
 pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
     if let Some(id) = m.detail {
         return draw_detail(frame, m, id);
+    }
+    if matches!(m.view, View::Milestone { .. }) {
+        return draw_milestone(frame, m);
     }
     let all = m.visible_issues();
     let page = m.page_issues();
@@ -181,7 +241,7 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     use super::*;
-    use crate::models::Kind;
+    use crate::models::{Container, ContainerStatus, Kind};
     use crate::tui::dashboard::DashboardModel;
     use crate::tui::dashboard_diff::DashboardSnapshot;
 
@@ -213,6 +273,33 @@ mod tests {
             issues,
             plans: vec![],
             milestones: vec![],
+        });
+        m
+    }
+
+    fn mk_container(id: i64, title: &str, version: Option<&str>, milestone_id: Option<i64>) -> Container {
+        Container {
+            id,
+            title: title.into(),
+            version: version.map(String::from),
+            body: None,
+            milestone_id,
+            status: ContainerStatus::Running,
+            created_at: "t".into(),
+            updated_at: "t".into(),
+        }
+    }
+
+    fn model_full(
+        issues: Vec<Issue>,
+        plans: Vec<(Container, i64)>,
+        milestones: Vec<(Container, i64)>,
+    ) -> DashboardModel {
+        let mut m = DashboardModel::new();
+        m.init(DashboardSnapshot {
+            issues,
+            plans,
+            milestones,
         });
         m
     }
@@ -327,5 +414,34 @@ mod tests {
         assert!(text.contains("#1 hello"), "标题: {text}");
         assert!(text.contains("status:"), "字段: {text}");
         assert!(text.contains("plan:"), "plan 字段: {text}");
+    }
+
+    #[test]
+    fn mini_bar_fills_by_ratio() {
+        assert_eq!(mini_bar(0, 0, 4), "░".repeat(4));
+        assert_eq!(mini_bar(1, 2, 4), "██░░");
+        assert_eq!(mini_bar(2, 2, 4), "████");
+        assert_eq!(mini_bar(0, 2, 4), "░░░░");
+    }
+
+    #[test]
+    fn draw_milestone_panel_shows_plan_rows_with_progress() {
+        let mut m = model_full(
+            vec![
+                mk_issue(1, "done one", Status::Done, Some(7)),
+                mk_issue(2, "open one", Status::Open, Some(7)),
+            ],
+            vec![(mk_container(7, "tui plan", None, Some(4)), 0)],
+            vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
+        );
+        m.view = View::Milestone { milestone_id: 4 };
+        m.selected = 0;
+        let backend = TestBackend::new(70, 10);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| draw_dashboard(f, &m)).unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("milestone TUI (0.4.0)"), "标题: {text}");
+        assert!(text.contains("tui plan"), "plan 标题: {text}");
+        assert!(text.contains("1/2"), "进度: {text}");
     }
 }
