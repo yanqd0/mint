@@ -94,7 +94,7 @@ fn st_add_issue_creates_row() {
 fn st_empty_db_list_ok() {
     let (_dir, db) = empty_db();
     let v = run_json(&db, &["list", "--all-states", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 0);
+    assert_eq!(v["items"].as_array().unwrap().len(), 0);
 }
 
 /// 默认 list 只列活跃；done 需 --all 才见。
@@ -104,13 +104,13 @@ fn st_list_default_filters_active() {
     let id = add_issue(&db, "to-close");
     // 默认含 open
     let v = run_json(&db, &["list", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 1);
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
     // 推进到 done 后默认不再列出
     advance_to_done(&db, id);
     let v = run_json(&db, &["list", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 0);
+    assert_eq!(v["items"].as_array().unwrap().len(), 0);
     let v = run_json(&db, &["list", "--all-states", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 1);
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
 }
 
 /// 显式 --status done 不叠加活跃过滤（参数化模板的微妙分支）。
@@ -121,10 +121,10 @@ fn st_list_status_done_bypasses_active_filter() {
     advance_to_done(&db, id);
     // 不带 --all 也应列出 done（?2 IS NOT NULL 绕过活跃过滤）
     let v = run_json(&db, &["list", "--status", "done", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 1);
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
     // 带 --all 结果不变
     let v = run_json(&db, &["list", "--status", "done", "--all-states", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 1);
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
 }
 
 /// 非法转换被拒绝（open 直接 close）。
@@ -229,17 +229,17 @@ fn st_list_filters() {
         &db,
         &["--project", "p1", "list", "--label", "bug", "--json"],
     );
-    assert_eq!(v.as_array().unwrap().len(), 1);
-    assert_eq!(v[0]["title"], "with-bug");
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
+    assert_eq!(v["items"][0]["title"], "with-bug");
 
     let v = run_json(&db, &["--project", "p1", "list", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 2);
+    assert_eq!(v["items"].as_array().unwrap().len(), 2);
 
     let v = run_json(
         &db,
         &["--project", "p1", "list", "--status", "open", "--json"],
     );
-    assert_eq!(v.as_array().unwrap().len(), 2);
+    assert_eq!(v["items"].as_array().unwrap().len(), 2);
 }
 
 /// JSON 输出形态：add 返回 {id,title,project,kind,status}；state 返回 {id,from,to}。
@@ -276,7 +276,7 @@ fn st_add_duplicate_merges() {
     );
     // 未新建：list 仍 1 条
     let v = run_json(&db, &["list", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 1);
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
     // hit_count 递增
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["hit_count"], 1);
@@ -303,8 +303,7 @@ fn st_add_duplicate_merges_labels() {
     );
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert!(
-        v["labels"]
-            .as_array()
+        v["labels"].as_array()
             .unwrap()
             .iter()
             .any(|l| l == "urgent"),
@@ -352,12 +351,12 @@ fn st_add_different_project_no_merge() {
         &db,
         &["--project", "proj-a", "list", "--all-states", "--json"],
     );
-    assert_eq!(v.as_array().unwrap().len(), 1);
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
     let v = run_json(
         &db,
         &["--project", "proj-b", "list", "--all-states", "--json"],
     );
-    assert_eq!(v.as_array().unwrap().len(), 1);
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
 }
 
 /// 去重：JSON merge 输出字段齐全（merged/id/title/project/kind/status）。
@@ -380,7 +379,7 @@ fn st_search_matches_title() {
     add_issue(&db, "fix timeout bug");
     let v = run_json(&db, &["search", "timeout", "--json"]);
     let ids: Vec<i64> = v
-        .as_array()
+        ["items"].as_array()
         .unwrap()
         .iter()
         .map(|x| x["id"].as_i64().unwrap())
@@ -404,7 +403,7 @@ fn st_search_matches_body() {
         ],
     );
     let v = run_json(&db, &["search", "database", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 1, "body 关键词应命中: {v}");
+    assert_eq!(v["items"].as_array().unwrap().len(), 1, "body 关键词应命中: {v}");
 }
 
 /// search：中文子串（trigram，查询 ≥3 字符）。
@@ -413,7 +412,7 @@ fn st_search_chinese_trigram() {
     let (_dir, db) = empty_db();
     add_issue(&db, "修复登录 bug");
     let v = run_json(&db, &["search", "修复登录", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 1, "中文子串应命中: {v}");
+    assert_eq!(v["items"].as_array().unwrap().len(), 1, "中文子串应命中: {v}");
 }
 
 /// search：触发器同步（add 可搜、状态推进仍可搜、delete 后不可搜）。
@@ -423,7 +422,7 @@ fn st_search_trigger_sync() {
     let id = add_issue(&db, "sync searchable item");
     assert_eq!(
         run_json(&db, &["search", "searchable", "--json"])
-            .as_array()
+            ["items"].as_array()
             .unwrap()
             .len(),
         1
@@ -433,7 +432,7 @@ fn st_search_trigger_sync() {
     run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
     assert_eq!(
         run_json(&db, &["search", "searchable", "--json"])
-            .as_array()
+            ["items"].as_array()
             .unwrap()
             .len(),
         1
@@ -442,7 +441,7 @@ fn st_search_trigger_sync() {
     run_json(&db, &["delete", "issue", &id.to_string(), "--json"]);
     assert_eq!(
         run_json(&db, &["search", "searchable", "--json"])
-            .as_array()
+            ["items"].as_array()
             .unwrap()
             .len(),
         0
@@ -469,7 +468,7 @@ fn st_search_filters() {
     // project 过滤：proj-b 不含
     assert_eq!(
         run_json(&db, &["--project", "proj-b", "search", "filter", "--json"])
-            .as_array()
+            ["items"].as_array()
             .unwrap()
             .len(),
         0
@@ -488,14 +487,14 @@ fn st_search_filters() {
                 "--json"
             ]
         )
-        .as_array()
+        ["items"].as_array()
         .unwrap()
         .len(),
         1
     );
     assert_eq!(
         run_json(&db, &["search", "filter", "--label", "other", "--json"])
-            .as_array()
+            ["items"].as_array()
             .unwrap()
             .len(),
         0
@@ -514,7 +513,7 @@ fn st_search_filters() {
                 "--json"
             ]
         )
-        .as_array()
+        ["items"].as_array()
         .unwrap()
         .len(),
         1
@@ -532,7 +531,7 @@ fn st_search_filters() {
                 "--json"
             ]
         )
-        .as_array()
+        ["items"].as_array()
         .unwrap()
         .len(),
         0
@@ -544,7 +543,7 @@ fn st_search_filters() {
 fn st_search_empty_db() {
     let (_dir, db) = empty_db();
     let v = run_json(&db, &["search", "anything", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 0);
+    assert_eq!(v["items"].as_array().unwrap().len(), 0);
 }
 
 /// search：≤2 字符走 LIKE 兜底（不报错），命中 title/body。
@@ -554,11 +553,11 @@ fn st_search_short_like_fallback() {
     add_issue(&db, "登录问题");
     // 2 字符中文走 LIKE 兜底
     let v = run_json(&db, &["search", "登录", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 1);
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
     // 2 字符英文走 LIKE 兜底
     add_issue(&db, "fix auth bug");
     let v = run_json(&db, &["search", "au", "--json"]);
-    assert!(!v.as_array().unwrap().is_empty());
+    assert!(!v["items"].as_array().unwrap().is_empty());
 }
 
 /// search：空查询报错。
@@ -669,14 +668,14 @@ fn st_edit_triggers_fts() {
     );
     assert_eq!(
         run_json(&db, &["search", "newkeyword", "--json"])
-            .as_array()
+            ["items"].as_array()
             .unwrap()
             .len(),
         1
     );
     assert_eq!(
         run_json(&db, &["search", "oldkeyword", "--json"])
-            .as_array()
+            ["items"].as_array()
             .unwrap()
             .len(),
         0
@@ -748,8 +747,8 @@ fn st_roadmap_crud() {
     );
 
     let v = run_json(&db, &["roadmap", "list", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 2);
-    assert_eq!(v[0]["issue_count"], 0);
+    assert_eq!(v["items"].as_array().unwrap().len(), 2);
+    assert_eq!(v["items"][0]["issue_count"], 0);
 
     // 直接挂两个 issue 后 show 聚合
     let i1 = add_issue(&db, "a");
@@ -1241,10 +1240,10 @@ fn st_list_alias_short_a() {
     advance_to_done(&db, id);
     // 默认不含 done
     let v = run_json(&db, &["list", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 0);
+    assert_eq!(v["items"].as_array().unwrap().len(), 0);
     // -a 等价 --all
     let v = run_json(&db, &["list", "-a", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 1);
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
 }
 
 /// roadmap version 重复创建冲突（UNIQUE 约束报错）。

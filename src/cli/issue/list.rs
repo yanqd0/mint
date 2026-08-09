@@ -29,9 +29,6 @@ pub struct ListArgs {
     /// Items per page (default 5)
     #[arg(long, default_value = "5")]
     pub page_size: u32,
-    /// Include body in JSON output (omitted by default)
-    #[arg(long)]
-    pub body: bool,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -56,9 +53,6 @@ pub struct SearchArgs {
     /// Items per page (default 5)
     #[arg(long, default_value = "5")]
     pub page_size: u32,
-    /// Include body in JSON output (omitted by default)
-    #[arg(long)]
-    pub body: bool,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -87,23 +81,14 @@ pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Er
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;
-    let total = issues.len();
-    let issues = paginate(issues, l.page, l.page_size);
+    let (issues, total, page) = paginate(issues, l.page, l.page_size);
 
     if l.json {
-        let json: Vec<serde_json::Value> =
-            issues.iter().map(|i| issue_to_json(i, l.body)).collect();
-        println!("{}", serde_json::to_string(&json)?);
+        let items: Vec<serde_json::Value> = issues.iter().map(issue_to_json).collect();
+        println!("{}", paged_json(&items, page, l.page_size, total));
     } else {
         print!("{}", output::format_list(&issues));
-    }
-    if l.page.is_some() {
-        eprintln!(
-            "--- Page {}/{} ({} per page) ---",
-            l.page.unwrap_or(1),
-            total.div_ceil(l.page_size as usize).max(1),
-            l.page_size
-        );
+        print_page_footer(page, l.page_size, total);
     }
     Ok(())
 }
@@ -181,52 +166,69 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;
-    let total = issues.len();
-    let issues = paginate(issues, s.page, s.page_size);
+    let (issues, total, page) = paginate(issues, s.page, s.page_size);
 
     if s.json {
-        let json: Vec<serde_json::Value> =
-            issues.iter().map(|i| issue_to_json(i, s.body)).collect();
-        println!("{}", serde_json::to_string(&json)?);
+        let items: Vec<serde_json::Value> = issues.iter().map(issue_to_json).collect();
+        println!("{}", paged_json(&items, page, s.page_size, total));
     } else {
         print!("{}", output::format_list(&issues));
-    }
-    if s.page.is_some() {
-        eprintln!(
-            "--- Page {}/{} ({} per page) ---",
-            s.page.unwrap_or(1),
-            total.div_ceil(s.page_size as usize).max(1),
-            s.page_size
-        );
+        print_page_footer(page, s.page_size, total);
     }
     Ok(())
 }
 
 /// Rust-side pagination：fetch all → slice。
-pub(crate) fn paginate<T>(items: Vec<T>, page: Option<u32>, page_size: u32) -> Vec<T> {
+/// 返回 (items, total, page, page_size)。
+pub(crate) fn paginate<T>(
+    items: Vec<T>,
+    page: Option<u32>,
+    page_size: u32,
+) -> (Vec<T>, usize, u32) {
     let p = page.unwrap_or(1).max(1);
+    let total = items.len();
     let offset = ((p - 1) * page_size) as usize;
-    if offset >= items.len() {
-        return Vec::new();
+    if offset >= total {
+        return (Vec::new(), total, p);
     }
-    let end = (offset + page_size as usize).min(items.len());
-    items.into_iter().skip(offset).take(end - offset).collect()
+    let end = (offset + page_size as usize).min(total);
+    let page_items = items.into_iter().skip(offset).take(end - offset).collect();
+    (page_items, total, p)
 }
 
-/// JSON 序列化 issue，可选省略 body。
-fn issue_to_json(i: &Issue, include_body: bool) -> serde_json::Value {
-    let mut obj = serde_json::json!({
+/// 构建分页信封 JSON 对象。
+pub(crate) fn paged_json(
+    items: &[serde_json::Value],
+    page: u32,
+    page_size: u32,
+    total: usize,
+) -> serde_json::Value {
+    let pages = total.div_ceil(page_size as usize).max(1);
+    serde_json::json!({
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "pages": pages,
+    })
+}
+
+/// 打印分页脚注（stderr，人体输出）。
+pub(crate) fn print_page_footer(page: u32, page_size: u32, total: usize) {
+    let pages = total.div_ceil(page_size as usize).max(1);
+    eprintln!("--- Page {page}/{pages} ({page_size} per page, {total} total) ---");
+}
+
+/// JSON 序列化 issue（list 视图：永远不包含 body）。
+fn issue_to_json(i: &Issue) -> serde_json::Value {
+    serde_json::json!({
         "id": i.id, "title": i.title, "kind": i.kind, "status": i.status,
         "priority": i.priority, "project_id": i.project_id, "project": i.project,
         "test_cmd": i.test_cmd, "dropped_reason": i.dropped_reason,
         "last_commit_id": i.last_commit_id, "plan_id": i.plan_id,
         "hit_count": i.hit_count, "labels": i.labels, "links": i.links,
         "created_at": i.created_at, "updated_at": i.updated_at,
-    });
-    if include_body {
-        obj["body"] = serde_json::Value::String(i.body.clone().unwrap_or_default());
-    }
-    obj
+    })
 }
 
 pub fn cmd_show(conn: &Connection, s: &ShowArgs) -> Result<(), Error> {

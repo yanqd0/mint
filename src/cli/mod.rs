@@ -423,31 +423,26 @@ pub(crate) fn cmd_container_list(
     a: &ListContainersArgs,
 ) -> Result<(), Error> {
     let items = container::list(conn, kind, a.all)?;
-    let total = items.len();
-    let items = issue::list::paginate(items, a.page, a.page_size);
+    let (items, total, page) = issue::list::paginate(items, a.page, a.page_size);
     if a.json {
-        let json: Vec<serde_json::Value> = items
+        let arr: Vec<serde_json::Value> = items
             .iter()
             .map(|(c, count)| {
                 serde_json::json!({
                     "id": c.id, "title": c.title, "version": c.version,
-                    "body": c.body, "roadmap_id": c.roadmap_id,
-                    "status": c.status, "issue_count": count,
+                    "roadmap_id": c.roadmap_id, "status": c.status,
+                    "issue_count": count,
                     "created_at": c.created_at, "updated_at": c.updated_at,
                 })
             })
             .collect();
-        println!("{}", serde_json::to_string(&json)?);
+        println!(
+            "{}",
+            issue::list::paged_json(&arr, page, a.page_size, total)
+        );
     } else {
         print!("{}", output::format_container_list(&items));
-    }
-    if a.page.is_some() {
-        eprintln!(
-            "--- Page {}/{} ({} per page) ---",
-            a.page.unwrap_or(1),
-            total.div_ceil(a.page_size as usize).max(1),
-            a.page_size
-        );
+        issue::list::print_page_footer(page, a.page_size, total);
     }
     Ok(())
 }
@@ -510,23 +505,28 @@ pub(crate) fn kind_noun(kind: ContainerKind) -> &'static str {
 /// label list：列出所有 label（含关联 issue 数）。
 fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
     let labels = crate::label::list(conn)?;
-    let total = labels.len();
-    let labels = issue::list::paginate(labels, l.page, l.page_size);
+    let (labels, total, page) = issue::list::paginate(labels, l.page, l.page_size);
     if l.json {
-        println!("{}", serde_json::to_string(&labels)?);
+        let arr: Vec<serde_json::Value> = labels
+            .iter()
+            .map(|(t, count)| {
+                serde_json::json!({
+                    "id": t.id, "name": t.name, "description": t.description,
+                    "issue_count": count,
+                    "created_at": t.created_at, "updated_at": t.updated_at,
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            issue::list::paged_json(&arr, page, l.page_size, total)
+        );
     } else {
         for (t, count) in &labels {
             let desc = t.description.as_deref().unwrap_or("");
             println!("{:<16} {:>5} issues  {}", t.name, count, desc);
         }
-    }
-    if l.page.is_some() {
-        eprintln!(
-            "--- Page {}/{} ({} per page) ---",
-            l.page.unwrap_or(1),
-            total.div_ceil(l.page_size as usize).max(1),
-            l.page_size
-        );
+        issue::list::print_page_footer(page, l.page_size, total);
     }
     Ok(())
 }
