@@ -10,7 +10,16 @@ use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{container_status_color, mini_bar};
 use crate::tui::panel::{render_panel, stack};
 
-/// Milestones tab：全部 milestone 列表（每行状态点 + id + version + 标题）。
+/// 某 milestone 下 plan 聚合的 issue 数（直属 issue 因 snapshot 无直属关系暂不计，见 #105 TODO）。
+fn milestone_issue_count(m: &DashboardModel, mid: i64) -> usize {
+    let plan_ids: Vec<i64> = m.milestone_plans(mid).iter().map(|(c, _)| c.id).collect();
+    m.issues
+        .iter()
+        .filter(|i| i.plan_id.is_some_and(|p| plan_ids.contains(&p)))
+        .count()
+}
+
+/// Milestones tab：全部 milestone 列表（每行状态点 + id + version + 标题 + plan/issue 数）。
 pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
     for (idx, (ms, _)) in m.page_milestones().iter().enumerate() {
@@ -21,11 +30,14 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
             Style::new()
         };
         let ver = ms.version.as_deref().unwrap_or("");
+        let plan_count = m.milestone_plans(ms.id).len();
+        let issue_count = milestone_issue_count(m, ms.id);
         lines.push(Line::from(vec![
             Span::styled("● ", container_status_color(ms.status)),
             Span::styled(format!("#{:<3}", ms.id), style),
             Span::styled(format!(" {ver:<8}"), style),
             Span::styled(format!("  {}", ms.title), style),
+            Span::styled(format!("  plans {plan_count} · issues {issue_count}"), style),
         ]));
     }
     if lines.is_empty() {
@@ -108,6 +120,8 @@ mod tests {
         assert!(text.contains("milestones"), "标题: {text}");
         assert!(text.contains("0.4.0"), "version: {text}");
         assert!(text.contains("TUI"), "标题: {text}");
+        assert!(text.contains("plans 0"), "plan 计数: {text}");
+        assert!(text.contains("issues 0"), "issue 计数: {text}");
     }
 
     #[test]
