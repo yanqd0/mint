@@ -12,6 +12,7 @@
 - `mint tui` 大屏展示：自动变化 issue/plan/milestone 面板，进度条（open 率）+ 状态点（● 黄/绿闪/绿/白/红）；plan 执行中自动切 plan 面板、结束短暂切所属 milestone 面板再回 issue；Enter 查看 issue 详情 / milestone 面板查看其下 plan 行进度；Tab/p 手动循环全部面板。TTY 每秒自动刷新，非 TTY 输出快照文本。
 - `mint tui` 界面重构（plan #20）：6 页面（Issues/Plans/Milestones 3 tab + Issue/Plan/Milestone 3 详情），顶部 Tabs（1/2/3/Tab 切换）、Panel 圆角组件、plan 详情 kanban（6 态分列）、plans 按 milestone 分组；自动切换加空闲约束（用户操作 ≥5s 且两次切换间隔 ≥5s）。页面与 `src/tui/dashboard/pages/` 子模块一一对应。
 - `mint tui` UI 打磨（plan #21）：最外框嵌入项目名、Tabs 立体高亮（【1. Issues】格式）、panel 与边界 padding；issue 列表表头 + 标签（定长省略）+ 状态着色收敛（仅状态点/状态文本）+ 页码总量；detail 页底部操作提示；进度条配色反转（完成=高亮）；milestone 快捷键 m；milestones 行加 plan/issue 计数；kanban 占比调整（固定 10 行省略）。
+- `mint tui` 自动跳转重构（plan #22）：事件驱动的双 queue 管道（事件→queue1→合并器[延迟1s同类聚合]→queue2[限5挤队首]→执行器[空闲≥5s & 间隔≥5s]→UI）；新增 issue/plan/milestone 跳列表+详情（变化内容闪烁 2s）；issue 状态变化跳对应 plan；plan 结束跳所属 milestone；60s 空闲回首页。`jump/` 子模块（parse/merge/exec/home）。
 
 ### Others
 
