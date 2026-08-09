@@ -6,6 +6,7 @@ use crate::cli::issue::list::{fill_labels, issue_from_row};
 use crate::container::{self, ContainerKind};
 use crate::db;
 use crate::error::Error;
+use crate::link;
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::diff::DashboardSnapshot;
 
@@ -24,6 +25,10 @@ pub fn load_snapshot(conn: &Connection, project: &str) -> Result<DashboardSnapsh
     )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
     fill_labels(conn, &mut issues)?;
+    // 补 links（出向 + 入向反向派生），供详情页 links 列表与 diff 使用。
+    for i in issues.iter_mut() {
+        i.links = link::links_for(conn, i.id)?;
+    }
     let plans = container::list(conn, ContainerKind::Plan, true)?;
     let milestones = container::list(conn, ContainerKind::Milestone, true)?;
     Ok(DashboardSnapshot {
@@ -95,5 +100,37 @@ mod tests {
         let snap = load_snapshot(&conn, "mint").unwrap();
         assert!(snap.issues.is_empty());
         assert!(snap.plans.is_empty());
+    }
+
+    #[test]
+    fn snapshot_fills_issue_links() {
+        let conn = db();
+        conn.execute(
+            "INSERT INTO issues (title, kind, status, priority, project_id)
+             VALUES ('a', 'problem', 'open', 3, 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO issues (title, kind, status, priority, project_id)
+             VALUES ('b', 'problem', 'open', 3, 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO issue_links (from_id, type, to_id) VALUES (1, 'related', 2)",
+            [],
+        )
+        .unwrap();
+        let snap = load_snapshot(&conn, "mint").unwrap();
+        let a = snap.issue(1).unwrap();
+        assert_eq!(a.links.len(), 1);
+        assert_eq!(a.links[0].other_id, 2);
+        assert_eq!(a.links[0].rel, "related");
+        // 入向反向派生：issue 2 也聚合到 link（related 对称，rel 仍为 related）。
+        let b = snap.issue(2).unwrap();
+        assert_eq!(b.links.len(), 1);
+        assert_eq!(b.links[0].other_id, 1);
+        assert_eq!(b.links[0].rel, "related");
     }
 }
