@@ -45,7 +45,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
             let bar = mini_bar(done, total, 20);
             lines.push(Line::from(vec![
                 Span::styled(format!("#{:<3}", plan.id), style),
-                Span::styled(format!("{bar}"), style),
+                Span::styled(bar, style),
                 Span::styled(format!(" {done}/{total}  {}", plan.title), style),
             ]));
         }
