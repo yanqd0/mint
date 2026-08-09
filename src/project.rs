@@ -45,18 +45,123 @@ fn dir_basename(cwd: &Path) -> Option<String> {
 }
 
 /// 确保 project 存在，返回其 id。不存在则自动注册（name/git/abs_dir）。
+/// 已存在时，新 git/abs_dir 追加到已有 CSV 列表。
 pub fn ensure(conn: &Connection, name: &str, cwd: &Path) -> Result<i64, Error> {
-    // 已有则直接返回（仅「不存在」走注册；其他错误向上传播，不吞）
-    if let Some(id) = query_id(conn, name)? {
-        return Ok(id);
-    }
     let git = git_repo_url(cwd);
     let abs_dir = std::fs::canonicalize(cwd)
         .ok()
         .map(|p| p.to_string_lossy().into_owned());
-    conn.execute(db::PROJECT_INSERT, params![name, git, abs_dir])?;
+
+    if let Some(id) = query_id(conn, name)? {
+        // 已存在：检查新 git/abs_dir 是否已在 CSV 中，不在则追加
+        if let Some(ref new_git) = git {
+            append_csv(conn, id, "git", new_git)?;
+        }
+        if let Some(ref new_dir) = abs_dir {
+            append_csv(conn, id, "abs_dir", new_dir)?;
+        }
+        return Ok(id);
+    }
+    conn.execute(
+        db::PROJECT_INSERT,
+        params![name, None::<&str>, git, abs_dir],
+    )?;
     query_id(conn, name)?
         .ok_or_else(|| Error::Other(format!("project '{name}' just inserted but not found")))
+}
+
+/// 追加值到 CSV 字段（不存在时追加，逗号分隔）。
+fn append_csv(conn: &Connection, id: i64, col: &str, value: &str) -> Result<(), Error> {
+    let current: String = conn
+        .query_row(
+            &format!("SELECT {col} FROM projects WHERE id = ?1"),
+            params![id],
+            |r| r.get(0),
+        )
+        .unwrap_or_default();
+    let current = current.trim();
+    if current.is_empty() {
+        conn.execute(
+            &format!("UPDATE projects SET {col} = ?2, updated_at = datetime('now') WHERE id = ?1"),
+            params![id, value],
+        )?;
+    } else if !current.split(',').any(|s| s.trim() == value) {
+        let merged = format!("{current},{value}");
+        conn.execute(
+            &format!("UPDATE projects SET {col} = ?2, updated_at = datetime('now') WHERE id = ?1"),
+            params![id, merged],
+        )?;
+    }
+    Ok(())
+}
+
+/// 显式创建 project（name + 可选 description/git/abs_dir）。
+pub fn create(
+    conn: &Connection,
+    name: &str,
+    description: Option<&str>,
+    git: Option<&str>,
+    abs_dir: Option<&str>,
+) -> Result<i64, Error> {
+    conn.execute(db::PROJECT_INSERT, params![name, description, git, abs_dir])?;
+    query_id(conn, name)?
+        .ok_or_else(|| Error::Other(format!("project '{name}' just inserted but not found")))
+}
+
+/// 查询单条 project（按 id）。
+pub fn get(conn: &Connection, id: i64) -> Result<Option<Project>, Error> {
+    conn.query_row(db::PROJECT_SELECT, params![id], |r| {
+        Ok(Project {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            description: r.get(2)?,
+            git: r.get(3)?,
+            abs_dir: r.get(4)?,
+            created_at: r.get(5)?,
+            updated_at: r.get(6)?,
+        })
+    })
+    .optional()
+    .map_err(Error::from)
+}
+
+/// 更新 project 字段（COALESCE）。
+pub fn update(
+    conn: &Connection,
+    id: i64,
+    name: Option<&str>,
+    description: Option<&str>,
+    git: Option<&str>,
+    abs_dir: Option<&str>,
+) -> Result<(), Error> {
+    let affected = conn.execute(
+        db::PROJECT_UPDATE,
+        params![id, name, description, git, abs_dir],
+    )?;
+    if affected == 0 {
+        return Err(Error::Other(format!("project #{id} not found")));
+    }
+    Ok(())
+}
+
+/// 查询 project 下的 issue 数量。
+pub fn issue_count(conn: &Connection, id: i64) -> Result<i64, Error> {
+    conn.query_row(db::PROJECT_ISSUE_COUNT, params![id], |r| r.get(0))
+        .map_err(Error::from)
+}
+
+/// 删除 project（无 issue 关联时允许）。
+pub fn delete(conn: &Connection, name: &str) -> Result<(), Error> {
+    let id =
+        query_id(conn, name)?.ok_or_else(|| Error::Other(format!("project '{name}' not found")))?;
+    let count = issue_count(conn, id)?;
+    if count > 0 {
+        return Err(Error::Other(format!(
+            "project '{name}' has {count} issue(s); reassign or delete them first"
+        )));
+    }
+    conn.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
+    Ok(())
 }
 
 /// 查询 project 的 id（不存在返回 None）。

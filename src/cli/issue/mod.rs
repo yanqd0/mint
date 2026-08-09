@@ -46,10 +46,15 @@ pub enum IssueCmd {
 }
 
 /// Issue 命令分发。
-pub fn dispatch(conn: &mut Connection, cwd: &Path, cmd: &IssueCmd) -> Result<(), Error> {
+pub fn dispatch(
+    conn: &mut Connection,
+    cwd: &Path,
+    project: &str,
+    cmd: &IssueCmd,
+) -> Result<(), Error> {
     match cmd {
-        IssueCmd::Add(a) => add::cmd_add(conn, cwd, a),
-        IssueCmd::List(l) => list::cmd_list(conn, l),
+        IssueCmd::Add(a) => add::cmd_add(conn, cwd, project, a),
+        IssueCmd::List(l) => list::cmd_list(conn, project, l),
         IssueCmd::Show(s) => list::cmd_show(conn, s),
         IssueCmd::Get(g) => set_get::cmd_get(conn, g),
         IssueCmd::Set(s) => set_get::cmd_set(conn, s),

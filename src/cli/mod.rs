@@ -12,6 +12,7 @@ use crate::output;
 pub mod delete;
 pub mod issue;
 pub mod plan;
+pub mod project;
 pub mod roadmap;
 
 use issue::IssueArgs;
@@ -132,6 +133,88 @@ pub struct RoadmapSetArgs {
 }
 
 #[derive(clap::Args)]
+pub struct ProjectArgs {
+    #[command(subcommand)]
+    pub(crate) command: ProjectCmd,
+}
+
+#[derive(Subcommand)]
+pub enum ProjectCmd {
+    /// Create a new project
+    Create(ProjectCreateArgs),
+    /// List all projects
+    List(ProjectListArgs),
+    /// Show a project's details
+    Show(ProjectIdArgs),
+    /// Get a single field (bare output; --json for structured)
+    Get(ProjectGetArgs),
+    /// Set fields: --name / --description / --git / --abs-dir
+    Set(ProjectSetArgs),
+}
+
+#[derive(clap::Args)]
+pub struct ProjectCreateArgs {
+    pub name: String,
+    /// Optional description
+    #[arg(long)]
+    pub description: Option<String>,
+    /// Git remote URLs (comma-separated)
+    #[arg(long)]
+    pub git: Option<String>,
+    /// Absolute directory paths (comma-separated)
+    #[arg(long)]
+    pub abs_dir: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Args)]
+pub struct ProjectListArgs {
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Args)]
+pub struct ProjectIdArgs {
+    pub id: i64,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Args)]
+pub struct ProjectGetArgs {
+    pub id: i64,
+    /// Field: name, description, git, abs_dir, created_at, updated_at
+    pub field: String,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Args)]
+pub struct ProjectSetArgs {
+    pub id: i64,
+    /// New name (omit to keep; empty rejected)
+    #[arg(long)]
+    pub name: Option<String>,
+    /// New description (omit to keep; empty string clears)
+    #[arg(long)]
+    pub description: Option<String>,
+    /// Git URLs (comma-separated, replaces)
+    #[arg(long)]
+    pub git: Option<String>,
+    /// Abs dirs (comma-separated, replaces)
+    #[arg(long)]
+    pub abs_dir: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Args)]
 pub struct ListLabelsArgs {
     /// Show all (kept for uniform --all-states/-a; no state dimension)
     #[arg(long = "all-states", short = 'a')]
@@ -154,11 +237,11 @@ pub struct ListLabelsArgs {
 #[command(name = "mint", version, about = "Minimal Issue & Needs Tracker")]
 pub struct Cli {
     /// Override DB path (default: $XDG_DATA_HOME/mint/mint.db)
-    #[arg(long, global = true, env = "MINT_DB_PATH")]
+    #[arg(long, env = "MINT_DB_PATH")]
     db: Option<PathBuf>,
 
     /// Project context (default: git repo name → dir name; use --project to specify)
-    #[arg(short = 'p', long, global = true)]
+    #[arg(short = 'p', long, env = "MINT_PROJECT")]
     project: Option<String>,
 
     #[command(subcommand)]
@@ -177,6 +260,8 @@ pub enum Commands {
     Search(SearchArgs),
     /// Label subcommands
     Label(LabelArgs),
+    /// Project subcommands
+    Project(ProjectArgs),
     /// Roadmap container subcommands
     Roadmap(RoadmapArgs),
     /// Plan container subcommands
@@ -261,6 +346,8 @@ pub enum DeleteCmd {
     Roadmap(ContainerIdArgs),
     /// Delete a label by name (clears its issue associations; DANGEROUS)
     Label(DeleteLabelArgs),
+    /// Delete a project by name (refuse if issues exist; DANGEROUS)
+    Project(DeleteLabelArgs),
 }
 
 #[derive(clap::Args)]
@@ -280,19 +367,34 @@ impl Cli {
         let cwd = std::env::current_dir()?;
         let path = self.db_path();
         let mut conn = crate::db::open(&path)?;
+        let project = self.resolve_project(&cwd, &conn)?;
 
         match &self.command {
-            Commands::Issue(i) => issue::dispatch(&mut conn, &cwd, &i.command),
-            Commands::List(l) => issue::list::cmd_list(&conn, l),
+            Commands::Issue(i) => issue::dispatch(&mut conn, &cwd, &project, &i.command),
+            Commands::List(l) => issue::list::cmd_list(&conn, &project, l),
             Commands::Show(s) => issue::list::cmd_show(&conn, s),
-            Commands::Search(s) => issue::list::cmd_search(&conn, s),
+            Commands::Search(s) => issue::list::cmd_search(&conn, &project, s),
             Commands::Label(t) => match &t.command {
                 LabelCmd::List(l) => cmd_label_list(&conn, l),
             },
+            Commands::Project(p) => project::dispatch(&conn, &p.command),
             Commands::Roadmap(r) => roadmap::dispatch(&conn, &r.command),
             Commands::Plan(p) => plan::dispatch(&conn, &p.command),
             Commands::Delete(d) => delete::dispatch(&conn, &d.command),
         }
+    }
+
+    fn resolve_project(&self, cwd: &std::path::Path, conn: &Connection) -> Result<String, Error> {
+        let name = self
+            .project
+            .clone()
+            .unwrap_or_else(|| crate::project::detect_name(cwd, None));
+        if name.trim().is_empty() {
+            return Err(Error::Other("--project must not be empty".to_string()));
+        }
+        // 统一走 ensure：不存在则自动注册（幂等）
+        crate::project::ensure(conn, &name, cwd)?;
+        Ok(name)
     }
 
     /// 数据库路径：MINT_DB_PATH > $XDG_DATA_HOME/mint/mint.db

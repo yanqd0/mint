@@ -42,5 +42,17 @@ pub fn dispatch(conn: &Connection, cmd: &super::DeleteCmd) -> Result<(), Error> 
             }
             Ok(())
         }
+        super::DeleteCmd::Project(a) => {
+            crate::project::delete(conn, &a.name)?;
+            if a.json {
+                println!(
+                    "{}",
+                    serde_json::json!({ "deleted": a.name, "kind": "project" })
+                );
+            } else {
+                println!("Deleted project '{}'", a.name);
+            }
+            Ok(())
+        }
     }
 }

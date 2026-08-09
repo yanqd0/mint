@@ -31,7 +31,10 @@ pub const ISSUE_LINKS_FOR: &str = include_str!("queries/issue_links_for.sql");
 
 pub const PROJECT_INSERT: &str = include_str!("queries/project_insert.sql");
 pub const PROJECT_SELECT_ID: &str = include_str!("queries/project_select_id.sql");
+pub const PROJECT_SELECT: &str = include_str!("queries/project_select.sql");
+pub const PROJECT_UPDATE: &str = include_str!("queries/project_update.sql");
 pub const PROJECT_LIST: &str = include_str!("queries/project_list.sql");
+pub const PROJECT_ISSUE_COUNT: &str = include_str!("queries/project_issue_count.sql");
 
 pub const LABEL_INSERT: &str = include_str!("queries/label_insert.sql");
 pub const LABEL_SELECT_ID: &str = include_str!("queries/label_select_id.sql");

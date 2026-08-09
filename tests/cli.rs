@@ -171,7 +171,7 @@ fn st_add_rejects_empty_title_and_project() {
         stderr.contains("title must not be empty"),
         "stderr: {stderr}"
     );
-    let stderr = run_fail(&db, &["issue", "add", "ok", "--project", ""]);
+    let stderr = run_fail(&db, &["--project", "", "issue", "add", "ok"]);
     assert!(
         stderr.contains("--project must not be empty"),
         "stderr: {stderr}"
@@ -213,26 +213,32 @@ fn st_list_filters() {
     run_json(
         &db,
         &[
+            "--project",
+            "p1",
             "issue",
             "add",
             "with-bug",
-            "--project",
-            "p1",
             "--label",
             "bug:缺陷",
             "--json",
         ],
     );
-    run_json(&db, &["issue", "add", "plain", "--project", "p1", "--json"]);
+    run_json(&db, &["--project", "p1", "issue", "add", "plain", "--json"]);
 
-    let v = run_json(&db, &["list", "--label", "bug", "--json"]);
+    let v = run_json(
+        &db,
+        &["--project", "p1", "list", "--label", "bug", "--json"],
+    );
     assert_eq!(v.as_array().unwrap().len(), 1);
     assert_eq!(v[0]["title"], "with-bug");
 
-    let v = run_json(&db, &["list", "--project", "p1", "--json"]);
+    let v = run_json(&db, &["--project", "p1", "list", "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 2);
 
-    let v = run_json(&db, &["list", "--status", "open", "--json"]);
+    let v = run_json(
+        &db,
+        &["--project", "p1", "list", "--status", "open", "--json"],
+    );
     assert_eq!(v.as_array().unwrap().len(), 2);
 }
 
@@ -332,17 +338,26 @@ fn st_add_different_project_no_merge() {
     let (_dir, db) = empty_db();
     let a = run_json(
         &db,
-        &["issue", "add", "fix login", "--project", "proj-a", "--json"],
+        &["--project", "proj-a", "issue", "add", "fix login", "--json"],
     );
     let id_a = a["id"].as_i64().unwrap();
     let b = run_json(
         &db,
-        &["issue", "add", "fix login", "--project", "proj-b", "--json"],
+        &["--project", "proj-b", "issue", "add", "fix login", "--json"],
     );
     let id_b = b["id"].as_i64().unwrap();
     assert_ne!(id_a, id_b, "不同 project 不应合并");
-    let v = run_json(&db, &["list", "--all-states", "--json"]);
-    assert_eq!(v.as_array().unwrap().len(), 2);
+    // list 只列当前 project（auto-detected），跨 project 的 issue 各自在 --project 下列出
+    let v = run_json(
+        &db,
+        &["--project", "proj-a", "list", "--all-states", "--json"],
+    );
+    assert_eq!(v.as_array().unwrap().len(), 1);
+    let v = run_json(
+        &db,
+        &["--project", "proj-b", "list", "--all-states", "--json"],
+    );
+    assert_eq!(v.as_array().unwrap().len(), 1);
 }
 
 /// 去重：JSON merge 输出字段齐全（merged/id/title/project/kind/status）。
@@ -441,11 +456,11 @@ fn st_search_filters() {
     run_json(
         &db,
         &[
+            "--project",
+            "proj-a",
             "issue",
             "add",
             "filter target",
-            "--project",
-            "proj-a",
             "--label",
             "dev",
             "--json",
@@ -453,7 +468,7 @@ fn st_search_filters() {
     );
     // project 过滤：proj-b 不含
     assert_eq!(
-        run_json(&db, &["search", "filter", "--project", "proj-b", "--json"])
+        run_json(&db, &["--project", "proj-b", "search", "filter", "--json"])
             .as_array()
             .unwrap()
             .len(),
@@ -461,10 +476,21 @@ fn st_search_filters() {
     );
     // label 过滤
     assert_eq!(
-        run_json(&db, &["search", "filter", "--label", "dev", "--json"])
-            .as_array()
-            .unwrap()
-            .len(),
+        run_json(
+            &db,
+            &[
+                "--project",
+                "proj-a",
+                "search",
+                "filter",
+                "--label",
+                "dev",
+                "--json"
+            ]
+        )
+        .as_array()
+        .unwrap()
+        .len(),
         1
     );
     assert_eq!(
@@ -476,17 +502,39 @@ fn st_search_filters() {
     );
     // status 过滤：open 命中、done 不命中
     assert_eq!(
-        run_json(&db, &["search", "filter", "--status", "open", "--json"])
-            .as_array()
-            .unwrap()
-            .len(),
+        run_json(
+            &db,
+            &[
+                "--project",
+                "proj-a",
+                "search",
+                "filter",
+                "--status",
+                "open",
+                "--json"
+            ]
+        )
+        .as_array()
+        .unwrap()
+        .len(),
         1
     );
     assert_eq!(
-        run_json(&db, &["search", "filter", "--status", "done", "--json"])
-            .as_array()
-            .unwrap()
-            .len(),
+        run_json(
+            &db,
+            &[
+                "--project",
+                "proj-a",
+                "search",
+                "filter",
+                "--status",
+                "done",
+                "--json"
+            ]
+        )
+        .as_array()
+        .unwrap()
+        .len(),
         0
     );
 }
@@ -680,7 +728,7 @@ fn st_project_autodetect_explicit() {
     let (_dir, db) = empty_db();
     let v = run_json(
         &db,
-        &["issue", "add", "explicit", "--project", "mint", "--json"],
+        &["--project", "mint", "issue", "add", "explicit", "--json"],
     );
     assert_eq!(v["project"], "mint");
 }

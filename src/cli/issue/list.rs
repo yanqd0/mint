@@ -23,9 +23,6 @@ pub struct ListArgs {
     /// Filter by label name
     #[arg(long)]
     pub label: Option<String>,
-    /// Filter by project name
-    #[arg(long)]
-    pub project: Option<String>,
     /// Page number (1-based, requires --page-size)
     #[arg(long)]
     pub page: Option<u32>,
@@ -44,9 +41,6 @@ pub struct ListArgs {
 pub struct SearchArgs {
     /// FTS5 query (trigram tokenizer, at least 3 characters; ≤2 chars falls back to LIKE)
     pub query: String,
-    /// Filter by project name
-    #[arg(long)]
-    pub project: Option<String>,
     /// Filter by label name
     #[arg(long)]
     pub label: Option<String>,
@@ -78,11 +72,11 @@ pub struct ShowArgs {
     pub json: bool,
 }
 
-pub fn cmd_list(conn: &Connection, l: &ListArgs) -> Result<(), Error> {
+pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Error> {
     let all: i64 = if l.all { 1 } else { 0 };
     let status = l.status;
     let label: Option<&str> = l.label.as_deref();
-    let project: Option<&str> = l.project.as_deref();
+    let project: Option<&str> = Some(project);
     let priority = l.priority;
 
     let mut stmt = conn.prepare(db::ISSUE_LIST)?;
@@ -146,12 +140,12 @@ pub fn fill_labels(conn: &Connection, issues: &mut [Issue]) -> Result<(), Error>
 }
 
 /// 全文搜索（FTS5 trigram + LIKE 兜底）：≥3 字符走 MATCH，≤2 字符降级 LIKE。
-pub fn cmd_search(conn: &Connection, s: &SearchArgs) -> Result<(), Error> {
+pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<(), Error> {
     let q = s.query.trim();
     if q.is_empty() {
         return Err(Error::Other("search query must not be empty".to_string()));
     }
-    let project: Option<&str> = s.project.as_deref();
+    let project: Option<&str> = Some(project);
     let label: Option<&str> = s.label.as_deref();
     let status = s.status;
     let priority = s.priority;

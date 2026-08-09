@@ -1,4 +1,4 @@
-//! Issue 创建（add）命令：去重、label 关联、project 自动检测。
+//! Issue 创建（add）命令：去重、label 关联。
 
 use std::path::Path;
 
@@ -23,9 +23,6 @@ pub struct AddArgs {
     /// Priority: 0 (highest) to 3 (lowest, default)
     #[arg(long, default_value = "3", value_parser = clap::value_parser!(i64).range(0..=3))]
     pub priority: i64,
-    /// Project name (default: auto-detect from git/dir)
-    #[arg(long)]
-    pub project: Option<String>,
     /// Labels: 'name' or 'name:desc', comma-separated
     #[arg(long)]
     pub label: Vec<String>,
@@ -34,21 +31,22 @@ pub struct AddArgs {
     pub json: bool,
 }
 
-pub fn cmd_add(conn: &mut Connection, cwd: &Path, a: &AddArgs) -> Result<(), Error> {
+pub fn cmd_add(
+    conn: &mut Connection,
+    cwd: &Path,
+    project_name: &str,
+    a: &AddArgs,
+) -> Result<(), Error> {
     if a.title.trim().is_empty() {
         return Err(Error::Other("title must not be empty".to_string()));
     }
-    if a.project.as_deref().is_some_and(|p| p.trim().is_empty()) {
-        return Err(Error::Other("--project must not be empty".to_string()));
-    }
-    let pname = project::detect_name(cwd, a.project.as_deref());
 
     let kind = a.kind;
     let status = crate::models::Status::Open;
     let test_cmd: Option<&str> = None;
 
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-    let pid = project::ensure(&tx, &pname, cwd)?;
+    let pid = project::ensure(&tx, project_name, cwd)?;
 
     let cands = load_dup_candidates(&tx, pid)?;
     if let Some(hit) = dedup::find_duplicate(&a.title, &cands) {
@@ -58,7 +56,7 @@ pub fn cmd_add(conn: &mut Connection, cwd: &Path, a: &AddArgs) -> Result<(), Err
             label::attach(&tx, hit.id, &specs)?;
         }
         tx.commit()?;
-        print_merge(a, &pname, hit)?;
+        print_merge(a, project_name, hit)?;
         return Ok(());
     }
 
@@ -86,13 +84,13 @@ pub fn cmd_add(conn: &mut Connection, cwd: &Path, a: &AddArgs) -> Result<(), Err
         println!(
             "{}",
             serde_json::to_string(&serde_json::json!({
-                "id": id, "title": a.title.trim(), "project": pname,
+                "id": id, "title": a.title.trim(), "project": project_name,
                 "kind": kind, "status": status,
             }))?
         );
     } else {
         println!(
-            "Created issue #{id} ({}) in project '{pname}'",
+            "Created issue #{id} ({}) in project '{project_name}'",
             a.title.trim()
         );
     }
