@@ -9,10 +9,13 @@ use crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::layout::Constraint;
+use rusqlite::Connection;
 
 use crate::error::Error;
 use crate::tui::model::ListModel;
 
+pub mod dashboard_data;
+pub mod dashboard_diff;
 pub mod draw;
 pub mod model;
 
@@ -36,6 +39,15 @@ fn to_keycode(e: Event) -> Option<KeyCode> {
         Event::Key(k) if k.kind == KeyEventKind::Press => Some(k.code),
         _ => None,
     }
+}
+
+/// dashboard 大屏展示（M1 雏形：打印全量快照；M2 完善自动刷新循环）。
+pub fn run_dashboard(conn: &Connection) -> Result<(), Error> {
+    let snap = dashboard_data::load_snapshot(conn)?;
+    for i in &snap.issues {
+        println!("#{} {} {}", i.id, i.status.as_str(), i.title);
+    }
+    Ok(())
 }
 
 /// 启动 list 表格浏览：TTY 交互，非 TTY 单页文本输出。

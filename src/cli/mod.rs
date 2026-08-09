@@ -274,6 +274,8 @@ pub enum Commands {
     Roadmap(RoadmapArgs),
     /// Plan container subcommands
     Plan(PlanArgs),
+    /// Live dashboard: auto-refreshing issue/plan activity feed (TTY) or snapshot (non-TTY)
+    Tui,
     /// Delete data (DANGEROUS: permanent). Prefer `issue state drop` for issues
     Delete(DeleteArgs),
 }
@@ -389,6 +391,7 @@ impl Cli {
             Commands::Roadmap(r) => roadmap::dispatch(&conn, &r.command),
             Commands::Plan(p) => plan::dispatch(&conn, &p.command),
             Commands::Delete(d) => delete::dispatch(&conn, &d.command),
+            Commands::Tui => crate::tui::run_dashboard(&conn),
         }
     }
 

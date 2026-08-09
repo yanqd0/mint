@@ -1,0 +1,299 @@
+//! dashboard 全量快照 + 变化 diff（纯函数，无 ratatui 依赖，可独立单测）。
+
+use std::collections::{HashMap, HashSet};
+
+use crate::models::{Container, ContainerStatus, Issue, Status};
+
+/// 一次全量快照（dashboard 每 tick 拉取：全部 issue + 全部 plan，无 roadmap）。
+pub struct DashboardSnapshot {
+    pub issues: Vec<Issue>,
+    pub plans: Vec<(Container, i64)>,
+}
+
+impl DashboardSnapshot {
+    pub fn issue(&self, id: i64) -> Option<&Issue> {
+        self.issues.iter().find(|i| i.id == id)
+    }
+    pub fn plan(&self, id: i64) -> Option<&(Container, i64)> {
+        self.plans.iter().find(|(c, _)| c.id == id)
+    }
+}
+
+/// 会话内变化事件（由两轮快照 diff 产生）。
+#[derive(Debug, Clone)]
+pub enum ChangeEvent {
+    IssueAdded {
+        issue: Issue,
+    },
+    IssueStatusChanged {
+        issue: Issue,
+        from: Status,
+        to: Status,
+    },
+    IssueUpdated {
+        issue: Issue,
+    },
+    IssueRemoved {
+        id: i64,
+        title: String,
+    },
+    PlanAdded {
+        plan: Container,
+        count: i64,
+    },
+    PlanStatusChanged {
+        plan: Container,
+        from: ContainerStatus,
+        to: ContainerStatus,
+    },
+    PlanUpdated {
+        plan: Container,
+    },
+    PlanRemoved {
+        id: i64,
+        title: String,
+    },
+}
+
+impl ChangeEvent {
+    /// 若为 issue 相关事件，返回 issue id。
+    pub fn issue_id(&self) -> Option<i64> {
+        match self {
+            ChangeEvent::IssueAdded { issue }
+            | ChangeEvent::IssueStatusChanged { issue, .. }
+            | ChangeEvent::IssueUpdated { issue } => Some(issue.id),
+            ChangeEvent::IssueRemoved { id, .. } => Some(*id),
+            _ => None,
+        }
+    }
+    /// 若为 plan 相关事件，返回 plan id。
+    pub fn plan_id(&self) -> Option<i64> {
+        match self {
+            ChangeEvent::PlanAdded { plan, .. }
+            | ChangeEvent::PlanStatusChanged { plan, .. }
+            | ChangeEvent::PlanUpdated { plan } => Some(plan.id),
+            ChangeEvent::PlanRemoved { id, .. } => Some(*id),
+            _ => None,
+        }
+    }
+}
+
+/// issue 是否发生非状态字段变化（忽略 hit_count/updated_at/status 噪声）。
+fn issue_fields_changed(a: &Issue, b: &Issue) -> bool {
+    a.title != b.title
+        || a.kind != b.kind
+        || a.priority != b.priority
+        || a.plan_id != b.plan_id
+        || a.body != b.body
+        || a.labels != b.labels
+}
+
+/// 两轮快照 → 变化事件（issues 按 id 升序 → plans 按 id 升序，确定性）。
+pub fn diff_snapshots(prev: &DashboardSnapshot, next: &DashboardSnapshot) -> Vec<ChangeEvent> {
+    let prev_issues: HashMap<i64, &Issue> = prev.issues.iter().map(|i| (i.id, i)).collect();
+    let prev_plans: HashMap<i64, &(Container, i64)> =
+        prev.plans.iter().map(|p| (p.0.id, p)).collect();
+    let mut events = Vec::new();
+
+    for issue in &next.issues {
+        match prev_issues.get(&issue.id) {
+            None => events.push(ChangeEvent::IssueAdded {
+                issue: issue.clone(),
+            }),
+            Some(p) => {
+                if p.status != issue.status {
+                    events.push(ChangeEvent::IssueStatusChanged {
+                        issue: issue.clone(),
+                        from: p.status,
+                        to: issue.status,
+                    });
+                } else if issue_fields_changed(p, issue) {
+                    events.push(ChangeEvent::IssueUpdated {
+                        issue: issue.clone(),
+                    });
+                }
+            }
+        }
+    }
+    let next_ids: HashSet<i64> = next.issues.iter().map(|i| i.id).collect();
+    for (id, p) in &prev_issues {
+        if !next_ids.contains(id) {
+            events.push(ChangeEvent::IssueRemoved {
+                id: *id,
+                title: p.title.clone(),
+            });
+        }
+    }
+
+    for (plan, count) in &next.plans {
+        match prev_plans.get(&plan.id) {
+            None => events.push(ChangeEvent::PlanAdded {
+                plan: plan.clone(),
+                count: *count,
+            }),
+            Some((p, _)) => {
+                if p.status != plan.status {
+                    events.push(ChangeEvent::PlanStatusChanged {
+                        plan: plan.clone(),
+                        from: p.status,
+                        to: plan.status,
+                    });
+                }
+            }
+        }
+    }
+    let next_plan_ids: HashSet<i64> = next.plans.iter().map(|(c, _)| c.id).collect();
+    for (id, (p, _)) in &prev_plans {
+        if !next_plan_ids.contains(id) {
+            events.push(ChangeEvent::PlanRemoved {
+                id: *id,
+                title: p.title.clone(),
+            });
+        }
+    }
+
+    events
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{ContainerStatus, Kind};
+
+    fn mk_issue(id: i64, title: &str, status: Status) -> Issue {
+        Issue {
+            id,
+            title: title.into(),
+            body: None,
+            kind: Kind::Problem,
+            status,
+            priority: 3,
+            project_id: 1,
+            project: Some("mint".into()),
+            test_cmd: None,
+            dropped_reason: None,
+            last_commit_id: None,
+            plan_id: None,
+            hit_count: 0,
+            labels: vec![],
+            links: vec![],
+            created_at: "t".into(),
+            updated_at: "t".into(),
+        }
+    }
+
+    fn mk_container(id: i64, title: &str, status: ContainerStatus) -> Container {
+        Container {
+            id,
+            title: title.into(),
+            version: None,
+            body: None,
+            roadmap_id: None,
+            status,
+            created_at: "t".into(),
+            updated_at: "t".into(),
+        }
+    }
+
+    fn snap(issues: Vec<Issue>, plans: Vec<(Container, i64)>) -> DashboardSnapshot {
+        DashboardSnapshot { issues, plans }
+    }
+
+    #[test]
+    fn empty_to_empty_no_events() {
+        let s = snap(vec![], vec![]);
+        assert!(diff_snapshots(&s, &s).is_empty());
+    }
+
+    #[test]
+    fn issue_added_and_removed() {
+        let prev = snap(vec![], vec![]);
+        let next = snap(vec![mk_issue(1, "hello", Status::Open)], vec![]);
+        let ev = diff_snapshots(&prev, &next);
+        assert_eq!(ev.len(), 1);
+        assert_eq!(ev[0].issue_id(), Some(1));
+        assert!(matches!(ev[0], ChangeEvent::IssueAdded { .. }));
+
+        let ev2 = diff_snapshots(&next, &prev);
+        assert_eq!(ev2.len(), 1);
+        match &ev2[0] {
+            ChangeEvent::IssueRemoved { id, title } => {
+                assert_eq!(*id, 1);
+                assert_eq!(title, "hello");
+            }
+            other => panic!("应 IssueRemoved: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn issue_status_change_reports_from_to() {
+        let prev = snap(vec![mk_issue(1, "a", Status::Open)], vec![]);
+        let next_issue = mk_issue(1, "a", Status::Dev);
+        let next = snap(vec![next_issue.clone()], vec![]);
+        let ev = diff_snapshots(&prev, &next);
+        assert_eq!(ev.len(), 1);
+        match &ev[0] {
+            ChangeEvent::IssueStatusChanged { issue, from, to } => {
+                assert_eq!(issue.id, 1);
+                assert_eq!(*from, Status::Open);
+                assert_eq!(*to, Status::Dev);
+            }
+            other => panic!("应 IssueStatusChanged: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn issue_field_update_ignores_hit_count_and_updated_at() {
+        let prev_issue = mk_issue(1, "a", Status::Open);
+        let mut next_issue = mk_issue(1, "a", Status::Open);
+        next_issue.hit_count = 5;
+        next_issue.updated_at = "later".into();
+        // 仅 hit_count/updated_at 变化 → 无事件
+        assert!(
+            diff_snapshots(
+                &snap(vec![prev_issue.clone()], vec![]),
+                &snap(vec![next_issue.clone()], vec![])
+            )
+            .is_empty()
+        );
+        // title 变化 → IssueUpdated
+        next_issue.title = "changed".into();
+        let ev = diff_snapshots(
+            &snap(vec![prev_issue.clone()], vec![]),
+            &snap(vec![next_issue], vec![]),
+        );
+        assert_eq!(ev.len(), 1);
+        assert!(matches!(ev[0], ChangeEvent::IssueUpdated { .. }));
+    }
+
+    #[test]
+    fn plan_added_and_status_change() {
+        let prev = snap(
+            vec![],
+            vec![(mk_container(1, "p", ContainerStatus::Open), 0)],
+        );
+        let next = snap(
+            vec![],
+            vec![(mk_container(1, "p", ContainerStatus::Running), 2)],
+        );
+        let ev = diff_snapshots(&prev, &next);
+        assert_eq!(ev.len(), 1);
+        match &ev[0] {
+            ChangeEvent::PlanStatusChanged { plan, from, to } => {
+                assert_eq!(plan.id, 1);
+                assert_eq!(*from, ContainerStatus::Open);
+                assert_eq!(*to, ContainerStatus::Running);
+            }
+            other => panic!("应 PlanStatusChanged: {other:?}"),
+        }
+        // 新增 plan
+        let prev2 = snap(vec![], vec![]);
+        let next2 = snap(
+            vec![],
+            vec![(mk_container(2, "p2", ContainerStatus::Open), 1)],
+        );
+        let ev2 = diff_snapshots(&prev2, &next2);
+        assert_eq!(ev2.len(), 1);
+        assert!(matches!(ev2[0], ChangeEvent::PlanAdded { .. }));
+    }
+}
