@@ -5,6 +5,8 @@ pub mod data;
 pub mod diff;
 pub mod draw;
 pub mod model;
+pub mod model_nav;
+pub mod model_view;
 pub mod pages;
 pub mod run;
 pub mod types;
