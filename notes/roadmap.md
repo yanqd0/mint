@@ -2,7 +2,7 @@
 
 > 渐进式交付：每个版本在上一版完整可运行的基础上增量添加功能。
 > 当前状态：0.2.0 已完成（2026-08-08，85 commits）。
-> 版本规划主载体：mint（`roadmaps`/`plans` 表，0.1.0-1.0 共 8 个版本已加载）；本文件双维护、mint 优先。
+> 版本规划主载体：mint（`milestones`/`plans` 表，0.1.0-1.0 共 8 个版本已加载）；本文件双维护、mint 优先。
 
 ## 发布策略
 
@@ -17,7 +17,7 @@
 - **每版不排太多**：宁可多切小版本，保证每版可交付、可运行。
 - **依赖优先**：db/models/state 属底层能力，前移；capture/adapter 依赖 CLI，后置。
 - **schema 一次定全**：状态值域/表结构尽早冻结，避免未来重建表（SQLite 改 CHECK 需重建）。
-- **容器越早越好**：roadmap/plan 两类"容器关联 issue"结构优先于去重/搜索/agent 适配。
+- **容器越早越好**：milestone/plan 两类"容器关联 issue"结构优先于去重/搜索/agent 适配。
 
 ---
 
@@ -40,17 +40,17 @@
 **目标**：issue 之上引入"容器"概念，串联开发链路。
 
 **已交付**：
-- **roadmap 表**：版本规划（关键字段 `version` UNIQUE + body），关联 plan（plans.roadmap_id）与直接挂的 issue（roadmap_direct_issues，二选一）
+- **milestone 表**：版本规划（关键字段 `version` UNIQUE + body），关联 plan（plans.milestone_id）与直接挂的 issue（milestone_direct_issues，二选一）
 - **plan 表**：编程 agent 的执行计划（body 完整 md），关联多个 issue（issues.plan_id）
 - **git commit 关联**：`state commit`（dev→test）必填 `--sha` 写 `issues.last_commit_id`；原 `state stage` 改名合并为 `commit`（删除顶层 commit 子命令）
-- **容器状态 5 态派生**：open/running/partial/dropped/done（open=从未开始/running=曾运行），写后级联同步（issue→plan→roadmap）
+- **容器状态 5 态派生**：open/running/partial/dropped/done（open=从未开始/running=曾运行），写后级联同步（issue→plan→milestone）
 - **issue links**：`related`/`solves`/`duplicates` 带类型多对多关系（单向存 + 反向派生），`mint link create/remove/list`（对应 issue #16）
 - **时区显示修复**：存储 UTC、显示转本地时区（`datetime(col,'localtime')`）（对应 issue #17）
 - **--all/-a 别名**：所有 list 命令统一（对应 issue #18）
 - 轻量迁移重构：migration 有序数组驱动 `PRAGMA user_version` 增量升级；修复旧 v2 库升级时容器表不更新（002 原地改 DDL 致跳迁移）
 - schema v4（8 表）；75 测试全绿（UT + IT + ST），fmt/clippy/sqruff 全过
 
-**验收**：roadmap/plan 能聚合其下 issue；agent 的 plan 可入库管理。
+**验收**：milestone/plan 能聚合其下 issue；agent 的 plan 可入库管理。
 
 ## 0.3.0 — 去重 + 搜索 + 支持 Claude
 
@@ -82,13 +82,13 @@
 - **不做**内联编辑/新建表单（编辑归 CLI）
 
 **已交付**（plan #16 第一步，2026-08-09）：
-- 4 个 list 命令（`mint list`/`issue list`、`plan list`、`roadmap list`、`label list`）加 `--tui`：TTY 下 ratatui 可翻页表格（j/k 或 ↑/↓ 选行、PgUp/PgDn 或 h/l 翻页、q/Esc 退出）；非 TTY 降级输出单页表格文本（不可交互）。
+- 4 个 list 命令（`mint list`/`issue list`、`plan list`、`milestone list`、`label list`）加 `--tui`：TTY 下 ratatui 可翻页表格（j/k 或 ↑/↓ 选行、PgUp/PgDn 或 h/l 翻页、q/Esc 退出）；非 TTY 降级输出单页表格文本（不可交互）。
 - 同一批 list 命令默认输出改 TSV（表头首行 + tab 分隔数据行，token 最优）；`--tsv` 参数移除（默认即 TSV）。
 - 公共代码：分页三件套提升至 `src/cli/list_common.rs`；TUI 渲染分层 `src/tui/`（model 纯状态机/draw/rows）。
 - 依赖：ratatui 0.30 + crossterm 0.29（默认包含）；列宽按 Unicode 显示宽度对齐（中英文混排）。
-- **`mint tui` 大屏展示**（plan #13，2026-08-09）：自动变化 issue/plan 面板，进度条（open 率）+ 状态点（黄=待做、绿闪=开发、绿=在做、白=完成、红=drop）；plan 执行中（有 dev/test issue）自动切 plan 面板、结束切回 issue；Enter 查看 issue 详情。roadmap 面板另建 plan #17 记录（下次单独做）。
+- **`mint tui` 大屏展示**（plan #13，2026-08-09）：自动变化 issue/plan 面板，进度条（open 率）+ 状态点（黄=待做、绿闪=开发、绿=在做、白=完成、红=drop）；plan 执行中（有 dev/test issue）自动切 plan 面板、结束切回 issue；Enter 查看 issue 详情。milestone 面板另建 plan #17 记录（下次单独做）。
 
-**待做**：快捷键状态操作（plan/start/close 等推进，编辑仍归 CLI）、各子命令默认 TUI、roadmap 面板（plan #17）。
+**待做**：快捷键状态操作（plan/start/close 等推进，编辑仍归 CLI）、各子命令默认 TUI、milestone 面板（plan #17）。
 
 **验收**：人工可滚动浏览并按状态推进 issue。
 

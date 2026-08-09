@@ -313,6 +313,20 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D28. roadmap 概念改名 milestone
+
+**背景**：用户评估 "roadmap" 语义不合适。mint 的 roadmap 实际承载"版本节点"（0.4.0/0.5.0 挂 plan+issue），更接近 milestone（里程碑），而非"长期路线图"（roadmap 通常指产品长期规划）。
+
+**决策**：
+- **概念层级**：roadmap（上位抽象，未来跨项目大功能）→ milestone（版本节点/项目进展/git tag）→ plan → issue。
+- **实现层全量改名**：表 `roadmaps`→`milestones`、`roadmap_id`→`milestone_id`、`roadmap_direct_issues`→`milestone_direct_issues`、命令/文案/JSON 全 milestone；005 数据迁移（重建外键引用表 `plans`/`milestone_direct_issues`）。
+- **roadmap 概念在 DDD.md 保留**为上位抽象，现阶段不实现；未来可能成为跨项目组织更大规模开发流程的功能。
+- plugin 触发词收拢 milestone 主词（roadmap 保留为上位概念名）。
+
+**理由**：语义准确（milestone=版本/git tag 节点）；全量改名避免内部残留旧词与 DDD 上位概念混淆；数据迁移遵循增量 migration 哲学。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前

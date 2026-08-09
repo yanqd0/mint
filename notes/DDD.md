@@ -51,8 +51,8 @@ CLI 内联 `--label`（按 clap 框架能力，逗号/重复）；`mint label li
 
 ### Container（容器）
 
-issue/plan 之上的**聚合容器**。`roadmap`（版本方向）与 `plan`（执行计划）构成层级：
-**roadmap → plan（plans.roadmap_id）→ issue（issues.plan_id）**；roadmap 可直接挂无 plan 的 issue（`roadmap_direct_issues`，二选一约束——issue 属 plan 后不能再直接挂 roadmap）。
+issue/plan 之上的**聚合容器**。概念层级：`roadmap`（上位抽象，未来跨项目大功能）→ `milestone`（版本节点）→ `plan`（执行计划）→ `issue`。
+**当前实现**：`milestone → plan（plans.milestone_id）→ issue（issues.plan_id）`；milestone 可直接挂无 plan 的 issue（`milestone_direct_issues`，二选一约束——issue 属 plan 后不能再直接挂 milestone）。
 
 **容器状态 5 态派生**（纯当前态集合推导，不存储为独立语义）：
 
@@ -66,17 +66,21 @@ issue/plan 之上的**聚合容器**。`roadmap`（版本方向）与 `plan`（�
 
 优先级：`running > done > dropped > partial > open`。
 - **plan 状态** ← 其下 issue 状态派生
-- **roadmap 状态** ← 其下 plan 状态 + 直接挂 issue 状态合并派生
+- **milestone 状态** ← 其下 plan 状态 + 直接挂 issue 状态合并派生
 
-**status 列保留但派生同步**：子项状态/归属变更时**写后级联同步**（改 issue → 重算 plan → 重算 roadmap，同一事务）；无单独更新接口，CLI 只读（价值在按状态筛选）。**无 close/drop/reopen 命令**（状态纯派生）。
+**status 列保留但派生同步**：子项状态/归属变更时**写后级联同步**（改 issue → 重算 plan → 重算 milestone，同一事务）；无单独更新接口，CLI 只读（价值在按状态筛选）。**无 close/drop/reopen 命令**（状态纯派生）。
 
-**字段**：roadmaps 有 `version`（UNIQUE，如 0.1.0 或任意用户形式）+ `body`（复杂描述）；plans 有 `body` + `roadmap_id`。
+**字段**：milestones 有 `version`（UNIQUE，如 0.1.0 或任意用户形式）+ `body`（复杂描述）；plans 有 `body` + `milestone_id`。
 
-**CLI 形态**：`mint roadmap create/list/show/issue/detach-issue`；`mint plan create/list/show/issue/detach-issue`。`list` 默认只显非 done，`--all`/`-a` 全列。
+**CLI 形态**：`mint milestone create/list/show/issue/detach-issue`；`mint plan create/list/show/issue/detach-issue`。`list` 默认只显非 done，`--all`/`-a` 全列。
 
-### Roadmap（路线图）
+### Roadmap（路线图，上位抽象）
 
-数据库化的**版本规划**：关键字段 `version`（如 `0.1.0`，支持任意用户版本形式，UNIQUE）。roadmap 除自身的复杂描述（body）外，主要**关联 plan**（多版本方向的拆解）；也可直接挂不属于任何 plan 的 issue。
+**概念保留**：roadmap 是 milestone 的上位抽象——一个 roadmap 可包含大量 milestone，多个 roadmap 对应 1.0/2.0 这种超大版本粒度。**本项目现阶段不实现**（对应版本/项目进展/git tag 用 milestone 即可）；未来可能成为跨项目组织更大规模开发流程的功能（另见 D28 改名决策）。
+
+### Milestone（里程碑）
+
+数据库化的**版本节点**：对应项目进展、软件版本、git tag。关键字段 `version`（如 `0.1.0`，支持任意用户版本形式，UNIQUE）。milestone 除自身的复杂描述（body）外，主要**关联 plan**（版本方向的拆解）；也可直接挂不属于任何 plan 的 issue。CLI：`mint milestone`。
 
 ### Plan（计划）
 
