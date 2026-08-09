@@ -39,6 +39,9 @@ pub struct ListContainersArgs {
     /// Table view (interactive on TTY, single page otherwise)
     #[arg(long, conflicts_with = "json")]
     pub tui: bool,
+    /// Tab-separated table output
+    #[arg(long, conflicts_with_all = ["json", "tui"])]
+    pub tsv: bool,
 }
 
 #[derive(clap::Args)]
@@ -236,6 +239,9 @@ pub struct ListLabelsArgs {
     /// Table view (interactive on TTY, single page otherwise)
     #[arg(long, conflicts_with = "json")]
     pub tui: bool,
+    /// Tab-separated table output
+    #[arg(long, conflicts_with_all = ["json", "tui"])]
+    pub tsv: bool,
 }
 
 // ── 顶层 Cli 与 Commands ─────────────────────────────────────────
@@ -453,6 +459,10 @@ pub(crate) fn cmd_container_list(
             })
             .collect();
         println!("{}", paged_json(&arr, page, a.page_size, total));
+    } else if a.tsv {
+        let (headers, rows) = crate::tui::rows::containers(&items);
+        print!("{}", crate::output::format_tsv(&headers, &rows));
+        print_page_footer(page, a.page_size, total);
     } else {
         print!("{}", output::format_container_list(&items));
         print_page_footer(page, a.page_size, total);
@@ -535,6 +545,10 @@ fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
             })
             .collect();
         println!("{}", paged_json(&arr, page, l.page_size, total));
+    } else if l.tsv {
+        let (headers, rows) = crate::tui::rows::labels(&labels);
+        print!("{}", crate::output::format_tsv(&headers, &rows));
+        print_page_footer(page, l.page_size, total);
     } else {
         for (t, count) in &labels {
             let desc = t.description.as_deref().unwrap_or("");
