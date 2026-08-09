@@ -3,7 +3,18 @@
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
-use crate::models::{Issue, Status};
+use crate::models::{ContainerStatus, Issue, Status};
+
+/// 容器状态基色（milestone/plan 状态点用）。
+pub fn container_status_color(status: ContainerStatus) -> Color {
+    match status {
+        ContainerStatus::Open => Color::Yellow,
+        ContainerStatus::Running => Color::Green,
+        ContainerStatus::Partial => Color::Cyan,
+        ContainerStatus::Dropped => Color::Red,
+        ContainerStatus::Done => Color::White,
+    }
+}
 
 /// 状态基色（点/文字共用，TUI 统一配色）。
 fn status_color(status: Status) -> Color {

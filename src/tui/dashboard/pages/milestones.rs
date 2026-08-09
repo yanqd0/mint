@@ -1,15 +1,16 @@
 //! milestones 页面：Milestones tab 列表 + MilestoneDetail（其下 plan 行）。
 
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::mini_bar;
+use crate::tui::dashboard::pages::common::{container_status_color, mini_bar};
+use crate::tui::panel::{render_panel, stack};
 
-/// Milestones tab：全部 milestone 列表（每行 id + version + 标题）。
+/// Milestones tab：全部 milestone 列表（每行状态点 + id + version + 标题）。
 pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
     for (idx, (ms, _)) in m.page_milestones().iter().enumerate() {
@@ -21,6 +22,7 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
         };
         let ver = ms.version.as_deref().unwrap_or("");
         lines.push(Line::from(vec![
+            Span::styled("● ", container_status_color(ms.status)),
             Span::styled(format!("#{:<3}", ms.id), style),
             Span::styled(format!(" {ver:<8}"), style),
             Span::styled(format!("  {}", ms.title), style),
@@ -34,11 +36,8 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
         m.page + 1,
         m.pages()
     );
-    let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
-    frame.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title("mint · milestones")),
-        chunks[0],
-    );
+    let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
+    render_panel(frame, chunks[0], "mint · milestones", lines);
     frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
 }
 
@@ -79,10 +78,12 @@ pub fn draw_milestone_detail(frame: &mut Frame, m: &DashboardModel, milestone_id
         m.page + 1,
         m.pages()
     );
-    let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
-    frame.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title(format!("mint · milestone {title}"))),
+    let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
+    render_panel(
+        frame,
         chunks[0],
+        &format!("mint · milestone {title}"),
+        lines,
     );
     frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
 }
