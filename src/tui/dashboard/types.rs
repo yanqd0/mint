@@ -21,6 +21,55 @@ pub enum View {
     MilestoneDetail { milestone_id: i64 },
 }
 
+/// 跳转目标视图。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JumpTarget {
+    Issues,
+    Plans,
+    Milestones,
+    IssueDetail(i64),
+    PlanDetail(i64),
+    MilestoneDetail(i64),
+}
+
+/// 闪烁目标类型。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JumpKind {
+    Issue,
+    Plan,
+    Milestone,
+}
+
+/// 原始跳转请求（事件驱动，进 queue1）。
+#[derive(Debug, Clone)]
+pub struct RawJump {
+    pub target: JumpTarget,
+}
+
+/// 复合跳转请求（合并后进 queue2，含闪烁目标列表）。
+#[derive(Debug, Clone)]
+pub struct JumpRequest {
+    pub target: JumpTarget,
+    pub flash: Vec<(i64, JumpKind)>,
+}
+
+/// 进行中的闪烁项（渲染层读取；闪烁 2 tick）。
+#[derive(Debug, Clone)]
+pub struct FlashItem {
+    pub id: i64,
+    pub kind: JumpKind,
+    pub ticks: u32,
+}
+
+/// 跳转 queue 容量上限（queue2；新入队挤掉队首）。
+pub const JUMP_QUEUE_LIMIT: usize = 5;
+/// 跳转请求合并延迟（tick）：检测到请求后延迟 1 tick 再合并。
+pub const JUMP_MERGE_DELAY: u32 = 1;
+/// 变化内容闪烁时长（tick）。
+pub const FLASH_TICKS: u32 = 2;
+/// 空闲回首页阈值（tick）：无操作、无跳转 60s。
+pub const HOME_TIMEOUT: u32 = 60;
+
 /// 变更流条目：初始基线（当前全量按 updated_at 倒序）或会话内变化事件。
 #[derive(Debug, Clone)]
 pub enum FeedItem {
@@ -46,7 +95,8 @@ impl FeedItem {
 /// 一次 refresh 的结果。
 pub struct RefreshResult {
     pub new_events: usize,
-    pub auto_plan: Option<i64>,
+    /// 本次执行的跳转目标（无跳转 None）。
+    pub jumped: Option<JumpTarget>,
 }
 
 /// 执行中 plan：有 dev/test issue 的 plan，按该 plan 下最新活跃 issue updated_at 降序。

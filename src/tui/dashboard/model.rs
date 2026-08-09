@@ -1,11 +1,13 @@
 //! dashboard 状态机：视图切换、变更流、面板自动切换（无 ratatui，可单测）。
 //! 从 dashboard.rs 拆分而来；入口聚合导出见 `dashboard`。
 
+use std::collections::VecDeque;
+
 use crossterm::event::KeyCode;
 
 use crate::models::{Container, Issue};
 use crate::tui::dashboard::diff::{DashboardSnapshot, diff_snapshots};
-use crate::tui::dashboard::types::MAX_FEED;
+use crate::tui::dashboard::types::{FlashItem, JumpRequest, MAX_FEED, RawJump};
 
 pub use crate::tui::dashboard::types::{FeedItem, RefreshResult, View};
 
@@ -33,6 +35,14 @@ pub struct DashboardModel {
     pub(crate) auto_last: u32,
     /// 自动临时进入 milestone 详情的剩余 tick（Some = 自动切入，None = 用户手动/未切入）。
     pub(crate) milestone_hold: Option<u32>,
+    /// queue1：原始跳转请求（事件驱动，合并器每 tick 读空）。
+    pub(crate) pending: VecDeque<RawJump>,
+    /// queue2：就绪复合请求（每 5s 执行队首，容量 JUMP_QUEUE_LIMIT）。
+    pub(crate) ready: VecDeque<JumpRequest>,
+    /// 合并器延迟 tick（检测到请求后延迟 JUMP_MERGE_DELAY 再合并）。
+    pub(crate) merge_delay: u32,
+    /// 进行中的闪烁项（渲染层读取）。
+    pub flash: Vec<FlashItem>,
 }
 
 impl Default for DashboardModel {
@@ -57,6 +67,10 @@ impl DashboardModel {
             user_idle: 0,
             auto_last: 0,
             milestone_hold: None,
+            pending: VecDeque::new(),
+            ready: VecDeque::new(),
+            merge_delay: 0,
+            flash: Vec::new(),
         }
     }
 
@@ -85,6 +99,10 @@ impl DashboardModel {
         self.user_idle = 0;
         self.auto_last = 0;
         self.milestone_hold = None;
+        self.pending.clear();
+        self.ready.clear();
+        self.merge_delay = 0;
+        self.flash.clear();
     }
 
     /// 每 tick：diff 上一轮 → 事件前置 feed；面板自动切换。
@@ -95,8 +113,8 @@ impl DashboardModel {
             .map(|p| diff_snapshots(p, snapshot))
             .unwrap_or_default();
         let n = events.len();
-        for ev in events.into_iter().rev() {
-            self.feed.insert(0, FeedItem::Event(ev));
+        for ev in events.iter().rev() {
+            self.feed.insert(0, FeedItem::Event(ev.clone()));
         }
         if self.feed.len() > MAX_FEED {
             self.feed.truncate(MAX_FEED);
@@ -104,11 +122,18 @@ impl DashboardModel {
         // tick 计数：空闲与自动切换间隔递增。
         self.user_idle = self.user_idle.saturating_add(1);
         self.auto_last = self.auto_last.saturating_add(1);
-        // 自动临时 milestone 详情倒计时递减（归零后 switch_panel 回 Plans tab）。
-        if let Some(hold) = self.milestone_hold.as_mut() {
-            *hold = hold.saturating_sub(1);
+        // 闪烁递减（过期清除）。
+        for f in &mut self.flash {
+            f.ticks = f.ticks.saturating_sub(1);
         }
-        let auto_plan = self.switch_panel(snapshot);
+        self.flash.retain(|f| f.ticks > 0);
+        // 事件 → queue1（原始跳转请求）。
+        for r in crate::tui::dashboard::model_nav::raw_jumps_from_events(&events) {
+            self.pending.push_back(r);
+        }
+        // 合并器（延迟读空 → queue2）+ 执行器（空闲/间隔满足执行队首）。
+        self.merge_jumps();
+        let jumped = self.execute_jump();
         let mut issues = snapshot.issues.clone();
         issues.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         self.issues = issues;
@@ -121,7 +146,7 @@ impl DashboardModel {
         self.prune_detail();
         RefreshResult {
             new_events: n,
-            auto_plan,
+            jumped,
         }
     }
 
@@ -236,7 +261,3 @@ impl DashboardModel {
 #[cfg(test)]
 #[path = "model_tests.rs"]
 mod model_tests;
-
-#[cfg(test)]
-#[path = "model_tests_auto.rs"]
-mod model_tests_auto;

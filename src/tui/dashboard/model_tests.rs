@@ -262,3 +262,37 @@ fn number_keys_from_detail_switch_tab() {
     m.handle_key(KeyCode::Char('2'));
     assert_eq!(m.view, View::Plans);
 }
+
+#[test]
+fn pagination_with_page_size() {
+    let mut m = DashboardModel::new();
+    m.page_size = 2;
+    m.init(snap(
+        vec![
+            mk_issue(1, Status::Open, None, "1"),
+            mk_issue(2, Status::Open, None, "2"),
+            mk_issue(3, Status::Open, None, "3"),
+            mk_issue(4, Status::Open, None, "4"),
+            mk_issue(5, Status::Open, None, "5"),
+        ],
+        vec![],
+    ));
+    // page_size 2 → 3 页（updated 倒序：5,4 | 3,2 | 1）
+    assert_eq!(m.pages(), 3);
+    assert_eq!(m.page_issues().len(), 2);
+    assert_eq!(m.page_issues()[0].id, 5);
+    m.handle_key(KeyCode::Char('l'));
+    assert_eq!(m.page, 1);
+    assert_eq!(m.page_issues()[0].id, 3);
+    m.handle_key(KeyCode::PageDown);
+    assert_eq!(m.page, 2);
+    assert_eq!(m.page_issues().len(), 1);
+    m.handle_key(KeyCode::Char('l')); // 末页无操作
+    assert_eq!(m.page, 2);
+    m.handle_key(KeyCode::PageUp);
+    assert_eq!(m.page, 1);
+    m.handle_key(KeyCode::Char('h'));
+    assert_eq!(m.page, 0);
+    m.handle_key(KeyCode::Char('h')); // 首页无操作
+    assert_eq!(m.page, 0);
+}
