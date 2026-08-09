@@ -216,7 +216,8 @@ pub fn cmd_show(conn: &Connection, s: &ShowArgs) -> Result<(), Error> {
     if s.json {
         println!("{}", serde_json::to_string(&issue)?);
     } else {
-        print!("{}", output::format_issue(&issue));
+        let (headers, rows) = crate::cli::list_common::issue_detail(&issue);
+        print!("{}", output::format_tsv(&headers, &rows));
     }
     Ok(())
 }

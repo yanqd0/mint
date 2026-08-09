@@ -3,7 +3,7 @@
 //! 供 issue/plan/milestone/label 各 list 命令共用（分页原 `issue::list` 内、
 //! 列矩阵原 `tui::rows`，均提升至此）。
 
-use crate::models::{Container, Issue, Label};
+use crate::models::{Container, Issue, IssueSummary, Label};
 
 /// 分页总页数（至少 1 页）。
 pub(crate) fn page_count(total: usize, page_size: u32) -> u32 {
@@ -121,6 +121,113 @@ pub(crate) fn labels(items: &[(Label, i64)]) -> (Vec<String>, Vec<Vec<String>>) 
     (headers, rows)
 }
 
+// ── show 详情列矩阵（默认 TSV 输出，单行）────
+
+/// TSV 单元格转义：tab/换行/回车 → 空格（保持 show TSV 单行）。
+fn tsv_cell(s: &str) -> String {
+    s.replace(['\t', '\n', '\r'], " ")
+}
+
+/// Issue 详情（show）→ (表头, 单行矩阵)。body 末列（含 tab/换行转义）。
+pub(crate) fn issue_detail(i: &Issue) -> (Vec<String>, Vec<Vec<String>>) {
+    let headers: Vec<String> = [
+        "ID", "Status", "Kind", "Priority", "Title", "Plan", "Labels", "TestCmd", "Dropped",
+        "Commit", "Links", "Created", "Updated", "Body",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
+    let plan = i.plan_id.map(|p| format!("#{p}")).unwrap_or_default();
+    let labels = if i.labels.is_empty() {
+        String::new()
+    } else {
+        i.labels.join(",")
+    };
+    let links = if i.links.is_empty() {
+        String::new()
+    } else {
+        i.links.len().to_string()
+    };
+    let row = vec![
+        i.id.to_string(),
+        i.status.as_str().to_string(),
+        i.kind.as_str().to_string(),
+        i.priority.to_string(),
+        tsv_cell(&i.title),
+        plan,
+        tsv_cell(&labels),
+        i.test_cmd.as_deref().map(tsv_cell).unwrap_or_default(),
+        i.dropped_reason
+            .as_deref()
+            .map(tsv_cell)
+            .unwrap_or_default(),
+        i.last_commit_id.clone().unwrap_or_default(),
+        links,
+        i.created_at.clone(),
+        i.updated_at.clone(),
+        i.body.as_deref().map(tsv_cell).unwrap_or_default(),
+    ];
+    (headers, vec![row])
+}
+
+/// Plan 详情（show）→ (表头, 单行矩阵)。body 末列。
+pub(crate) fn plan_detail(
+    c: &Container,
+    issues: &[IssueSummary],
+) -> (Vec<String>, Vec<Vec<String>>) {
+    let headers: Vec<String> = [
+        "ID",
+        "Status",
+        "Title",
+        "Milestone",
+        "Issues",
+        "Created",
+        "Updated",
+        "Body",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
+    let milestone = c.milestone_id.map(|m| format!("#{m}")).unwrap_or_default();
+    let row = vec![
+        c.id.to_string(),
+        c.status.as_str().to_string(),
+        tsv_cell(&c.title),
+        milestone,
+        issues.len().to_string(),
+        c.created_at.clone(),
+        c.updated_at.clone(),
+        c.body.as_deref().map(tsv_cell).unwrap_or_default(),
+    ];
+    (headers, vec![row])
+}
+
+/// Milestone 详情（show）→ (表头, 单行矩阵)。body 末列。
+pub(crate) fn milestone_detail(
+    c: &Container,
+    plan_count: usize,
+    issue_count: usize,
+) -> (Vec<String>, Vec<Vec<String>>) {
+    let headers: Vec<String> = [
+        "ID", "Status", "Version", "Title", "Plans", "Issues", "Created", "Updated", "Body",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
+    let row = vec![
+        c.id.to_string(),
+        c.status.as_str().to_string(),
+        c.version.clone().unwrap_or_default(),
+        tsv_cell(&c.title),
+        plan_count.to_string(),
+        issue_count.to_string(),
+        c.created_at.clone(),
+        c.updated_at.clone(),
+        c.body.as_deref().map(tsv_cell).unwrap_or_default(),
+    ];
+    (headers, vec![row])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,5 +313,42 @@ mod tests {
         assert_eq!(headers.join(","), "Name,Issues,Description");
         assert_eq!(rows[0].join(","), "dev,0,");
         assert_eq!(rows[1].join(","), "urgent,3,high");
+    }
+
+    #[test]
+    fn issue_detail_columns_plan_links_and_body_escape() {
+        use crate::models::Link;
+        let mut i = mk_issue(3, "hello", Status::Done);
+        i.plan_id = Some(7);
+        i.labels = vec!["dev".into()];
+        i.test_cmd = Some("cargo test".into());
+        i.body = Some("line1\nline2\ttab".into());
+        i.links = vec![Link {
+            other_id: 9,
+            other_title: "other".into(),
+            rel: "related".into(),
+            created_at: "t".into(),
+        }];
+        let (headers, rows) = issue_detail(&i);
+        assert_eq!(
+            headers.join(","),
+            "ID,Status,Kind,Priority,Title,Plan,Labels,TestCmd,Dropped,Commit,Links,Created,Updated,Body"
+        );
+        assert_eq!(rows[0][5], "#7"); // plan 只显 #N
+        assert_eq!(rows[0][10], "1"); // links 数量
+        assert_eq!(rows[0][13], "line1 line2 tab"); // body 末列，换行/tab 转空格
+    }
+
+    #[test]
+    fn plan_and_milestone_detail_columns() {
+        let c = mk_container(2, "p", Some("0.4.0"));
+        let (_, rows) = plan_detail(&c, &[]);
+        assert_eq!(rows[0].join(","), "2,open,p,,0,t,t,"); // milestone 空
+        let (headers, rows2) = milestone_detail(&c, 3, 5);
+        assert_eq!(
+            headers.join(","),
+            "ID,Status,Version,Title,Plans,Issues,Created,Updated,Body"
+        );
+        assert_eq!(rows2[0].join(","), "2,open,0.4.0,p,3,5,t,t,");
     }
 }

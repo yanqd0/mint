@@ -484,7 +484,17 @@ pub(crate) fn cmd_container_show(
             }))?
         );
     } else {
-        print!("{}", output::format_container_show(&c, &issues));
+        let (headers, rows) = match kind {
+            ContainerKind::Plan => crate::cli::list_common::plan_detail(&c, &issues),
+            ContainerKind::Milestone => {
+                let plans = container::list(conn, ContainerKind::Plan, true)?
+                    .into_iter()
+                    .filter(|(p, _)| p.milestone_id == Some(c.id))
+                    .count();
+                crate::cli::list_common::milestone_detail(&c, plans, issues.len())
+            }
+        };
+        print!("{}", output::format_tsv(&headers, &rows));
     }
     Ok(())
 }
