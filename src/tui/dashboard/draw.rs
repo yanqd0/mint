@@ -243,7 +243,7 @@ mod tests {
     use super::*;
     use crate::models::{Container, ContainerStatus, Kind};
     use crate::tui::dashboard::DashboardModel;
-    use crate::tui::dashboard_diff::DashboardSnapshot;
+    use crate::tui::dashboard::diff::DashboardSnapshot;
 
     fn mk_issue(id: i64, title: &str, status: Status, plan_id: Option<i64>) -> Issue {
         Issue {

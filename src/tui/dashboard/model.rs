@@ -1,12 +1,13 @@
 //! dashboard 状态机：视图切换、变更流、面板自动切换（无 ratatui，可单测）。
+//! 从 dashboard.rs 拆分而来；入口聚合导出见 `dashboard`。
 
 use crossterm::event::KeyCode;
 
 use crate::models::{Container, Issue, Status};
-use crate::tui::dashboard_diff::{DashboardSnapshot, diff_snapshots};
-use crate::tui::dashboard_types::{MAX_FEED, active_plans};
+use crate::tui::dashboard::diff::{DashboardSnapshot, diff_snapshots};
+use crate::tui::dashboard::types::{MAX_FEED, active_plans};
 
-pub use crate::tui::dashboard_types::{FeedItem, RefreshResult, View};
+pub use crate::tui::dashboard::types::{FeedItem, RefreshResult, View};
 
 /// plan 执行结束 → 所属 milestone 面板的自动停留 tick 数（1 tick = 1s）。
 const MILESTONE_HOLD_TICKS: u32 = 3;
@@ -416,7 +417,7 @@ impl DashboardModel {
 mod tests {
     use super::*;
     use crate::models::{ContainerStatus, Kind, Status};
-    use crate::tui::dashboard_diff::DashboardSnapshot;
+    use crate::tui::dashboard::diff::DashboardSnapshot;
     use rstest::rstest;
 
     fn mk_issue(id: i64, status: Status, plan_id: Option<i64>, updated: &str) -> Issue {

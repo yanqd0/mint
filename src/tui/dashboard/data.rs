@@ -7,7 +7,7 @@ use crate::container::{self, ContainerKind};
 use crate::db;
 use crate::error::Error;
 use crate::models::{Issue, Status};
-use crate::tui::dashboard_diff::DashboardSnapshot;
+use crate::tui::dashboard::diff::DashboardSnapshot;
 
 /// 全量快照：全部 issue（含 labels）+ 全部 plan（含直接挂载 issue 计数）。
 pub fn load_snapshot(conn: &Connection) -> Result<DashboardSnapshot, Error> {

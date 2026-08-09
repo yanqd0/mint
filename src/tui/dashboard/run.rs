@@ -8,7 +8,7 @@ use rusqlite::Connection;
 
 use crate::error::Error;
 use crate::tui::dashboard::DashboardModel;
-use crate::tui::dashboard_data::load_snapshot;
+use crate::tui::dashboard::data::load_snapshot;
 use crate::tui::{CrosstermEvents, EventSource, is_interactive, to_keycode};
 
 /// 自动刷新间隔：每 tick 全量重查重渲。
@@ -31,7 +31,7 @@ fn run_loop(conn: &Connection, model: &mut DashboardModel) -> Result<(), Error> 
     let mut terminal = ratatui::init();
     let result = (|| -> Result<(), Error> {
         loop {
-            terminal.draw(|f| crate::tui::dashboard_draw::draw_dashboard(f, model))?;
+            terminal.draw(|f| crate::tui::dashboard::draw::draw_dashboard(f, model))?;
             match CrosstermEvents.poll_event(REFRESH_INTERVAL)? {
                 Some(ev) => {
                     if let Some(code) = to_keycode(ev)
@@ -57,7 +57,7 @@ fn render_text(model: &DashboardModel) -> Result<(), Error> {
     let mut terminal =
         ratatui::Terminal::new(backend).map_err(|e| Error::Other(format!("tui init: {e:?}")))?;
     terminal
-        .draw(|f| crate::tui::dashboard_draw::draw_dashboard(f, model))
+        .draw(|f| crate::tui::dashboard::draw::draw_dashboard(f, model))
         .map_err(|e| Error::Other(format!("tui draw: {e:?}")))?;
     let buf = terminal.backend().buffer();
     for y in 0..buf.area.height {

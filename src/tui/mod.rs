@@ -15,11 +15,6 @@ use crate::error::Error;
 use crate::tui::model::ListModel;
 
 pub mod dashboard;
-pub mod dashboard_data;
-pub mod dashboard_diff;
-pub mod dashboard_draw;
-pub mod dashboard_run;
-pub mod dashboard_types;
 pub mod draw;
 pub mod model;
 pub mod panel;
@@ -57,7 +52,7 @@ pub(crate) fn to_keycode(e: Event) -> Option<KeyCode> {
     }
 }
 
-pub use dashboard_run::run_dashboard;
+pub use dashboard::run_dashboard;
 
 /// 启动 list 表格浏览：TTY 交互，非 TTY 单页文本输出。
 pub fn run_list(

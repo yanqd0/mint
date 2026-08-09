@@ -1,7 +1,7 @@
 //! dashboard 公共类型：视图、变更流条目、刷新结果、执行中 plan 判定。
 
 use crate::models::{Issue, Status};
-use crate::tui::dashboard_diff::{ChangeEvent, DashboardSnapshot};
+use crate::tui::dashboard::diff::{ChangeEvent, DashboardSnapshot};
 
 /// 变更流最大条目数（超出裁剪尾部）。
 pub const MAX_FEED: usize = 200;
@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn feed_item_issue_only_for_issue_events() {
-        use crate::tui::dashboard_diff::ChangeEvent;
+        use crate::tui::dashboard::diff::ChangeEvent;
         let i = mk_issue(1, Status::Open, None, "1");
         assert_eq!(
             FeedItem::Baseline { issue: i.clone() }
