@@ -138,6 +138,9 @@ impl DashboardModel {
                     self.selected -= 1;
                 }
             }
+            KeyCode::Tab | KeyCode::Char('p') => {
+                self.cycle_views();
+            }
             KeyCode::Enter => {
                 if self.detail.is_none()
                     && let Some(i) = self.visible_issues().get(self.selected)
@@ -178,6 +181,30 @@ impl DashboardModel {
         if self.selected >= len {
             self.selected = len.saturating_sub(1);
         }
+    }
+
+    /// 手动在 issue 与各 plan 面板间循环（Tab/p）。
+    fn cycle_views(&mut self) {
+        let plan_ids: Vec<i64> = self.plans.iter().map(|(c, _)| c.id).collect();
+        match self.view {
+            View::Issue => {
+                if let Some(&first) = plan_ids.first() {
+                    self.view = View::Plan { plan_id: first };
+                }
+            }
+            View::Plan { plan_id } => {
+                let idx = plan_ids.iter().position(|&x| x == plan_id);
+                match idx {
+                    Some(i) if i + 1 < plan_ids.len() => {
+                        self.view = View::Plan {
+                            plan_id: plan_ids[i + 1],
+                        };
+                    }
+                    _ => self.view = View::Issue,
+                }
+            }
+        }
+        self.clamp_selected();
     }
 
     /// 按 id 查 issue（详情数据源）。
@@ -349,5 +376,21 @@ mod tests {
         let v = m.visible_issues();
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].id, 1);
+    }
+
+    #[test]
+    fn manual_navigation_cycles_issue_and_plans() {
+        let mut m = DashboardModel::new();
+        m.init(snap(
+            vec![],
+            vec![(mk_container(7), 0), (mk_container(8), 0)],
+        ));
+        // Issue → plan7 → plan8 → Issue
+        m.handle_key(KeyCode::Tab);
+        assert_eq!(m.view, View::Plan { plan_id: 7 });
+        m.handle_key(KeyCode::Char('p'));
+        assert_eq!(m.view, View::Plan { plan_id: 8 });
+        m.handle_key(KeyCode::Tab);
+        assert_eq!(m.view, View::Issue);
     }
 }
