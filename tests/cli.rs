@@ -80,6 +80,91 @@ fn advance_to_done(db: &str, id: i64) {
     );
 }
 
+/// retest：test→dev 打回，保留 last_commit_id，更新 test_cmd。
+#[test]
+fn st_state_retest_keeps_sha_and_sets_test_cmd() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "retest me");
+    // 推进到 test
+    run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
+    run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
+    run_json(
+        &db,
+        &[
+            "issue",
+            "state",
+            "commit",
+            &id.to_string(),
+            "--sha",
+            "abc123",
+            "--test-cmd",
+            "cargo test",
+            "--json",
+        ],
+    );
+    // retest 打回 dev
+    run_json(
+        &db,
+        &[
+            "issue",
+            "state",
+            "retest",
+            &id.to_string(),
+            "--test-cmd",
+            "cargo test tui::",
+            "--json",
+        ],
+    );
+    let v = run_json(&db, &["show", &id.to_string(), "--json"]);
+    assert_eq!(v["status"], "dev");
+    assert_eq!(v["last_commit_id"], "abc123");
+    assert_eq!(v["test_cmd"], "cargo test tui::");
+}
+
+/// retest 非法转换（open 直接 retest）拒绝。
+#[test]
+fn st_state_retest_illegal_from_open() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "bad retest");
+    let stderr = run_fail(
+        &db,
+        &[
+            "issue",
+            "state",
+            "retest",
+            &id.to_string(),
+            "--test-cmd",
+            "cargo test",
+        ],
+    );
+    assert!(stderr.contains("invalid transition"), "stderr: {stderr}");
+}
+
+/// retest 缺 test_cmd 拒绝。
+#[test]
+fn st_state_retest_requires_test_cmd() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "no test cmd");
+    run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
+    run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
+    run_json(
+        &db,
+        &[
+            "issue",
+            "state",
+            "commit",
+            &id.to_string(),
+            "--sha",
+            "abc",
+            "--test-cmd",
+            "cargo test",
+            "--json",
+        ],
+    );
+    let stderr = run_fail(&db, &["issue", "state", "retest", &id.to_string()]);
+    assert!(stderr.contains("test-cmd"), "stderr: {stderr}");
+}
+
 /// add 后 show 能取回 title。
 #[test]
 fn st_add_issue_creates_row() {
@@ -201,7 +286,7 @@ fn st_close_requires_test_cmd() {
     );
     let stderr = run_fail(&db, &["issue", "state", "close", &id.to_string()]);
     assert!(
-        stderr.contains("close requires --test-cmd"),
+        stderr.contains("close/retest requires --test-cmd"),
         "stderr: {stderr}"
     );
 }

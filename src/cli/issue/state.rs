@@ -25,6 +25,8 @@ pub enum StateCmd {
     Start(TransArgs),
     /// Advance dev -> test (commit code, requires --sha)
     Commit(CommitArgs),
+    /// Rework test -> dev (test failed; keeps last_commit_id, requires --test-cmd)
+    Retest(CloseArgs),
     /// Close test -> done (requires --test-cmd)
     Close(CloseArgs),
     /// Rework: planned/dev/test -> open
@@ -86,6 +88,7 @@ pub fn dispatch(conn: &Connection, cwd: &Path, cmd: &StateCmd) -> Result<(), Err
         StateCmd::Start(t) => cmd_trans(conn, t, Action::Start),
         StateCmd::Commit(c) => cmd_commit(conn, cwd, c),
         StateCmd::Close(c) => cmd_close(conn, c),
+        StateCmd::Retest(r) => cmd_retest(conn, r),
         StateCmd::Reset(t) => cmd_trans(conn, t, Action::Reset),
         StateCmd::Drop(d) => cmd_drop(conn, d),
         StateCmd::Reopen(t) => cmd_trans(conn, t, Action::Reopen),
@@ -132,6 +135,19 @@ fn cmd_close(conn: &Connection, c: &CloseArgs) -> Result<(), Error> {
     )
 }
 
+/// retest：test→dev（测试失败打回），必填 --test-cmd；保留 last_commit_id（commit_sha=None）。
+fn cmd_retest(conn: &Connection, r: &CloseArgs) -> Result<(), Error> {
+    transition(
+        conn,
+        r.id,
+        Action::Retest,
+        r.test_cmd.as_deref(),
+        None,
+        None,
+        r.json,
+    )
+}
+
 /// drop：任意状态→dropped，可选 --reason。
 fn cmd_drop(conn: &Connection, d: &DropArgs) -> Result<(), Error> {
     transition(
@@ -170,9 +186,9 @@ fn transition(
         )));
     }
 
-    if !state::close_requires_test_cmd(action, test_cmd) {
+    if !state::requires_test_cmd(action, test_cmd) {
         return Err(Error::Other(
-            "close requires --test-cmd (use 'not-tested' if tests were skipped)".to_string(),
+            "close/retest requires --test-cmd (use 'not-tested' if tests were skipped)".to_string(),
         ));
     }
 

@@ -55,7 +55,7 @@ fn full_workflow_passes() {
         let cur = status_of(&conn, id);
         let target = state::target_of(action);
         assert!(state::can_transition(cur, action, target), "{cur}→{target}");
-        assert!(state::close_requires_test_cmd(action, test_cmd));
+        assert!(state::requires_test_cmd(action, test_cmd));
         conn.execute(
             "UPDATE issues SET status=?1, test_cmd=COALESCE(?2,test_cmd), updated_at=datetime('now') WHERE id=?3",
             rusqlite::params![target, test_cmd, id],
@@ -125,15 +125,12 @@ fn label_attach_and_query() {
 
 /// test_cmd 必填：close 无 test_cmd 校验失败；'没测' 通过。
 #[test]
-fn close_requires_test_cmd() {
-    assert!(!state::close_requires_test_cmd(Action::Close, None));
-    assert!(state::close_requires_test_cmd(
-        Action::Close,
-        Some("cargo test")
-    ));
-    assert!(state::close_requires_test_cmd(Action::Close, Some("没测")));
+fn requires_test_cmd() {
+    assert!(!state::requires_test_cmd(Action::Close, None));
+    assert!(state::requires_test_cmd(Action::Close, Some("cargo test")));
+    assert!(state::requires_test_cmd(Action::Close, Some("没测")));
     // 非 close 不强制
-    assert!(state::close_requires_test_cmd(Action::Commit, None));
+    assert!(state::requires_test_cmd(Action::Commit, None));
 }
 
 /// drop 写入 dropped_reason。

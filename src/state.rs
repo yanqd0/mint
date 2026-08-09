@@ -11,6 +11,7 @@ pub enum Action {
     Plan,
     Start,
     Commit,
+    Retest,
     Close,
     Reset,
     Drop,
@@ -28,6 +29,7 @@ fn from_allowed(current: Status, action: Action) -> bool {
         Action::Plan => current == Status::Open,
         Action::Start => current == Status::Planned,
         Action::Commit => current == Status::Dev,
+        Action::Retest => current == Status::Test,
         Action::Close => current == Status::Test,
         // reset：活跃链路状态（planned/dev/test）打回 open
         Action::Reset => matches!(current, Status::Planned | Status::Dev | Status::Test),
@@ -44,6 +46,7 @@ pub fn target_of(action: Action) -> Status {
         Action::Plan => Status::Planned,
         Action::Start => Status::Dev,
         Action::Commit => Status::Test,
+        Action::Retest => Status::Dev,
         Action::Close => Status::Done,
         Action::Reset => Status::Open,
         Action::Drop => Status::Dropped,
@@ -51,9 +54,9 @@ pub fn target_of(action: Action) -> Status {
     }
 }
 
-/// close 必须提供 test_cmd（跳过测试填"没测"）。
-pub fn close_requires_test_cmd(action: Action, test_cmd: Option<&str>) -> bool {
-    if action != Action::Close {
+/// close/retest 必须提供 test_cmd（close=通过验证手法；retest=失败/复测手法，尽量精确）。
+pub fn requires_test_cmd(action: Action, test_cmd: Option<&str>) -> bool {
+    if !matches!(action, Action::Close | Action::Retest) {
         return true;
     }
     test_cmd.is_some_and(|s| !s.trim().is_empty())
@@ -81,6 +84,7 @@ mod tests {
             Action::Plan,
             Action::Start,
             Action::Commit,
+            Action::Retest,
             Action::Close,
             Action::Reset,
             Action::Drop,
@@ -94,7 +98,7 @@ mod tests {
             (Status::Open, Action::Plan)
                 | (Status::Planned, Action::Start)
                 | (Status::Dev, Action::Commit)
-                | (Status::Test, Action::Close)
+                | (Status::Test, Action::Retest | Action::Close)
                 | (Status::Planned | Status::Dev | Status::Test, Action::Reset)
                 | (_, Action::Drop)
                 | (Status::Done | Status::Dropped, Action::Reopen)
@@ -111,6 +115,7 @@ mod tests {
     #[case(Action::Plan, Status::Planned)]
     #[case(Action::Start, Status::Dev)]
     #[case(Action::Commit, Status::Test)]
+    #[case(Action::Retest, Status::Dev)]
     #[case(Action::Close, Status::Done)]
     #[case(Action::Reset, Status::Open)]
     #[case(Action::Drop, Status::Dropped)]
@@ -132,18 +137,21 @@ mod tests {
         assert!(!can_transition(current, action, wrong));
     }
 
-    /// close 必须带 test_cmd；跳过测试填"没测"可通过；非 close 不强制。
+    /// close/retest 必须带 test_cmd；跳过测试填"没测"可通过；其它动作不强制。
     #[rstest]
     #[case(Action::Close, None, false)]
     #[case(Action::Close, Some("  "), false)]
     #[case(Action::Close, Some("cargo test"), true)]
     #[case(Action::Close, Some("没测"), true)]
+    #[case(Action::Retest, None, false)]
+    #[case(Action::Retest, Some("  "), false)]
+    #[case(Action::Retest, Some("cargo test xxx"), true)]
     #[case(Action::Commit, None, true)]
-    fn close_test_cmd_rule(
+    fn requires_test_cmd_rule(
         #[case] action: Action,
         #[case] test_cmd: Option<&str>,
         #[case] expected: bool,
     ) {
-        assert_eq!(close_requires_test_cmd(action, test_cmd), expected);
+        assert_eq!(requires_test_cmd(action, test_cmd), expected);
     }
 }
