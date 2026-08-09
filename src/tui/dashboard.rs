@@ -90,7 +90,9 @@ impl DashboardModel {
                 .cmp(&a.issue().map(|i| &i.updated_at))
         });
         self.feed = baseline;
-        self.issues = snapshot.issues.clone();
+        let mut issues = snapshot.issues.clone();
+        issues.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        self.issues = issues;
         self.plans = snapshot.plans.clone();
         self.prev = Some(snapshot);
         self.view = View::Issue;
@@ -112,17 +114,13 @@ impl DashboardModel {
         if self.feed.len() > MAX_FEED {
             self.feed.truncate(MAX_FEED);
         }
-        // selected 稳定：新事件前置时，钉最新（==0 保持）或下移（>0 +n）
-        if n > 0 && self.selected > 0 {
-            self.selected = self
-                .selected
-                .saturating_add(n)
-                .min(self.feed.len().saturating_sub(1));
-        }
         let auto_plan = self.switch_panel(snapshot);
-        self.issues = snapshot.issues.clone();
+        let mut issues = snapshot.issues.clone();
+        issues.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        self.issues = issues;
         self.plans = snapshot.plans.clone();
         self.prev = Some(snapshot.clone());
+        self.clamp_selected();
         RefreshResult {
             new_events: n,
             auto_plan,
@@ -156,7 +154,8 @@ impl DashboardModel {
     pub fn handle_key(&mut self, key: KeyCode) -> bool {
         match key {
             KeyCode::Char('j') | KeyCode::Down => {
-                if self.selected + 1 < self.feed.len() {
+                let len = self.visible_issues().len();
+                if self.selected + 1 < len {
                     self.selected += 1;
                 }
             }
@@ -170,6 +169,7 @@ impl DashboardModel {
                     // 用户手动返回 issue；保留 last_auto，同 plan 继续执行时不反复抢占
                     self.view = View::Issue;
                 }
+                self.clamp_selected();
             }
             KeyCode::Char('q') => return true,
             _ => {}
@@ -186,6 +186,14 @@ impl DashboardModel {
                 .iter()
                 .filter(|i| i.plan_id == Some(plan_id))
                 .collect(),
+        }
+    }
+
+    /// 面板切换后校正选中（避免越界）。
+    fn clamp_selected(&mut self) {
+        let len = self.visible_issues().len();
+        if self.selected >= len {
+            self.selected = len.saturating_sub(1);
         }
     }
 }
@@ -275,13 +283,13 @@ mod tests {
     }
 
     #[test]
-    fn refresh_prepends_events_and_keeps_selection() {
+    fn refresh_prepends_events_and_clamps_selection() {
         let mut m = DashboardModel::new();
         m.init(snap(
             vec![mk_issue(1, "a", Status::Open, None, "10:00")],
             vec![],
         ));
-        // 选中第 0 条；新增一条 → selected 保持 0（钉最新）
+        // 新增 issue 事件 → feed 前置，selected 保持（面板列表下标）
         let r = m.refresh(&snap(
             vec![
                 mk_issue(1, "a", Status::Open, None, "10:00"),
@@ -292,7 +300,7 @@ mod tests {
         assert_eq!(r.new_events, 1);
         assert_eq!(m.selected, 0);
         assert_eq!(m.feed[0].issue().unwrap().id, 2);
-        // selected>0 时新事件前置 → +n
+        // 状态变化事件，issues 数量不变 → selected 保持
         m.selected = 1;
         let r = m.refresh(&snap(
             vec![
@@ -302,7 +310,14 @@ mod tests {
             vec![],
         ));
         assert_eq!(r.new_events, 1);
-        assert_eq!(m.selected, 2);
+        assert_eq!(m.selected, 1);
+        // selected 越界 → clamp
+        m.selected = 5;
+        m.refresh(&snap(
+            vec![mk_issue(1, "a", Status::Open, None, "10:00")],
+            vec![],
+        ));
+        assert_eq!(m.selected, 0);
     }
 
     #[test]
