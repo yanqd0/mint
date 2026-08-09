@@ -36,9 +36,6 @@ pub struct ListArgs {
     /// Table view (interactive on TTY, single page otherwise)
     #[arg(long, conflicts_with = "json")]
     pub tui: bool,
-    /// Tab-separated table output
-    #[arg(long, conflicts_with_all = ["json", "tui"])]
-    pub tsv: bool,
 }
 
 #[derive(clap::Args)]
@@ -97,12 +94,9 @@ pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Er
     if l.json {
         let items: Vec<serde_json::Value> = issues.iter().map(issue_to_json).collect();
         println!("{}", paged_json(&items, page, l.page_size, total));
-    } else if l.tsv {
+    } else {
         let (headers, rows) = crate::cli::list_common::issues(&issues);
         print!("{}", crate::output::format_tsv(&headers, &rows));
-        print_page_footer(page, l.page_size, total);
-    } else {
-        print!("{}", output::format_list(&issues));
         print_page_footer(page, l.page_size, total);
     }
     Ok(())
@@ -187,7 +181,8 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
         let items: Vec<serde_json::Value> = issues.iter().map(issue_to_json).collect();
         println!("{}", paged_json(&items, page, s.page_size, total));
     } else {
-        print!("{}", output::format_list(&issues));
+        let (headers, rows) = crate::cli::list_common::issues(&issues);
+        print!("{}", crate::output::format_tsv(&headers, &rows));
         print_page_footer(page, s.page_size, total);
     }
     Ok(())

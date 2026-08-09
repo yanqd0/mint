@@ -2,28 +2,6 @@
 
 use crate::models::{Container, Issue, IssueSummary};
 
-/// 渲染 issue 列表（人类可读，每行一个）。
-pub fn format_list(issues: &[Issue]) -> String {
-    let mut out = String::new();
-    for i in issues {
-        let label_str = if i.labels.is_empty() {
-            String::new()
-        } else {
-            format!(" [{}]", i.labels.join(","))
-        };
-        out.push_str(&format!(
-            "#{:<4} P{} {:<10} {:<14} {}{}\n",
-            i.id,
-            i.priority,
-            i.kind.as_str(),
-            i.status.as_str(),
-            i.title,
-            label_str
-        ));
-    }
-    out
-}
-
 /// 渲染单个 issue 详情（人类可读，多行缩进）。
 pub fn format_issue(i: &Issue) -> String {
     let mut out = String::new();
@@ -67,28 +45,6 @@ pub fn format_issue(i: &Issue) -> String {
     out
 }
 
-/// 渲染容器列表（人类可读，每行一个，含子项计数）。
-pub fn format_container_list(items: &[(Container, i64)]) -> String {
-    let mut out = String::new();
-    for (c, count) in items {
-        let version = c
-            .version
-            .as_deref()
-            .map(|v| format!(" ({v})"))
-            .unwrap_or_default();
-        out.push_str(&format!(
-            "#{:<4} {:<10} {:<8} {}{} issue{}\n",
-            c.id,
-            c.status.as_str(),
-            count,
-            c.title,
-            version,
-            if *count == 1 { "" } else { "s" }
-        ));
-    }
-    out
-}
-
 /// 渲染容器详情（人类可读，多行缩进）+ 其下 issue 列表。
 pub fn format_container_show(c: &Container, issues: &[IssueSummary]) -> String {
     let mut out = String::new();
@@ -118,7 +74,7 @@ pub fn format_container_show(c: &Container, issues: &[IssueSummary]) -> String {
     out
 }
 
-/// 渲染 TSV 表格（表头首行 + tab 分隔数据行，供 `--tsv` 输出）。
+/// 渲染 TSV 表格（表头首行 + tab 分隔数据行，list 默认输出）。
 pub fn format_tsv(headers: &[String], rows: &[Vec<String>]) -> String {
     let mut out = String::new();
     out.push_str(&headers.join("\t"));
@@ -209,49 +165,6 @@ mod tests {
         }
     }
 
-    /// format_list：行数 + 关键内容。
-    #[rstest]
-    #[case::empty(vec![], 0, "")]
-    #[case::one(vec![mk_issue(1, "hello", Kind::Problem, Status::Open, None, None, None, None, &[], vec![])], 1, "hello")]
-    #[case::many(
-        vec![
-            mk_issue(1, "first", Kind::Problem, Status::Open, None, None, None, None, &[], vec![]),
-            mk_issue(2, "second", Kind::Requirement, Status::Done, None, None, None, None, &[], vec![]),
-        ],
-        2,
-        "second",
-    )]
-    fn format_list_content(#[case] issues: Vec<Issue>, #[case] lines: usize, #[case] needle: &str) {
-        let out = format_list(&issues);
-        assert_eq!(out.lines().count(), lines);
-        assert!(out.contains(needle), "缺 {needle}: {out}");
-    }
-
-    /// format_list：labels 拼接（有/无/多个）。
-    #[rstest]
-    #[case(&[], "")]
-    #[case(&["dev"], "[dev]")]
-    #[case(&["dev", "urgent"], "[dev,urgent]")]
-    fn format_list_labels(#[case] labels: &[&str], #[case] expected: &str) {
-        let out = format_list(&[mk_issue(
-            1,
-            "t",
-            Kind::Problem,
-            Status::Open,
-            None,
-            None,
-            None,
-            None,
-            labels,
-            vec![],
-        )]);
-        if expected.is_empty() {
-            assert!(!out.contains('['), "无 labels 不应有括号: {out}");
-        } else {
-            assert!(out.contains(expected), "缺 {expected}: {out}");
-        }
-    }
-
     /// format_issue：可选字段的出现/缺失（body/test_cmd/dropped/commit/labels/links）。
     #[rstest]
     #[case::minimal(
@@ -310,36 +223,6 @@ mod tests {
         i.hit_count = n;
         let out = format_issue(&i);
         assert_eq!(out.contains("hit:"), show, "hit_count={n} 显示: {out}");
-    }
-
-    /// format_container_list：行数、version 括号出现、count 显示（空列表无 count）。
-    #[rstest]
-    #[case::empty(vec![], 0, false)]
-    #[case::with_version(vec![(mk_container(1, "r", Some("0.3.0"), None, None, ContainerStatus::Open), 1)], 1, true)]
-    #[case::no_version(vec![(mk_container(1, "p", None, None, Some(9), ContainerStatus::Done), 3)], 1, false)]
-    fn format_container_list_basic(
-        #[case] items: Vec<(Container, i64)>,
-        #[case] lines: usize,
-        #[case] has_version: bool,
-    ) {
-        let out = format_container_list(&items);
-        assert_eq!(out.lines().count(), lines);
-        assert_eq!(out.contains('('), has_version);
-        if !items.is_empty() {
-            assert!(out.contains(&items[0].1.to_string()), "缺 count: {out}");
-        }
-    }
-
-    /// format_container_list：单复数切换（issue / issues 行尾）。
-    #[rstest]
-    #[case(1, "issue\n")]
-    #[case(2, "issues\n")]
-    fn format_container_list_plural(#[case] n: i64, #[case] expected: &str) {
-        let out = format_container_list(&[(
-            mk_container(1, "r", None, None, None, ContainerStatus::Open),
-            n,
-        )]);
-        assert!(out.ends_with(expected), "行尾不匹配 {expected:?}: {out}");
     }
 
     /// format_container_show：roadmap/plan 字段与 issue 计数。

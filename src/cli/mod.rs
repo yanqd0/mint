@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use crate::container::{self, ContainerKind};
 use crate::error::Error;
 use crate::output;
-use list_common::{containers, paginate, paged_json, print_page_footer};
+use list_common::{containers, paged_json, paginate, print_page_footer};
 
 pub mod delete;
 pub mod issue;
@@ -39,9 +39,6 @@ pub struct ListContainersArgs {
     /// Table view (interactive on TTY, single page otherwise)
     #[arg(long, conflicts_with = "json")]
     pub tui: bool,
-    /// Tab-separated table output
-    #[arg(long, conflicts_with_all = ["json", "tui"])]
-    pub tsv: bool,
 }
 
 #[derive(clap::Args)]
@@ -239,9 +236,6 @@ pub struct ListLabelsArgs {
     /// Table view (interactive on TTY, single page otherwise)
     #[arg(long, conflicts_with = "json")]
     pub tui: bool,
-    /// Tab-separated table output
-    #[arg(long, conflicts_with_all = ["json", "tui"])]
-    pub tsv: bool,
 }
 
 // ── 顶层 Cli 与 Commands ─────────────────────────────────────────
@@ -459,12 +453,9 @@ pub(crate) fn cmd_container_list(
             })
             .collect();
         println!("{}", paged_json(&arr, page, a.page_size, total));
-    } else if a.tsv {
+    } else {
         let (headers, rows) = containers(&items);
         print!("{}", crate::output::format_tsv(&headers, &rows));
-        print_page_footer(page, a.page_size, total);
-    } else {
-        print!("{}", output::format_container_list(&items));
         print_page_footer(page, a.page_size, total);
     }
     Ok(())
@@ -545,15 +536,9 @@ fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
             })
             .collect();
         println!("{}", paged_json(&arr, page, l.page_size, total));
-    } else if l.tsv {
+    } else {
         let (headers, rows) = crate::cli::list_common::labels(&labels);
         print!("{}", crate::output::format_tsv(&headers, &rows));
-        print_page_footer(page, l.page_size, total);
-    } else {
-        for (t, count) in &labels {
-            let desc = t.description.as_deref().unwrap_or("");
-            println!("{:<16} {:>5} issues  {}", t.name, count, desc);
-        }
         print_page_footer(page, l.page_size, total);
     }
     Ok(())

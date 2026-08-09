@@ -1447,13 +1447,13 @@ fn st_tui_flag_in_help() {
     assert!(String::from_utf8_lossy(&out).contains("--tui"));
 }
 
-/// --tsv 输出：表头首行 + tab 分隔数据行，中文原样。
+/// 默认输出 TSV：表头首行 + tab 分隔数据行（无 flag）。
 #[test]
-fn st_tsv_output() {
+fn st_default_output_tsv() {
     let (_dir, db) = empty_db();
     add_issue(&db, "login broken");
     let out = mint(&db)
-        .args(["list", "--tsv"])
+        .args(["list"])
         .assert()
         .success()
         .get_output()
@@ -1461,17 +1461,34 @@ fn st_tsv_output() {
         .clone();
     let text = String::from_utf8_lossy(&out).to_string();
     let lines: Vec<&str> = text.lines().collect();
-    assert_eq!(lines[0], "ID\tP\tKind\tStatus\tTitle\tLabels", "表头: {text}");
-    assert!(lines.iter().any(|l| l.contains("login broken")), "缺数据行: {text}");
+    assert_eq!(
+        lines[0], "ID\tP\tKind\tStatus\tTitle\tLabels",
+        "表头: {text}"
+    );
+    assert!(
+        lines.iter().any(|l| l.contains("login broken")),
+        "缺数据行: {text}"
+    );
     assert!(lines[1].contains('\t'), "数据行应 tab 分隔: {lines:?}");
 }
 
-/// --tsv 与 --json / --tui 互斥。
+/// search 默认输出 TSV（表头 + 数据）。
 #[test]
-fn st_tsv_conflicts() {
+fn st_search_default_tsv() {
     let (_dir, db) = empty_db();
-    let stderr = run_fail(&db, &["list", "--tsv", "--json"]);
-    assert!(stderr.contains("cannot be used with"), "stderr: {stderr}");
-    let stderr = run_fail(&db, &["list", "--tsv", "--tui"]);
-    assert!(stderr.contains("cannot be used with"), "stderr: {stderr}");
+    add_issue(&db, "searchable token");
+    let out = mint(&db)
+        .args(["search", "searchable"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(
+        lines[0], "ID\tP\tKind\tStatus\tTitle\tLabels",
+        "表头: {text}"
+    );
+    assert!(text.contains("searchable token"), "缺数据: {text}");
 }
