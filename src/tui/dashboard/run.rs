@@ -14,7 +14,7 @@ use crate::git;
 use crate::state::{self, Action};
 use crate::tui::dashboard::DashboardModel;
 use crate::tui::dashboard::data::load_snapshot;
-use crate::tui::dashboard::types::{KeyAction, Notice, View};
+use crate::tui::dashboard::types::{IssueFilter, KeyAction, Notice, View};
 use crate::tui::{CrosstermEvents, EventSource, is_interactive, to_keycode};
 
 /// 自动刷新间隔：每 tick 全量重查重渲。
@@ -23,21 +23,23 @@ const REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
 /// 启动 dashboard（初始视图 = Issues 主屏）。
 /// `cwd` 供状态命令 commit 取 HEAD（git 仓库路径）。
 pub fn run_dashboard(conn: &Connection, project: &str, cwd: &Path) -> Result<(), Error> {
-    run_dashboard_view(conn, project, cwd, View::Issues)
+    run_dashboard_view(conn, project, cwd, View::Issues, None)
 }
 
-/// 以指定初始视图启动 dashboard：show --tui 传详情视图，list --tui 传列表视图。
+/// 以指定初始视图启动 dashboard：show --tui 传详情视图，list --tui 传列表视图 + 筛选。
 /// TTY 自动刷新交互；非 TTY 输出初始视图快照文本。
 pub fn run_dashboard_view(
     conn: &Connection,
     project: &str,
     cwd: &Path,
     initial: View,
+    filter: Option<IssueFilter>,
 ) -> Result<(), Error> {
     let snapshot = load_snapshot(conn, project)?;
     let mut model = DashboardModel::new();
     model.init(snapshot);
     model.view = initial;
+    model.filter = filter;
     if is_interactive() {
         let mut terminal = ratatui::init();
         let mut events = CrosstermEvents;
@@ -625,5 +627,37 @@ mod tests {
                 .iter()
                 .any(|l| l.contains(&format!("issue #{id}: open -> planned")))
         );
+    }
+
+    #[test]
+    fn interaction_list_tui_filter_filters_and_navigates_detail() {
+        use crate::models::Status;
+        // 模拟 list --tui：初始 view=Issues + filter（仅 open）。
+        let (_db_dir, conn, _id) = db_with_open_issue();
+        conn.execute(
+            "INSERT INTO issues (title, kind, status, priority, project_id)
+             VALUES ('done one', 'problem', 'done', 3, 1)",
+            [],
+        )
+        .unwrap();
+        let mut m = DashboardModel::new();
+        m.init(load_snapshot(&conn, "mint").unwrap());
+        m.view = View::Issues;
+        m.filter = Some(IssueFilter {
+            all: false,
+            status: Some(Status::Open),
+            label: None,
+            priority: None,
+        });
+        // 筛选生效：只显示 open issue。
+        let v = m.visible_issues();
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].status, Status::Open);
+        let open_id = v[0].id;
+        // Enter 进详情（等价 show --tui 页面），Esc 返回列表。
+        m.handle_key(KeyCode::Enter);
+        assert_eq!(m.view, View::IssueDetail { id: open_id });
+        m.handle_key(KeyCode::Esc);
+        assert_eq!(m.view, View::Issues);
     }
 }

@@ -75,7 +75,7 @@ pub fn dispatch(
 ) -> Result<(), Error> {
     match cmd {
         super::PlanCmd::Create(a) => cmd_plan_create(conn, a),
-        super::PlanCmd::List(a) => cmd_container_list(conn, ContainerKind::Plan, a),
+        super::PlanCmd::List(a) => cmd_container_list(conn, cwd, project, ContainerKind::Plan, a),
         super::PlanCmd::Show(a) => cmd_container_show(conn, cwd, project, ContainerKind::Plan, a),
         super::PlanCmd::Attach(a) => {
             container::set_issue_plan(conn, a.issue_id, a.id)?;

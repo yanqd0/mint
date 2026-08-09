@@ -384,7 +384,7 @@ impl Cli {
 
         match &self.command {
             Commands::Issue(i) => issue::dispatch(&mut conn, &cwd, &project, &i.command),
-            Commands::List(l) => issue::list::cmd_list(&conn, &project, l),
+            Commands::List(l) => issue::list::cmd_list(&conn, &cwd, &project, l),
             Commands::Show(s) => issue::list::cmd_show(&conn, &cwd, &project, s),
             Commands::Search(s) => issue::list::cmd_search(&conn, &project, s),
             Commands::Label(t) => match &t.command {
@@ -433,17 +433,25 @@ impl Cli {
 /// 容器 list：默认只显非 done，--all/-a 全列。
 pub(crate) fn cmd_container_list(
     conn: &Connection,
+    cwd: &std::path::Path,
+    project: &str,
     kind: ContainerKind,
     a: &ListContainersArgs,
 ) -> Result<(), Error> {
     let items = container::list(conn, kind, a.all)?;
     if a.tui {
-        let (headers, rows) = containers(&items);
-        let title = match kind {
-            ContainerKind::Milestone => "Milestones",
-            ContainerKind::Plan => "Plans",
+        // list --tui 归一：复用 dashboard 列表页（带 --all-states 筛选）。
+        let filter = crate::tui::dashboard::types::IssueFilter {
+            all: a.all,
+            status: None,
+            label: None,
+            priority: None,
         };
-        return crate::tui::run_list(title, headers, rows, a.page_size);
+        let view = match kind {
+            ContainerKind::Milestone => crate::tui::dashboard::types::View::Milestones,
+            ContainerKind::Plan => crate::tui::dashboard::types::View::Plans,
+        };
+        return crate::tui::run_dashboard_view(conn, project, cwd, view, Some(filter));
     }
     let (items, total, page) = paginate(items, a.page, a.page_size);
     if a.json {
@@ -482,7 +490,7 @@ pub(crate) fn cmd_container_show(
                 crate::tui::dashboard::types::View::MilestoneDetail { milestone_id: a.id }
             }
         };
-        return crate::tui::run_dashboard_view(conn, project, cwd, view);
+        return crate::tui::run_dashboard_view(conn, project, cwd, view, None);
     }
     let c = container::get(conn, kind, a.id)?
         .ok_or_else(|| Error::Other(format!("{} #{} not found", kind_noun(kind), a.id)))?;

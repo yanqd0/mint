@@ -1473,9 +1473,10 @@ fn st_tui_issue_list_single_page() {
         .stdout
         .clone();
     let text = String::from_utf8_lossy(&out).to_string();
-    assert!(text.contains("ID"), "表头缺 ID: {text}");
+    // list --tui 归一到 dashboard Issues 页：非 TTY 降级输出 dashboard 帧。
+    assert!(text.contains("1. Issues"), "dashboard tab: {text}");
     assert!(text.contains("login broken"), "缺数据行: {text}");
-    assert!(text.contains("Page 1/1"), "缺页码 footer: {text}");
+    assert!(text.contains("open"), "issue 状态点/状态: {text}");
 }
 
 /// plan/milestone/label 三个 list 的 --tui 降级。

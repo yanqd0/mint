@@ -9,7 +9,7 @@ use crate::models::{Container, Issue};
 use crate::state::Action;
 use crate::tui::dashboard::diff::{DashboardSnapshot, diff_snapshots};
 use crate::tui::dashboard::types::{
-    FlashItem, InputState, JumpRequest, MAX_FEED, NOTICE_TICKS, Notice, RawJump,
+    FlashItem, InputState, IssueFilter, JumpRequest, MAX_FEED, NOTICE_TICKS, Notice, RawJump,
 };
 
 pub use crate::tui::dashboard::types::{FeedItem, KeyAction, RefreshResult, View};
@@ -29,6 +29,8 @@ pub struct DashboardModel {
     pub milestones: Vec<(Container, i64)>,
     /// milestone 直属 issue 关联（详情页直属 issue 列表用）。
     pub milestone_directs: Vec<(i64, i64)>,
+    /// 初始筛选（list --tui 传入；TUI 内固定不变）。
+    pub filter: Option<IssueFilter>,
     pub(crate) prev: Option<DashboardSnapshot>,
     /// 当前面板页（0-based，每页 page_size 行）。
     pub page: usize,
@@ -69,6 +71,7 @@ impl DashboardModel {
             plans: Vec::new(),
             milestones: Vec::new(),
             milestone_directs: Vec::new(),
+            filter: None,
             prev: None,
             page: 0,
             page_size: 10,
@@ -103,6 +106,7 @@ impl DashboardModel {
         self.milestones = snapshot.milestones.clone();
         self.milestone_directs = snapshot.milestone_directs.clone();
         self.project = snapshot.project.clone();
+        self.filter = None;
         self.prev = Some(snapshot);
         self.view = View::Issues;
         self.selected = 0;

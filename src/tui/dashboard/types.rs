@@ -40,6 +40,16 @@ pub enum KeyAction {
     },
 }
 
+/// dashboard 初始筛选（list --tui 传入；TUI 内固定不变）。
+/// `all=false` 排除 done/dropped（对齐 list 默认只显活跃）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IssueFilter {
+    pub all: bool,
+    pub status: Option<Status>,
+    pub label: Option<String>,
+    pub priority: Option<i64>,
+}
+
 /// TUI 参数输入态：状态命令需参数（close→test_cmd、drop→reason）时进入，
 /// 字符输入到 `value`，Enter 提交（产出 State 请求）/ Esc 取消。
 #[derive(Debug, Clone, PartialEq, Eq)]

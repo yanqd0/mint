@@ -75,24 +75,36 @@ pub struct ShowArgs {
     pub tui: bool,
 }
 
-pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Error> {
+pub fn cmd_list(conn: &Connection, cwd: &Path, project: &str, l: &ListArgs) -> Result<(), Error> {
     let all: i64 = if l.all { 1 } else { 0 };
     let status = l.status;
     let label: Option<&str> = l.label.as_deref();
-    let project: Option<&str> = Some(project);
+    let project_param: Option<&str> = Some(project);
     let priority = l.priority;
 
     let mut stmt = conn.prepare(db::ISSUE_LIST)?;
     let rows = stmt.query_map(
-        rusqlite::params![all, status, label, project, priority],
+        rusqlite::params![all, status, label, project_param, priority],
         issue_from_row,
     )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;
     if l.tui {
-        let (headers, rows) = crate::cli::list_common::issues(&issues);
-        return crate::tui::run_list("Issues", headers, rows, l.page_size);
+        // list --tui 归一：复用 dashboard Issues 页（带初始筛选）。
+        let filter = crate::tui::dashboard::types::IssueFilter {
+            all: l.all,
+            status: l.status,
+            label: l.label.clone(),
+            priority: l.priority,
+        };
+        return crate::tui::run_dashboard_view(
+            conn,
+            project,
+            cwd,
+            crate::tui::dashboard::types::View::Issues,
+            Some(filter),
+        );
     }
     let (issues, total, page) = paginate(issues, l.page, l.page_size);
 
@@ -213,6 +225,7 @@ pub fn cmd_show(conn: &Connection, cwd: &Path, project: &str, s: &ShowArgs) -> R
             project,
             cwd,
             crate::tui::dashboard::types::View::IssueDetail { id },
+            None,
         );
     }
     let issue = conn

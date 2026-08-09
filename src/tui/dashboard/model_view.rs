@@ -12,9 +12,9 @@ pub struct PlanGroup<'a> {
 
 impl DashboardModel {
     /// 当前视图展示的 issue 集合（Issues tab = 全部；PlanDetail = 该 plan 下；
-    /// MilestoneDetail = 其下 plan 的 issue 聚合）。
+    /// MilestoneDetail = 其下 plan 的 issue 聚合）。随后应用 list --tui 的初始筛选。
     pub fn visible_issues(&self) -> Vec<&Issue> {
-        match self.view {
+        let mut v: Vec<&Issue> = match self.view {
             View::Issues => self.issues.iter().collect(),
             View::PlanDetail { plan_id } => self
                 .issues
@@ -32,7 +32,29 @@ impl DashboardModel {
                 })
                 .collect(),
             _ => Vec::new(),
+        };
+        // 初始筛选：all=false 排除 done/dropped（对齐 list 默认只显活跃）；其余精确匹配。
+        if let Some(f) = &self.filter {
+            v.retain(|i| {
+                if !f.all && matches!(i.status, Status::Done | Status::Dropped) {
+                    return false;
+                }
+                if f.status.is_some_and(|s| i.status != s) {
+                    return false;
+                }
+                if f.label
+                    .as_deref()
+                    .is_some_and(|l| !i.labels.iter().any(|x| x == l))
+                {
+                    return false;
+                }
+                if f.priority.is_some_and(|p| i.priority != p) {
+                    return false;
+                }
+                true
+            });
         }
+        v
     }
 
     /// Plans tab 行：分组展平（执行中 milestone → 无 milestone → 剩余 milestone）。
