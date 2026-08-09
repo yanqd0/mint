@@ -9,13 +9,14 @@
   - 非 TTY：降级输出单页表格文本（不可交互，脚本/CI 安全）。
   - `--tui` 与 `--json` 互斥；列宽按 Unicode 显示宽度对齐（中英文混排）。
 - list 类默认输出改 TSV：表头首行 + tab 分隔数据行（token 最优，喂 LLM 场景）；`--tsv` 参数移除（默认即 TSV），`--json`/`--tui` 保留。
-- `mint tui` 大屏展示：自动变化 issue/plan 面板，进度条（open 率）+ 状态点（● 黄/绿闪/绿/白/红）；plan 执行中自动切 plan 面板、结束切回；Enter 查看 issue 详情。TTY 每秒自动刷新，非 TTY 输出快照文本。
+- `mint tui` 大屏展示：自动变化 issue/plan/milestone 面板，进度条（open 率）+ 状态点（● 黄/绿闪/绿/白/红）；plan 执行中自动切 plan 面板、结束短暂切所属 milestone 面板再回 issue；Enter 查看 issue 详情 / milestone 面板查看其下 plan 行进度；Tab/p 手动循环全部面板。TTY 每秒自动刷新，非 TTY 输出快照文本。
 
 ### Others
 
 - 依赖新增：ratatui 0.30、crossterm 0.29、unicode-width。
 - 分页三件套提升至 `src/cli/list_common.rs`（issue/plan/milestone/label 共用）。
 - TUI 渲染模块 `src/tui/`（model 纯状态机 / draw 渲染 / rows 列转换）。
+- milestone 面板（plan #17）：snapshot 含 milestone、View::Milestone、plan 行迷你进度、倒计时自动回退。
 - 决策记录：TUI 选型（D25）、默认 TSV（D26）、mint tui 大屏（D27）。
 
 ## 0.3.0
