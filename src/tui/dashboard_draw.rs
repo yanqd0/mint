@@ -12,7 +12,10 @@ use crate::tui::dashboard::{DashboardModel, View};
 /// 状态点：`●` + 颜色（黄=待做、绿闪=开发、绿=在做、白=完成、红=drop）。
 pub fn status_dot(status: Status) -> (char, Style) {
     let style = match status {
-        Status::Open | Status::Planned => Style::new().fg(Color::Yellow),
+        Status::Open => Style::new().fg(Color::Yellow),
+        Status::Planned => Style::new()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::SLOW_BLINK),
         Status::Dev => Style::new()
             .fg(Color::Green)
             .add_modifier(Modifier::SLOW_BLINK),
@@ -26,7 +29,10 @@ pub fn status_dot(status: Status) -> (char, Style) {
 /// 进度条段样式：亮=未完成、亮闪=在做、暗=完成、暗红=drop。
 fn progress_style(status: Status) -> Style {
     match status {
-        Status::Open | Status::Planned => Style::new().fg(Color::Yellow),
+        Status::Open => Style::new().fg(Color::Yellow),
+        Status::Planned => Style::new()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::SLOW_BLINK),
         Status::Dev | Status::Test => Style::new()
             .fg(Color::Green)
             .add_modifier(Modifier::SLOW_BLINK),
@@ -213,6 +219,12 @@ mod tests {
         use ratatui::style::Color as C;
         assert_eq!(status_dot(Status::Open).0, '●');
         assert_eq!(status_dot(Status::Open).1.fg, Some(C::Yellow));
+        assert!(
+            status_dot(Status::Planned)
+                .1
+                .add_modifier
+                .contains(Modifier::SLOW_BLINK)
+        );
         assert!(
             status_dot(Status::Dev)
                 .1
