@@ -207,7 +207,7 @@ impl DashboardModel {
                     self.selected = 0;
                 }
             }
-            KeyCode::Char('r') => {
+            KeyCode::Char('m') => {
                 if let Some(mid) = self.selected_milestone_id() {
                     self.view = View::MilestoneDetail { milestone_id: mid };
                     self.page = 0;

@@ -74,7 +74,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     }
 
     let footer = format!(
-        "j/k row · ←/→ page · 1/2/3 tab · Enter detail · p plan · r milestone · q quit · Page {}/{} ({total} issues)",
+        "j/k row · ←/→ page · 1/2/3 tab · Enter detail · p plan · m milestone · q quit · Page {}/{} ({total} issues)",
         m.page + 1,
         m.pages()
     );
