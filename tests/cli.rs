@@ -303,7 +303,8 @@ fn st_add_duplicate_merges_labels() {
     );
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert!(
-        v["labels"].as_array()
+        v["labels"]
+            .as_array()
             .unwrap()
             .iter()
             .any(|l| l == "urgent"),
@@ -378,8 +379,8 @@ fn st_search_matches_title() {
     let (_dir, db) = empty_db();
     add_issue(&db, "fix timeout bug");
     let v = run_json(&db, &["search", "timeout", "--json"]);
-    let ids: Vec<i64> = v
-        ["items"].as_array()
+    let ids: Vec<i64> = v["items"]
+        .as_array()
         .unwrap()
         .iter()
         .map(|x| x["id"].as_i64().unwrap())
@@ -403,7 +404,11 @@ fn st_search_matches_body() {
         ],
     );
     let v = run_json(&db, &["search", "database", "--json"]);
-    assert_eq!(v["items"].as_array().unwrap().len(), 1, "body 关键词应命中: {v}");
+    assert_eq!(
+        v["items"].as_array().unwrap().len(),
+        1,
+        "body 关键词应命中: {v}"
+    );
 }
 
 /// search：中文子串（trigram，查询 ≥3 字符）。
@@ -412,7 +417,11 @@ fn st_search_chinese_trigram() {
     let (_dir, db) = empty_db();
     add_issue(&db, "修复登录 bug");
     let v = run_json(&db, &["search", "修复登录", "--json"]);
-    assert_eq!(v["items"].as_array().unwrap().len(), 1, "中文子串应命中: {v}");
+    assert_eq!(
+        v["items"].as_array().unwrap().len(),
+        1,
+        "中文子串应命中: {v}"
+    );
 }
 
 /// search：触发器同步（add 可搜、状态推进仍可搜、delete 后不可搜）。
@@ -421,8 +430,8 @@ fn st_search_trigger_sync() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "sync searchable item");
     assert_eq!(
-        run_json(&db, &["search", "searchable", "--json"])
-            ["items"].as_array()
+        run_json(&db, &["search", "searchable", "--json"])["items"]
+            .as_array()
             .unwrap()
             .len(),
         1
@@ -431,8 +440,8 @@ fn st_search_trigger_sync() {
     run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
     run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
     assert_eq!(
-        run_json(&db, &["search", "searchable", "--json"])
-            ["items"].as_array()
+        run_json(&db, &["search", "searchable", "--json"])["items"]
+            .as_array()
             .unwrap()
             .len(),
         1
@@ -440,8 +449,8 @@ fn st_search_trigger_sync() {
     // delete 后不可搜（issues_fts_ad 触发器清索引）
     run_json(&db, &["delete", "issue", &id.to_string(), "--json"]);
     assert_eq!(
-        run_json(&db, &["search", "searchable", "--json"])
-            ["items"].as_array()
+        run_json(&db, &["search", "searchable", "--json"])["items"]
+            .as_array()
             .unwrap()
             .len(),
         0
@@ -467,8 +476,8 @@ fn st_search_filters() {
     );
     // project 过滤：proj-b 不含
     assert_eq!(
-        run_json(&db, &["--project", "proj-b", "search", "filter", "--json"])
-            ["items"].as_array()
+        run_json(&db, &["--project", "proj-b", "search", "filter", "--json"])["items"]
+            .as_array()
             .unwrap()
             .len(),
         0
@@ -486,15 +495,15 @@ fn st_search_filters() {
                 "dev",
                 "--json"
             ]
-        )
-        ["items"].as_array()
-        .unwrap()
-        .len(),
+        )["items"]
+            .as_array()
+            .unwrap()
+            .len(),
         1
     );
     assert_eq!(
-        run_json(&db, &["search", "filter", "--label", "other", "--json"])
-            ["items"].as_array()
+        run_json(&db, &["search", "filter", "--label", "other", "--json"])["items"]
+            .as_array()
             .unwrap()
             .len(),
         0
@@ -512,10 +521,10 @@ fn st_search_filters() {
                 "open",
                 "--json"
             ]
-        )
-        ["items"].as_array()
-        .unwrap()
-        .len(),
+        )["items"]
+            .as_array()
+            .unwrap()
+            .len(),
         1
     );
     assert_eq!(
@@ -530,10 +539,10 @@ fn st_search_filters() {
                 "done",
                 "--json"
             ]
-        )
-        ["items"].as_array()
-        .unwrap()
-        .len(),
+        )["items"]
+            .as_array()
+            .unwrap()
+            .len(),
         0
     );
 }
@@ -667,15 +676,15 @@ fn st_edit_triggers_fts() {
         ],
     );
     assert_eq!(
-        run_json(&db, &["search", "newkeyword", "--json"])
-            ["items"].as_array()
+        run_json(&db, &["search", "newkeyword", "--json"])["items"]
+            .as_array()
             .unwrap()
             .len(),
         1
     );
     assert_eq!(
-        run_json(&db, &["search", "oldkeyword", "--json"])
-            ["items"].as_array()
+        run_json(&db, &["search", "oldkeyword", "--json"])["items"]
+            .as_array()
             .unwrap()
             .len(),
         0
