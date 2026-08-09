@@ -89,7 +89,7 @@ pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Er
 
     fill_labels(conn, &mut issues)?;
     if l.tui {
-        let (headers, rows) = crate::tui::rows::issues(&issues);
+        let (headers, rows) = crate::cli::list_common::issues(&issues);
         return crate::tui::run_list("Issues", headers, rows, l.page_size);
     }
     let (issues, total, page) = paginate(issues, l.page, l.page_size);
@@ -98,7 +98,7 @@ pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Er
         let items: Vec<serde_json::Value> = issues.iter().map(issue_to_json).collect();
         println!("{}", paged_json(&items, page, l.page_size, total));
     } else if l.tsv {
-        let (headers, rows) = crate::tui::rows::issues(&issues);
+        let (headers, rows) = crate::cli::list_common::issues(&issues);
         print!("{}", crate::output::format_tsv(&headers, &rows));
         print_page_footer(page, l.page_size, total);
     } else {

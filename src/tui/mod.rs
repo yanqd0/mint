@@ -15,7 +15,6 @@ use crate::tui::model::ListModel;
 
 pub mod draw;
 pub mod model;
-pub mod rows;
 
 /// 事件源抽象：生产 = crossterm，测试可注入脚本序列。
 pub trait EventSource {

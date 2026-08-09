@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use crate::container::{self, ContainerKind};
 use crate::error::Error;
 use crate::output;
-use list_common::{paged_json, paginate, print_page_footer};
+use list_common::{containers, paginate, paged_json, print_page_footer};
 
 pub mod delete;
 pub mod issue;
@@ -438,7 +438,7 @@ pub(crate) fn cmd_container_list(
 ) -> Result<(), Error> {
     let items = container::list(conn, kind, a.all)?;
     if a.tui {
-        let (headers, rows) = crate::tui::rows::containers(&items);
+        let (headers, rows) = containers(&items);
         let title = match kind {
             ContainerKind::Roadmap => "Roadmaps",
             ContainerKind::Plan => "Plans",
@@ -460,7 +460,7 @@ pub(crate) fn cmd_container_list(
             .collect();
         println!("{}", paged_json(&arr, page, a.page_size, total));
     } else if a.tsv {
-        let (headers, rows) = crate::tui::rows::containers(&items);
+        let (headers, rows) = containers(&items);
         print!("{}", crate::output::format_tsv(&headers, &rows));
         print_page_footer(page, a.page_size, total);
     } else {
@@ -529,7 +529,7 @@ pub(crate) fn kind_noun(kind: ContainerKind) -> &'static str {
 fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
     let labels = crate::label::list(conn)?;
     if l.tui {
-        let (headers, rows) = crate::tui::rows::labels(&labels);
+        let (headers, rows) = crate::cli::list_common::labels(&labels);
         return crate::tui::run_list("Labels", headers, rows, l.page_size);
     }
     let (labels, total, page) = paginate(labels, l.page, l.page_size);
@@ -546,7 +546,7 @@ fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
             .collect();
         println!("{}", paged_json(&arr, page, l.page_size, total));
     } else if l.tsv {
-        let (headers, rows) = crate::tui::rows::labels(&labels);
+        let (headers, rows) = crate::cli::list_common::labels(&labels);
         print!("{}", crate::output::format_tsv(&headers, &rows));
         print_page_footer(page, l.page_size, total);
     } else {
