@@ -36,8 +36,12 @@ Accepts an optional positional `<description>` argument summarizing intent. When
 
 > The rules below MUST NOT be skipped due to CC plan mode or any other workflow step. Skipping means "not taken over" — the next session MUST backfill.
 
+0. **After CC plan mode approval, determine whether this work belongs to an existing mint plan**:
+   - **Belongs** to an existing plan → `mint plan attach <plan_id> <issue_id>`
+   - **Does NOT belong** to any existing plan → first action MUST be `mint plan create` (under a roadmap), then create issues and attach
+   - **NEVER write code without a mint plan**: every CC plan must have a corresponding mint plan
 1. **After CC plan mode approval, the first action is NOT writing code**:
-   - Attach the corresponding mint plan issue to its mint plan (`mint plan attach <plan_id> <issue_id>`)
+   - Attach the work to a mint plan (step 0 guarantees the plan exists)
    - Create issues for each independent phase (kind=requirement, label `<version>,dev-clean`), attach to mint plan via `mint plan attach`
 2. **For each logical change (one or more commits)**:
    - `mint issue state plan <id>` (schedule)

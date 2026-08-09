@@ -36,8 +36,12 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 
 > 以下规则不因 CC plan mode / 任何其他流程步骤而跳过。违反视为"未接管"，下次 session 必须补登记。
 
+0. **CC plan mode 审批通过后，判断该工作是否属于已有 mint plan**：
+   - **属于**已有 plan → `mint plan attach <plan_id> <issue_id>` 挂入
+   - **不属于**任何已有 plan → 第一步必须是 `mint plan create` 新建 plan（挂 roadmap），再建 issue 并 attach
+   - **绝不允许无 plan 直接写代码**：CC plan 必须有对应的 mint plan
 1. **CC plan mode 审批通过后，第一件事不是写代码**：
-   - 将 CC plan 对应的 mint plan issue 挂入已有 mint plan（如 `mint plan attach <plan_id> <issue_id>`）
+   - 将 CC plan 对应的 work 挂入 mint plan（step 0 已保证 plan 存在）
    - 为每个独立 phase 建 issue（kind=requirement，label `<版本>,dev-clean`），`mint plan attach` 挂入
 2. **每完成一个逻辑变更（对应一次或多次 commit）**：
    - `mint issue state plan <id>`（排入计划）
