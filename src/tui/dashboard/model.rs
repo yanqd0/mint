@@ -13,6 +13,8 @@ pub use crate::tui::dashboard::types::{FeedItem, RefreshResult, View};
 
 /// dashboard 状态机。
 pub struct DashboardModel {
+    /// 当前项目名（外框标题）。
+    pub project: String,
     pub view: View,
     /// 变更流，index 0 = 最新。
     pub feed: Vec<FeedItem>,
@@ -54,6 +56,7 @@ impl Default for DashboardModel {
 impl DashboardModel {
     pub fn new() -> Self {
         Self {
+            project: String::new(),
             view: View::Issues,
             feed: Vec::new(),
             selected: 0,
@@ -92,6 +95,7 @@ impl DashboardModel {
         self.issues = issues;
         self.plans = snapshot.plans.clone();
         self.milestones = snapshot.milestones.clone();
+        self.project = snapshot.project.clone();
         self.prev = Some(snapshot);
         self.view = View::Issues;
         self.selected = 0;

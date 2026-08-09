@@ -167,6 +167,7 @@ mod tests {
             ],
             plans: vec![(mk_container(7), 2), (mk_container(8), 3)],
             milestones: vec![],
+            project: "mint".into(),
         };
         // 活跃 issue 最新更新：plan 7 的 dev(10:00) vs plan 8 的 test(11:00) → 8 在前
         let active = active_plans(&snap);

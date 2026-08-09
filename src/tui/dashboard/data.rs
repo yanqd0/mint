@@ -9,15 +9,15 @@ use crate::error::Error;
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::diff::DashboardSnapshot;
 
-/// 全量快照：全部 issue（含 labels）+ 全部 plan（含直接挂载 issue 计数）。
-pub fn load_snapshot(conn: &Connection) -> Result<DashboardSnapshot, Error> {
+/// 全量快照：当前项目 issue（含 labels）+ 全部 plan + 全部 milestone。
+pub fn load_snapshot(conn: &Connection, project: &str) -> Result<DashboardSnapshot, Error> {
     let mut stmt = conn.prepare(db::ISSUE_LIST)?;
     let rows = stmt.query_map(
         rusqlite::params![
             1,
             None::<Status>,
             None::<String>,
-            None::<String>,
+            Some(project),
             None::<i64>
         ],
         issue_from_row,
@@ -30,6 +30,7 @@ pub fn load_snapshot(conn: &Connection) -> Result<DashboardSnapshot, Error> {
         issues,
         plans,
         milestones,
+        project: project.to_string(),
     })
 }
 
@@ -72,7 +73,7 @@ mod tests {
         )
         .unwrap();
 
-        let snap = load_snapshot(&conn).unwrap();
+        let snap = load_snapshot(&conn, "mint").unwrap();
         assert_eq!(snap.issues.len(), 2);
         let a = snap.issue(1).unwrap();
         assert_eq!(a.title, "a");
@@ -91,7 +92,7 @@ mod tests {
     #[test]
     fn snapshot_empty_db() {
         let conn = db();
-        let snap = load_snapshot(&conn).unwrap();
+        let snap = load_snapshot(&conn, "mint").unwrap();
         assert!(snap.issues.is_empty());
         assert!(snap.plans.is_empty());
     }

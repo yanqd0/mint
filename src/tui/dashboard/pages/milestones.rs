@@ -37,7 +37,7 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
         m.pages()
     );
     let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
-    render_panel(frame, chunks[0], "mint · milestones", lines);
+    render_panel(frame, chunks[0], "milestones", lines);
     frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
 }
 
@@ -79,12 +79,7 @@ pub fn draw_milestone_detail(frame: &mut Frame, m: &DashboardModel, milestone_id
         m.pages()
     );
     let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
-    render_panel(
-        frame,
-        chunks[0],
-        &format!("mint · milestone {title}"),
-        lines,
-    );
+    render_panel(frame, chunks[0], &format!("milestone {title}"), lines);
     frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
 }
 
@@ -110,7 +105,7 @@ mod tests {
             .draw(|f| draw_milestones_panel(f, &m, f.area()))
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
-        assert!(text.contains("mint · milestones"), "标题: {text}");
+        assert!(text.contains("milestones"), "标题: {text}");
         assert!(text.contains("0.4.0"), "version: {text}");
         assert!(text.contains("TUI"), "标题: {text}");
     }

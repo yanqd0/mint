@@ -391,7 +391,7 @@ impl Cli {
             Commands::Milestone(r) => milestone::dispatch(&conn, &r.command),
             Commands::Plan(p) => plan::dispatch(&conn, &p.command),
             Commands::Delete(d) => delete::dispatch(&conn, &d.command),
-            Commands::Tui => crate::tui::run_dashboard(&conn),
+            Commands::Tui => crate::tui::run_dashboard(&conn, &project),
         }
     }
 

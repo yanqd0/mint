@@ -263,6 +263,7 @@ mod tests {
             issues,
             plans,
             milestones: vec![],
+            project: "mint".into(),
         }
     }
 

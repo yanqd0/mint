@@ -52,6 +52,7 @@ pub fn model_with(issues: Vec<Issue>) -> DashboardModel {
         issues,
         plans: vec![],
         milestones: vec![],
+        project: "mint".into(),
     });
     m
 }
@@ -66,6 +67,7 @@ pub fn model_full(
         issues,
         plans,
         milestones,
+        project: "mint".into(),
     });
     m
 }

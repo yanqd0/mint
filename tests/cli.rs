@@ -1527,7 +1527,8 @@ fn st_tui_dashboard_output() {
         .stdout
         .clone();
     let text = String::from_utf8_lossy(&out).to_string();
-    assert!(text.contains("mint · issues"), "标题: {text}");
+    assert!(text.contains("1. Issues"), "tab: {text}");
+    assert!(text.contains("issues"), "标题: {text}");
     assert!(text.contains("progress:"), "进度: {text}");
     assert!(text.contains("dashboard issue"), "issue: {text}");
     assert!(text.contains("●"), "状态点: {text}");
@@ -1545,7 +1546,8 @@ fn st_tui_dashboard_empty_db() {
         .stdout
         .clone();
     let text = String::from_utf8_lossy(&out).to_string();
-    assert!(text.contains("mint · issues"), "标题: {text}");
+    assert!(text.contains("1. Issues"), "tab: {text}");
+    assert!(text.contains("issues"), "标题: {text}");
 }
 
 /// help 展示 tui 子命令。

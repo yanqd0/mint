@@ -15,8 +15,8 @@ use crate::tui::panel::{render_panel, stack};
 /// 面板标题（Issues tab 或 PlanDetail）。
 fn panel_title(m: &DashboardModel) -> String {
     match m.view {
-        View::Issues => "mint · issues".to_string(),
-        View::PlanDetail { plan_id } => format!("mint · plan #{plan_id}"),
+        View::Issues => "issues".to_string(),
+        View::PlanDetail { plan_id } => format!("plan #{plan_id}"),
         _ => "mint".to_string(),
     }
 }
@@ -97,7 +97,7 @@ mod tests {
             .draw(|f| draw_issues_panel(f, &m, f.area()))
             .unwrap();
         let joined = buffer_text(terminal.backend().buffer()).join("\n");
-        assert!(joined.contains("mint · issues"), "标题: {joined}");
+        assert!(joined.contains("issues"), "标题: {joined}");
         assert!(joined.contains("progress: 50%"), "rate: {joined}");
         assert!(joined.contains("#1 open"), "issue 行: {joined}");
         assert!(joined.contains("●"), "状态点: {joined}");

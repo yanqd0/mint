@@ -15,19 +15,19 @@ use crate::tui::{CrosstermEvents, EventSource, is_interactive, to_keycode};
 const REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
 
 /// 启动 dashboard：TTY 自动刷新交互；非 TTY 输出初始快照文本。
-pub fn run_dashboard(conn: &Connection) -> Result<(), Error> {
-    let snapshot = load_snapshot(conn)?;
+pub fn run_dashboard(conn: &Connection, project: &str) -> Result<(), Error> {
+    let snapshot = load_snapshot(conn, project)?;
     let mut model = DashboardModel::new();
     model.init(snapshot);
     if is_interactive() {
-        run_loop(conn, &mut model)
+        run_loop(conn, project, &mut model)
     } else {
         render_text(&model)
     }
 }
 
 /// TTY 主循环：poll 1s 超时触发 refresh，按键走 handle_key。
-fn run_loop(conn: &Connection, model: &mut DashboardModel) -> Result<(), Error> {
+fn run_loop(conn: &Connection, project: &str, model: &mut DashboardModel) -> Result<(), Error> {
     let mut terminal = ratatui::init();
     let result = (|| -> Result<(), Error> {
         loop {
@@ -41,7 +41,7 @@ fn run_loop(conn: &Connection, model: &mut DashboardModel) -> Result<(), Error> 
                     }
                 }
                 None => {
-                    let snap = load_snapshot(conn)?;
+                    let snap = load_snapshot(conn, project)?;
                     model.refresh(&snap);
                 }
             }

@@ -15,6 +15,7 @@ pub mod tests_common;
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout};
+use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Tabs};
 
 use crate::tui::dashboard::model::DashboardModel;
@@ -29,23 +30,39 @@ fn tab_index(m: &DashboardModel) -> usize {
     }
 }
 
-/// 渲染 dashboard：顶部 Tabs + 按 View 分发到各页面。
+/// 渲染 dashboard：最外框（项目名标题）+ 顶部 Tabs（立体高亮）+ 内容（左右 padding）。
 pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
-    let chunks = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(frame.area());
+    let outer = Block::bordered().title(m.project.as_str());
+    let inner = outer.inner(frame.area());
+    // 左右各 1 格 padding（panel 与外框边界留白）。
+    let h = Layout::horizontal([
+        Constraint::Length(1),
+        Constraint::Min(0),
+        Constraint::Length(1),
+    ])
+    .split(inner);
+    // 首排 Tabs + 1 行 padding + 内容。
+    let v = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .split(h[1]);
     frame.render_widget(
-        Tabs::new(["Issues", "Plans", "Milestones"])
+        Tabs::new(["1. Issues", "2. Plans", "3. Milestones"])
             .select(tab_index(m))
-            .block(Block::bordered()),
-        chunks[0],
+            .highlight_style(Style::new().add_modifier(Modifier::REVERSED)),
+        v[0],
     );
     match m.view {
-        View::Issues => issues::draw_issues_panel(frame, m, chunks[1]),
-        View::Plans => plans::draw_plans_panel(frame, m, chunks[1]),
-        View::Milestones => milestones::draw_milestones_panel(frame, m, chunks[1]),
-        View::IssueDetail { id } => issue_detail::draw_detail(frame, m, id, chunks[1]),
-        View::PlanDetail { plan_id } => plan_detail::draw_detail(frame, m, plan_id, chunks[1]),
+        View::Issues => issues::draw_issues_panel(frame, m, v[2]),
+        View::Plans => plans::draw_plans_panel(frame, m, v[2]),
+        View::Milestones => milestones::draw_milestones_panel(frame, m, v[2]),
+        View::IssueDetail { id } => issue_detail::draw_detail(frame, m, id, v[2]),
+        View::PlanDetail { plan_id } => plan_detail::draw_detail(frame, m, plan_id, v[2]),
         View::MilestoneDetail { milestone_id } => {
-            milestone_detail::draw_detail(frame, m, milestone_id, chunks[1])
+            milestone_detail::draw_detail(frame, m, milestone_id, v[2])
         }
     }
+    frame.render_widget(outer, frame.area());
 }

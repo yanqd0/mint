@@ -60,7 +60,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
         m.pages()
     );
     let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
-    render_panel(frame, chunks[0], "mint · plans", lines);
+    render_panel(frame, chunks[0], "plans", lines);
     frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
 }
 
@@ -86,7 +86,7 @@ mod tests {
             .draw(|f| draw_plans_panel(f, &m, f.area()))
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
-        assert!(text.contains("mint · plans"), "标题: {text}");
+        assert!(text.contains("plans"), "标题: {text}");
         assert!(text.contains("TUI (0.4.0)"), "组标题: {text}");
         assert!(text.contains("tui plan"), "plan 标题: {text}");
         assert!(text.contains("1/1"), "进度: {text}");
