@@ -67,11 +67,16 @@ pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
 }
 
 /// Plan 命令分发。
-pub fn dispatch(conn: &Connection, cmd: &super::PlanCmd) -> Result<(), Error> {
+pub fn dispatch(
+    conn: &Connection,
+    cwd: &std::path::Path,
+    project: &str,
+    cmd: &super::PlanCmd,
+) -> Result<(), Error> {
     match cmd {
         super::PlanCmd::Create(a) => cmd_plan_create(conn, a),
         super::PlanCmd::List(a) => cmd_container_list(conn, ContainerKind::Plan, a),
-        super::PlanCmd::Show(a) => cmd_container_show(conn, ContainerKind::Plan, a),
+        super::PlanCmd::Show(a) => cmd_container_show(conn, cwd, project, ContainerKind::Plan, a),
         super::PlanCmd::Attach(a) => {
             container::set_issue_plan(conn, a.issue_id, a.id)?;
             print_issue_link_json(a.id, a.issue_id, "attached", a.json)

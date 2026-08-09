@@ -13,5 +13,5 @@ pub mod run;
 pub mod types;
 
 pub use model::DashboardModel;
-pub use run::run_dashboard;
+pub use run::{run_dashboard, run_dashboard_view};
 pub use types::{FeedItem, RefreshResult, View};

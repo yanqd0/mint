@@ -75,11 +75,18 @@ pub fn cmd_milestone_set(conn: &Connection, s: &MilestoneSetArgs) -> Result<(), 
 }
 
 /// Milestone 命令分发。
-pub fn dispatch(conn: &Connection, cmd: &super::MilestoneCmd) -> Result<(), Error> {
+pub fn dispatch(
+    conn: &Connection,
+    cwd: &std::path::Path,
+    project: &str,
+    cmd: &super::MilestoneCmd,
+) -> Result<(), Error> {
     match cmd {
         super::MilestoneCmd::Create(a) => cmd_milestone_create(conn, a),
         super::MilestoneCmd::List(a) => cmd_container_list(conn, ContainerKind::Milestone, a),
-        super::MilestoneCmd::Show(a) => cmd_container_show(conn, ContainerKind::Milestone, a),
+        super::MilestoneCmd::Show(a) => {
+            cmd_container_show(conn, cwd, project, ContainerKind::Milestone, a)
+        }
         super::MilestoneCmd::Attach(a) => {
             container::link_direct(conn, a.id, a.issue_id)?;
             print_issue_link_json(a.id, a.issue_id, "attached", a.json)

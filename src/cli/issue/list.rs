@@ -1,5 +1,7 @@
 //! Issue 列表/搜索/详情（list/search/show）。
 
+use std::path::Path;
+
 use rusqlite::Connection;
 
 use crate::cli::list_common::{paged_json, paginate, print_page_footer};
@@ -68,6 +70,9 @@ pub struct ShowArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
+    /// TUI detail page (reuses the mint tui page)
+    #[arg(long, conflicts_with = "json")]
+    pub tui: bool,
 }
 
 pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Error> {
@@ -200,8 +205,16 @@ fn issue_to_json(i: &Issue) -> serde_json::Value {
     })
 }
 
-pub fn cmd_show(conn: &Connection, s: &ShowArgs) -> Result<(), Error> {
+pub fn cmd_show(conn: &Connection, cwd: &Path, project: &str, s: &ShowArgs) -> Result<(), Error> {
     let id = s.id;
+    if s.tui {
+        return crate::tui::run_dashboard_view(
+            conn,
+            project,
+            cwd,
+            crate::tui::dashboard::types::View::IssueDetail { id },
+        );
+    }
     let issue = conn
         .query_row(db::ISSUE_SHOW, rusqlite::params![id], issue_from_row)
         .map_err(|e| match e {

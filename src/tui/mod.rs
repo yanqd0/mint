@@ -52,7 +52,7 @@ pub(crate) fn to_keycode(e: Event) -> Option<KeyCode> {
     }
 }
 
-pub use dashboard::run_dashboard;
+pub use dashboard::{run_dashboard, run_dashboard_view};
 
 /// 启动 list 表格浏览：TTY 交互，非 TTY 单页文本输出。
 pub fn run_list(

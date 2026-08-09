@@ -47,6 +47,9 @@ pub struct ContainerIdArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
+    /// TUI detail page (reuses the mint tui page)
+    #[arg(long, conflicts_with = "json")]
+    pub tui: bool,
 }
 
 #[derive(clap::Args)]
@@ -382,14 +385,14 @@ impl Cli {
         match &self.command {
             Commands::Issue(i) => issue::dispatch(&mut conn, &cwd, &project, &i.command),
             Commands::List(l) => issue::list::cmd_list(&conn, &project, l),
-            Commands::Show(s) => issue::list::cmd_show(&conn, s),
+            Commands::Show(s) => issue::list::cmd_show(&conn, &cwd, &project, s),
             Commands::Search(s) => issue::list::cmd_search(&conn, &project, s),
             Commands::Label(t) => match &t.command {
                 LabelCmd::List(l) => cmd_label_list(&conn, l),
             },
             Commands::Project(p) => project::dispatch(&conn, &p.command),
-            Commands::Milestone(r) => milestone::dispatch(&conn, &r.command),
-            Commands::Plan(p) => plan::dispatch(&conn, &p.command),
+            Commands::Milestone(r) => milestone::dispatch(&conn, &cwd, &project, &r.command),
+            Commands::Plan(p) => plan::dispatch(&conn, &cwd, &project, &p.command),
             Commands::Delete(d) => delete::dispatch(&conn, &d.command),
             Commands::Tui => crate::tui::run_dashboard(&conn, &project, &cwd),
         }
@@ -467,9 +470,20 @@ pub(crate) fn cmd_container_list(
 /// 容器 show：详情 + 其下 issue。
 pub(crate) fn cmd_container_show(
     conn: &Connection,
+    cwd: &std::path::Path,
+    project: &str,
     kind: ContainerKind,
     a: &ContainerIdArgs,
 ) -> Result<(), Error> {
+    if a.tui {
+        let view = match kind {
+            ContainerKind::Plan => crate::tui::dashboard::types::View::PlanDetail { plan_id: a.id },
+            ContainerKind::Milestone => {
+                crate::tui::dashboard::types::View::MilestoneDetail { milestone_id: a.id }
+            }
+        };
+        return crate::tui::run_dashboard_view(conn, project, cwd, view);
+    }
     let c = container::get(conn, kind, a.id)?
         .ok_or_else(|| Error::Other(format!("{} #{} not found", kind_noun(kind), a.id)))?;
     let issues = container::issues_for(conn, kind, a.id)?;

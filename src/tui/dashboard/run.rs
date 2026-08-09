@@ -14,18 +14,30 @@ use crate::git;
 use crate::state::{self, Action};
 use crate::tui::dashboard::DashboardModel;
 use crate::tui::dashboard::data::load_snapshot;
-use crate::tui::dashboard::types::{KeyAction, Notice};
+use crate::tui::dashboard::types::{KeyAction, Notice, View};
 use crate::tui::{CrosstermEvents, EventSource, is_interactive, to_keycode};
 
 /// 自动刷新间隔：每 tick 全量重查重渲。
 const REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
 
-/// 启动 dashboard：TTY 自动刷新交互；非 TTY 输出初始快照文本。
+/// 启动 dashboard（初始视图 = Issues 主屏）。
 /// `cwd` 供状态命令 commit 取 HEAD（git 仓库路径）。
 pub fn run_dashboard(conn: &Connection, project: &str, cwd: &Path) -> Result<(), Error> {
+    run_dashboard_view(conn, project, cwd, View::Issues)
+}
+
+/// 以指定初始视图启动 dashboard：show --tui 传详情视图，list --tui 传列表视图。
+/// TTY 自动刷新交互；非 TTY 输出初始视图快照文本。
+pub fn run_dashboard_view(
+    conn: &Connection,
+    project: &str,
+    cwd: &Path,
+    initial: View,
+) -> Result<(), Error> {
     let snapshot = load_snapshot(conn, project)?;
     let mut model = DashboardModel::new();
     model.init(snapshot);
+    model.view = initial;
     if is_interactive() {
         let mut terminal = ratatui::init();
         let mut events = CrosstermEvents;
@@ -587,6 +599,31 @@ mod tests {
                 .iter()
                 .any(|l| l.contains("open -> planned")),
             "notice 应在 NOTICE_TICKS 后消失"
+        );
+    }
+
+    #[test]
+    fn interaction_initial_detail_view_state_keys_apply() {
+        // show --tui 的初始视图 = 详情：从 IssueDetail 启动，Shift+状态键作用于当前 issue。
+        let (_db_dir, conn, id) = db_with_open_issue();
+        let cwd = TempDir::new().unwrap();
+        let mut m = DashboardModel::new();
+        m.init(load_snapshot(&conn, "mint").unwrap());
+        m.view = View::IssueDetail { id };
+        let terminal = run_interaction(
+            &conn,
+            cwd.path(),
+            &mut m,
+            vec![
+                Script::Key(KeyCode::Char('P')),
+                Script::Key(KeyCode::Char('q')),
+            ],
+        );
+        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("planned"));
+        assert!(
+            frame_lines(&terminal)
+                .iter()
+                .any(|l| l.contains(&format!("issue #{id}: open -> planned")))
         );
     }
 }
