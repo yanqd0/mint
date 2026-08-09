@@ -116,14 +116,14 @@ pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
         .iter()
         .filter(|i| matches!(i.status, Status::Done))
         .count();
-    let open_rate = done
+    let progress_rate = done
         .checked_mul(100)
         .and_then(|d| d.checked_div(total))
         .unwrap_or(0);
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(progress_bar(&all));
-    lines.push(Line::from(format!("  open rate: {open_rate}%")));
+    lines.push(Line::from(format!("  progress: {progress_rate}%")));
     for (idx, i) in page.iter().enumerate() {
         let (dot, dot_style) = status_dot(i.status);
         let selected = idx == m.selected;
@@ -248,7 +248,7 @@ mod tests {
         let text = buffer_text(terminal.backend().buffer());
         let joined = text.join("\n");
         assert!(joined.contains("mint · issues"), "标题: {joined}");
-        assert!(joined.contains("open rate: 50%"), "rate: {joined}");
+        assert!(joined.contains("progress: 50%"), "rate: {joined}");
         assert!(joined.contains("#1 open"), "issue 行: {joined}");
         assert!(joined.contains("●"), "状态点: {joined}");
     }
