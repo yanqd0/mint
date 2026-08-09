@@ -21,6 +21,7 @@
 - TUI 渲染模块 `src/tui/`（model 纯状态机 / draw 渲染 / rows 列转换）。
 - milestone 面板（plan #17）：snapshot 含 milestone、View::Milestone、plan 行迷你进度、倒计时自动回退。
 - dashboard 递归拆分：`src/tui/dashboard/` 子模块（data/diff/draw/model/model_nav/model_view/run/types）+ `pages/`（页面↔子模块对应）；model.rs 拆分至 ≤300 行（#99）。
+- plugin 模板规范（plan #23）：`title-templates/`（issue/plan/milestone 标题语义 + ≤60 字符上限）+ `body-templates/`（T1-T16 场景模板，每文件一模板）；省 token 原则（不写 LLM 已知、不瞎猜、`? 待确认` 尾节）；SKILL.md 精简段 + flow 小索引，en/cn 同步。
 - 决策记录：TUI 选型（D25）、默认 TSV（D26）、mint tui 大屏（D27）。
 
 ## 0.3.0
