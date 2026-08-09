@@ -37,7 +37,10 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
             Span::styled(format!("#{:<3}", ms.id), style),
             Span::styled(format!(" {ver:<8}"), style),
             Span::styled(format!("  {}", ms.title), style),
-            Span::styled(format!("  plans {plan_count} · issues {issue_count}"), style),
+            Span::styled(
+                format!("  plans {plan_count} · issues {issue_count}"),
+                style,
+            ),
         ]));
     }
     if lines.is_empty() {
