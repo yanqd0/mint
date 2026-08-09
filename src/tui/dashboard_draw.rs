@@ -9,35 +9,46 @@ use ratatui::widgets::{Block, Paragraph};
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::{DashboardModel, View};
 
-/// 状态点：`●` + 颜色（黄=待做、绿闪=开发、绿=在做、白=完成、红=drop）。
-pub fn status_dot(status: Status) -> (char, Style) {
-    let style = match status {
-        Status::Open => Style::new().fg(Color::Yellow),
-        Status::Planned => Style::new()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::SLOW_BLINK),
-        Status::Dev => Style::new()
-            .fg(Color::Green)
-            .add_modifier(Modifier::SLOW_BLINK),
-        Status::Test => Style::new().fg(Color::Green),
-        Status::Done => Style::new().fg(Color::White),
-        Status::Dropped => Style::new().fg(Color::Red),
-    };
-    ('●', style)
+/// 状态基色（点/文字共用，TUI 统一配色）。
+fn status_color(status: Status) -> Color {
+    match status {
+        Status::Open | Status::Planned => Color::Yellow,
+        Status::Dev | Status::Test => Color::Green,
+        Status::Done => Color::White,
+        Status::Dropped => Color::Red,
+    }
 }
 
-/// 进度条段样式：亮=未完成、亮闪=在做、暗=完成、暗红=drop。
+/// 状态是否闪烁（Planned 已排期待做、Dev 开发中）。
+fn status_blinks(status: Status) -> bool {
+    matches!(status, Status::Planned | Status::Dev)
+}
+
+/// 状态点样式（闪烁状态加 SLOW_BLINK）。
+fn status_style(status: Status) -> Style {
+    let mut s = Style::new().fg(status_color(status));
+    if status_blinks(status) {
+        s = s.add_modifier(Modifier::SLOW_BLINK);
+    }
+    s
+}
+
+/// 状态点：`●` + 颜色（黄=待做、黄闪=已排期、绿闪=开发、绿=在做、白=完成、红=drop）。
+pub fn status_dot(status: Status) -> (char, Style) {
+    ('●', status_style(status))
+}
+
+/// 状态文字样式：与状态点同色但不闪烁。
+pub fn status_text_style(status: Status) -> Style {
+    Style::new().fg(status_color(status))
+}
+
+/// 进度条段样式：亮=未完成、亮闪=在做、暗=完成、红=drop。
 fn progress_style(status: Status) -> Style {
-    match status {
-        Status::Open => Style::new().fg(Color::Yellow),
-        Status::Planned => Style::new()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::SLOW_BLINK),
-        Status::Dev | Status::Test => Style::new()
-            .fg(Color::Green)
-            .add_modifier(Modifier::SLOW_BLINK),
-        Status::Done => Style::new().fg(Color::DarkGray),
-        Status::Dropped => Style::new().fg(Color::Red),
+    if status == Status::Done {
+        Style::new().fg(Color::DarkGray)
+    } else {
+        status_style(status)
     }
 }
 
@@ -134,9 +145,9 @@ pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
         let (dot, dot_style) = status_dot(i.status);
         let selected = idx == m.selected;
         let text_style = if selected {
-            Style::new().add_modifier(Modifier::REVERSED)
+            status_text_style(i.status).add_modifier(Modifier::REVERSED)
         } else {
-            Style::new()
+            status_text_style(i.status)
         };
         lines.push(Line::from(vec![
             Span::styled(format!("{dot} "), dot_style),
@@ -234,6 +245,24 @@ mod tests {
         assert_eq!(status_dot(Status::Test).1.fg, Some(C::Green));
         assert_eq!(status_dot(Status::Done).1.fg, Some(C::White));
         assert_eq!(status_dot(Status::Dropped).1.fg, Some(C::Red));
+    }
+
+    #[test]
+    fn status_text_style_same_color_no_blink() {
+        use ratatui::style::Color as C;
+        assert_eq!(status_text_style(Status::Dev).fg, Some(C::Green));
+        assert!(
+            !status_text_style(Status::Dev)
+                .add_modifier
+                .contains(Modifier::SLOW_BLINK)
+        );
+        assert_eq!(status_text_style(Status::Planned).fg, Some(C::Yellow));
+        assert!(
+            !status_text_style(Status::Planned)
+                .add_modifier
+                .contains(Modifier::SLOW_BLINK)
+        );
+        assert_eq!(status_text_style(Status::Done).fg, Some(C::White));
     }
 
     fn buffer_text(buf: &ratatui::buffer::Buffer) -> Vec<String> {
