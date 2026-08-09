@@ -113,6 +113,47 @@ pub fn truncate(s: &str, max: usize) -> String {
     out
 }
 
+/// 键值对多列布局：按可用宽度估算列数，逐列对齐（列宽 = 该列最宽 + 2 padding）。
+/// 返回多行 `Line`，供详情页 basic panel 用（空值由调用方过滤后再传）。
+pub fn kv_lines(pairs: &[(String, String)], width: u16) -> Vec<Line<'static>> {
+    use unicode_width::UnicodeWidthStr;
+    if pairs.is_empty() {
+        return Vec::new();
+    }
+    let cells: Vec<(String, usize)> = pairs
+        .iter()
+        .map(|(k, v)| {
+            let s = format!("{k}: {v}");
+            let w = s.width();
+            (s, w)
+        })
+        .collect();
+    let total_w: usize = cells.iter().map(|(_, w)| w).sum();
+    let avg = total_w / cells.len();
+    let cols = (width as usize / avg.max(1)).clamp(1, cells.len());
+    let rows = cells.len().div_ceil(cols);
+    let mut col_widths = vec![0usize; cols];
+    for (i, (_, w)) in cells.iter().enumerate() {
+        col_widths[i % cols] = col_widths[i % cols].max(*w);
+    }
+    (0..rows)
+        .map(|r| {
+            let spans: Vec<Span> = (0..cols)
+                .filter_map(|c| {
+                    let idx = r * cols + c;
+                    if idx >= cells.len() {
+                        return None;
+                    }
+                    let (s, w) = &cells[idx];
+                    let pad = col_widths[c] - w + 2; // 列间 2 空格
+                    Some(Span::raw(format!("{s}{}", " ".repeat(pad))))
+                })
+                .collect();
+            Line::from(spans)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,5 +256,37 @@ mod tests {
         assert_eq!(mini_bar(1, 2, 4), " ██░░ ");
         assert_eq!(mini_bar(2, 2, 4), " ████ ");
         assert_eq!(mini_bar(0, 2, 4), " ░░░░ ");
+    }
+
+    #[test]
+    fn kv_lines_single_row_when_wide() {
+        let pairs = vec![
+            ("status".to_string(), "planned".to_string()),
+            ("kind".to_string(), "problem".to_string()),
+            ("priority".to_string(), "0".to_string()),
+        ];
+        let lines = kv_lines(&pairs, 100);
+        assert_eq!(lines.len(), 1);
+        let text = lines[0]
+            .spans
+            .iter()
+            .map(|s| s.content.as_ref())
+            .collect::<Vec<_>>()
+            .join("");
+        assert!(
+            text.starts_with("status: planned  kind: problem"),
+            "多列应对齐: {text}"
+        );
+    }
+
+    #[test]
+    fn kv_lines_wraps_when_narrow() {
+        let pairs = vec![
+            ("status".to_string(), "planned".to_string()),
+            ("kind".to_string(), "problem".to_string()),
+        ];
+        let lines = kv_lines(&pairs, 5);
+        assert_eq!(lines.len(), 2); // 每行 1 列
+        assert!(lines[0].spans[0].content.starts_with("status:"));
     }
 }
