@@ -62,7 +62,12 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
             Constraint::Length(10),
         ],
     );
-    render_panel(frame, chunks[0], &format!("milestone #{milestone_id}"), info_lines);
+    render_panel(
+        frame,
+        chunks[0],
+        &format!("milestone #{milestone_id}"),
+        info_lines,
+    );
     render_panel(frame, chunks[1], "plans", plan_lines);
     issues::draw_issues_panel(frame, m, chunks[2]);
 }
@@ -87,9 +92,7 @@ mod tests {
         );
         m.view = View::MilestoneDetail { milestone_id: 4 };
         let mut terminal = test_backend(100, 20);
-        terminal
-            .draw(|f| draw_detail(f, &m, 4, f.area()))
-            .unwrap();
+        terminal.draw(|f| draw_detail(f, &m, 4, f.area())).unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("milestone #4"), "标题: {text}");
         assert!(text.contains("TUI"), "info: {text}");
