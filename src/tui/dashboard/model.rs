@@ -25,8 +25,6 @@ pub struct DashboardModel {
     pub plans: Vec<(Container, i64)>,
     pub milestones: Vec<(Container, i64)>,
     pub(crate) prev: Option<DashboardSnapshot>,
-    /// 上次自动切到的 plan（用户手动 Esc 回 tab 后避免同 plan 反复抢占）。
-    pub(crate) last_auto: Option<i64>,
     /// 当前面板页（0-based，每页 page_size 行）。
     pub page: usize,
     /// 每页行数。
@@ -35,8 +33,6 @@ pub struct DashboardModel {
     pub(crate) user_idle: u32,
     /// 距上次自动切换的 tick；两次自动切换间隔 ≥ AUTO_SWITCH_GAP。
     pub(crate) auto_last: u32,
-    /// 自动临时进入 milestone 详情的剩余 tick（Some = 自动切入，None = 用户手动/未切入）。
-    pub(crate) milestone_hold: Option<u32>,
     /// queue1：原始跳转请求（事件驱动，合并器每 tick 读空）。
     pub(crate) pending: VecDeque<RawJump>,
     /// queue2：就绪复合请求（每 5s 执行队首，容量 JUMP_QUEUE_LIMIT）。
@@ -64,12 +60,10 @@ impl DashboardModel {
             plans: Vec::new(),
             milestones: Vec::new(),
             prev: None,
-            last_auto: None,
             page: 0,
             page_size: 10,
             user_idle: 0,
             auto_last: 0,
-            milestone_hold: None,
             pending: VecDeque::new(),
             ready: VecDeque::new(),
             merge_delay: 0,
@@ -99,10 +93,8 @@ impl DashboardModel {
         self.prev = Some(snapshot);
         self.view = View::Issues;
         self.selected = 0;
-        self.last_auto = None;
         self.user_idle = 0;
         self.auto_last = 0;
-        self.milestone_hold = None;
         self.pending.clear();
         self.ready.clear();
         self.merge_delay = 0;
@@ -145,6 +137,8 @@ impl DashboardModel {
         self.clamp_page();
         // 详情指向的实体已删除 → 回对应 tab。
         self.prune_detail();
+        // 规则 7：空闲 60s 回首页（不经 queue）。
+        self.home_timeout();
         RefreshResult {
             new_events: n,
             jumped,
@@ -155,13 +149,6 @@ impl DashboardModel {
     pub fn handle_key(&mut self, key: KeyCode) -> bool {
         // 任何按键 → 用户活跃，重置空闲计时（自动切换前置失效）。
         self.user_idle = 0;
-        // 用户手动操作 milestone 详情（Esc/q 之外）→ 接管，取消自动倒计时踢回。
-        if matches!(self.view, View::MilestoneDetail { .. })
-            && self.milestone_hold.is_some()
-            && !matches!(key, KeyCode::Esc | KeyCode::Char('q'))
-        {
-            self.milestone_hold = None;
-        }
         match key {
             KeyCode::Char('1') => self.switch_tab(View::Issues),
             KeyCode::Char('2') => self.switch_tab(View::Plans),
@@ -247,7 +234,6 @@ impl DashboardModel {
                 View::IssueDetail { .. } => self.switch_tab(View::Issues),
                 View::PlanDetail { .. } => self.switch_tab(View::Plans),
                 View::MilestoneDetail { .. } => {
-                    self.milestone_hold = None;
                     self.switch_tab(View::Milestones);
                 }
                 _ => {}
