@@ -52,11 +52,15 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
                 .copied()
                 .filter(|i| i.status == *s)
                 .collect();
-            let rows: Vec<String> = items
+            let mut rows: Vec<String> = items
                 .iter()
+                .take(10)
                 .map(|i| format!("#{} {}", i.id, truncate(&i.title, 8)))
                 .collect();
-            (format!("{} ({})", s.as_str(), rows.len()), rows)
+            if items.len() > 10 {
+                rows.push("…".into());
+            }
+            (format!("{} ({})", s.as_str(), items.len()), rows)
         })
         .collect();
 
@@ -64,8 +68,8 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
         area,
         &[
             Constraint::Length(4),
-            Constraint::Min(0),
             Constraint::Length(10),
+            Constraint::Min(0),
             Constraint::Length(1),
         ],
     );

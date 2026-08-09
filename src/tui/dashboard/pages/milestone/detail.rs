@@ -39,9 +39,10 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         ]));
     }
 
-    // 2. 其下 plan 列表 panel（每行迷你进度 + done/total）。
+    // 2. 其下 plan 列表 panel（每行迷你进度 + done/total，最多 5 行省略）。
+    let plans = m.milestone_plans(milestone_id);
     let mut plan_lines: Vec<Line> = Vec::new();
-    for (plan, _) in m.milestone_plans(milestone_id) {
+    for (plan, _) in plans.iter().take(5) {
         let (pdone, ptotal) = m.plan_progress(plan.id);
         let bar = mini_bar(pdone, ptotal, 20);
         plan_lines.push(Line::from(vec![
@@ -49,6 +50,9 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
             Span::raw(bar),
             Span::raw(format!(" {pdone}/{ptotal}  {}", plan.title)),
         ]));
+    }
+    if plans.len() > 5 {
+        plan_lines.push(Line::from("…"));
     }
     if plan_lines.is_empty() {
         plan_lines.push(Line::from("(no plans in this milestone)"));
@@ -59,8 +63,8 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         area,
         &[
             Constraint::Length(4),
+            Constraint::Length(6),
             Constraint::Min(0),
-            Constraint::Length(10),
             Constraint::Length(1),
         ],
     );
