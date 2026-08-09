@@ -6,13 +6,19 @@ use crate::tui::dashboard::diff::{ChangeEvent, DashboardSnapshot};
 /// 变更流最大条目数（超出裁剪尾部）。
 pub const MAX_FEED: usize = 200;
 
-/// 视图：默认 issue 面板；plan 执行中（有 dev/test issue）自动切 plan 面板；
-/// milestone 面板显示其下 plan 分组（手动 Tab/p 循环进入，或 plan 结束时短暂自动切入）。
+/// 视图：3 个 tab 页 + 3 个详情页（6 态）。
+/// tab：Issues / Plans / Milestones（1/2/3 或 Tab 切换）；
+/// 详情：IssueDetail（Enter）/ PlanDetail（p）/ MilestoneDetail（r）。
+/// plan 执行中（有 dev/test issue）在用户空闲 ≥5s 后自动切到 PlanDetail；
+/// plan 结束短暂展示所属 MilestoneDetail 后回 Plans tab。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
-    Issue,
-    Plan { plan_id: i64 },
-    Milestone { milestone_id: i64 },
+    Issues,
+    Plans,
+    Milestones,
+    IssueDetail { id: i64 },
+    PlanDetail { plan_id: i64 },
+    MilestoneDetail { milestone_id: i64 },
 }
 
 /// 变更流条目：初始基线（当前全量按 updated_at 倒序）或会话内变化事件。

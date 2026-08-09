@@ -1,6 +1,7 @@
 //! issue 详情页：基本信息 + 字段列表（Enter 展开，Esc 收起）。
 
 use ratatui::Frame;
+use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph};
 
@@ -8,7 +9,7 @@ use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::status_text_style;
 
 /// 渲染 issue 详情（Enter 展开）。
-pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64) {
+pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
     if let Some(i) = m.issue(id) {
         lines.push(Line::from(format!("#{} {}", i.id, i.title)));
@@ -55,7 +56,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64) {
     }
     frame.render_widget(
         Paragraph::new(lines).block(Block::bordered().title("detail")),
-        frame.area(),
+        area,
     );
 }
 
@@ -63,14 +64,16 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64) {
 mod tests {
     use super::*;
     use crate::models::Status;
-    use crate::tui::dashboard::pages::tests_common::{buffer_text, mk_issue, model_with, test_backend};
+    use crate::tui::dashboard::pages::tests_common::{
+        buffer_text, mk_issue, model_with, test_backend,
+    };
 
     #[test]
     fn draw_detail_shows_issue_fields() {
         let mut m = model_with(vec![mk_issue(1, "hello", Status::Dev, Some(7))]);
-        m.detail = Some(1);
+        m.view = crate::tui::dashboard::types::View::IssueDetail { id: 1 };
         let mut terminal = test_backend(60, 12);
-        terminal.draw(|f| draw_detail(f, &m, 1)).unwrap();
+        terminal.draw(|f| draw_detail(f, &m, 1, f.area())).unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("#1 hello"), "标题: {text}");
         assert!(text.contains("status:"), "字段: {text}");

@@ -26,7 +26,9 @@ pub fn stack(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
 
 /// 横向分栏（左右排布），按约束分配宽度。
 pub fn columns(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
-    Layout::horizontal(constraints.to_vec()).split(area).to_vec()
+    Layout::horizontal(constraints.to_vec())
+        .split(area)
+        .to_vec()
 }
 
 #[cfg(test)]
@@ -65,7 +67,10 @@ mod tests {
     #[test]
     fn stack_splits_vertically() {
         let area = Rect::new(0, 0, 40, 20);
-        let rects = stack(area, &[Constraint::Percentage(50), Constraint::Percentage(50)]);
+        let rects = stack(
+            area,
+            &[Constraint::Percentage(50), Constraint::Percentage(50)],
+        );
         assert_eq!(rects.len(), 2);
         assert_eq!(rects[0].y, 0);
         assert_eq!(rects[1].y, 10);
@@ -74,7 +79,10 @@ mod tests {
     #[test]
     fn columns_splits_horizontally() {
         let area = Rect::new(0, 0, 40, 20);
-        let rects = columns(area, &[Constraint::Percentage(50), Constraint::Percentage(50)]);
+        let rects = columns(
+            area,
+            &[Constraint::Percentage(50), Constraint::Percentage(50)],
+        );
         assert_eq!(rects.len(), 2);
         assert_eq!(rects[0].x, 0);
         assert_eq!(rects[1].x, 20);
