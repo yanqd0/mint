@@ -2,13 +2,13 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
-use ratatui::style::Modifier;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::models::Status;
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{progress_bar, status_dot, status_text_style};
+use crate::tui::dashboard::pages::common::{progress_bar, status_dot, status_text_style, truncate};
 use crate::tui::dashboard::types::View;
 use crate::tui::panel::{render_panel, stack};
 
@@ -42,27 +42,39 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let mut prog_lines = vec![progress_bar(&all)];
     prog_lines.push(Line::from(format!("  progress: {progress_rate}%")));
 
-    // 列表 panel：状态点 + issue 行。
+    // 列表 panel：表头 + 状态点/状态文本（着色）+ ID + 标签 + 标题。
     let mut list_lines: Vec<Line> = Vec::new();
+    list_lines.push(Line::from(" #  STATUS  LABEL      TITLE"));
     for (idx, i) in page.iter().enumerate() {
         let (dot, dot_style) = status_dot(i.status);
         let selected = idx == m.selected;
-        let text_style = if selected {
-            status_text_style(i.status).add_modifier(Modifier::REVERSED)
+        let row_style = if selected {
+            Style::new().add_modifier(Modifier::REVERSED)
         } else {
-            status_text_style(i.status)
+            Style::new()
         };
-        list_lines.push(Line::from(vec![
-            Span::styled(format!("{dot} "), dot_style),
-            Span::styled(
-                format!("#{} {} {}", i.id, i.status.as_str(), i.title),
-                text_style,
-            ),
-        ]));
+        let label = i
+            .labels
+            .first()
+            .map(|l| truncate(l, 10))
+            .unwrap_or_default();
+        list_lines.push(
+            Line::from(vec![
+                Span::styled(format!("{dot} "), dot_style),
+                Span::styled(
+                    format!("{:<6}", i.status.as_str()),
+                    status_text_style(i.status),
+                ),
+                Span::styled(format!("#{:<3}", i.id), Style::new()),
+                Span::styled(format!(" {label:<10}"), Style::new()),
+                Span::styled(format!(" {}", truncate(&i.title, 24)), Style::new()),
+            ])
+            .patch_style(row_style),
+        );
     }
 
     let footer = format!(
-        "j/k ↑↓ row · h/l PgUp/PgDn page · 1/2/3 tab · Enter detail · p plan · r milestone · q quit · Page {}/{}",
+        "j/k row · ←/→ page · 1/2/3 tab · Enter detail · p plan · r milestone · q quit · Page {}/{} ({total} issues)",
         m.page + 1,
         m.pages()
     );
@@ -99,7 +111,8 @@ mod tests {
         let joined = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(joined.contains("issues"), "标题: {joined}");
         assert!(joined.contains("progress: 50%"), "rate: {joined}");
-        assert!(joined.contains("#1 open"), "issue 行: {joined}");
+        assert!(joined.contains("open one"), "issue 行: {joined}");
+        assert!(joined.contains("STATUS"), "表头: {joined}");
         assert!(joined.contains("●"), "状态点: {joined}");
     }
 
