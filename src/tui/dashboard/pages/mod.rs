@@ -5,7 +5,7 @@
 pub mod common;
 pub mod issue_detail;
 pub mod issues;
-pub mod milestone_detail;
+pub mod milestone;
 pub mod milestones;
 pub mod plan_detail;
 pub mod plans;
@@ -61,7 +61,7 @@ pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
         View::IssueDetail { id } => issue_detail::draw_detail(frame, m, id, v[2]),
         View::PlanDetail { plan_id } => plan_detail::draw_detail(frame, m, plan_id, v[2]),
         View::MilestoneDetail { milestone_id } => {
-            milestone_detail::draw_detail(frame, m, milestone_id, v[2])
+            milestone::detail::draw_detail(frame, m, milestone_id, v[2])
         }
     }
     frame.render_widget(outer, frame.area());

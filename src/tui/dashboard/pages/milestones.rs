@@ -32,7 +32,7 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
         lines.push(Line::from("(no milestones)"));
     }
     let footer = format!(
-        "j/k ↑↓ row · h/l page · 1/2/3 tab · Enter detail · q quit · Page {}/{}",
+        "j/k ↑↓ row · ←/→ page · 1/2/3 tab · Enter detail · q quit · Page {}/{}",
         m.page + 1,
         m.pages()
     );
@@ -74,7 +74,7 @@ pub fn draw_milestone_detail(frame: &mut Frame, m: &DashboardModel, milestone_id
     }
 
     let footer = format!(
-        "j/k ↑↓ plan · h/l page · 1/2/3 tab · Esc back · q quit · Page {}/{}",
+        "j/k ↑↓ plan · ←/→ page · 1/2/3 tab · Esc back · q quit · Page {}/{}",
         m.page + 1,
         m.pages()
     );

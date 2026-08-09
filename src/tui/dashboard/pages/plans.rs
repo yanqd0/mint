@@ -55,7 +55,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     }
 
     let footer = format!(
-        "j/k ↑↓ plan · h/l page · 1/2/3 tab · Enter detail · q quit · Page {}/{}",
+        "j/k ↑↓ plan · ←/→ page · 1/2/3 tab · Enter detail · q quit · Page {}/{}",
         m.page + 1,
         m.pages()
     );

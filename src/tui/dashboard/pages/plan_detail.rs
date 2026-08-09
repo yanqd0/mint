@@ -4,6 +4,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
+use ratatui::widgets::Paragraph;
 
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
@@ -65,6 +66,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
             Constraint::Length(4),
             Constraint::Min(0),
             Constraint::Length(10),
+            Constraint::Length(1),
         ],
     );
     render_panel(frame, chunks[0], &format!("plan #{plan_id}"), info_lines);
@@ -80,6 +82,11 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
 
     // 3. issue list panel（复用 issues 页）。
     issues::draw_issues_panel(frame, m, chunks[2]);
+    // 4. footer。
+    frame.render_widget(
+        Paragraph::new(Line::from("Esc back · 1/2/3 tab · q quit")),
+        chunks[3],
+    );
 }
 
 #[cfg(test)]

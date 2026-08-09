@@ -1,12 +1,13 @@
 //! issue 详情页：基本信息 + 字段列表（Enter 展开，Esc 收起）。
 
 use ratatui::Frame;
-use ratatui::layout::Rect;
+use ratatui::layout::{Constraint, Rect};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph};
 
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::status_text_style;
+use crate::tui::panel::stack;
 
 /// 渲染 issue 详情（Enter 展开）。
 pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64, area: Rect) {
@@ -54,9 +55,14 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64, area: Rect) {
     } else {
         lines.push(Line::from(format!("#{id} (deleted)")));
     }
+    let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
     frame.render_widget(
         Paragraph::new(lines).block(Block::bordered().title("detail")),
-        area,
+        chunks[0],
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from("Esc back · 1/2/3 tab · q quit")),
+        chunks[1],
     );
 }
 

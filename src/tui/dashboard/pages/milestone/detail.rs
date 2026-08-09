@@ -4,6 +4,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
+use ratatui::widgets::Paragraph;
 
 use crate::models::Status;
 use crate::tui::dashboard::model::DashboardModel;
@@ -60,6 +61,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
             Constraint::Length(4),
             Constraint::Min(0),
             Constraint::Length(10),
+            Constraint::Length(1),
         ],
     );
     render_panel(
@@ -70,6 +72,10 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
     );
     render_panel(frame, chunks[1], "plans", plan_lines);
     issues::draw_issues_panel(frame, m, chunks[2]);
+    frame.render_widget(
+        Paragraph::new(Line::from("Esc back · 1/2/3 tab · q quit")),
+        chunks[3],
+    );
 }
 
 #[cfg(test)]
