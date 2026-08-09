@@ -71,7 +71,7 @@
 
 **验收**：agent 会话中自动捕获生效；重复 issue 自动合并。
 
-## 0.4.0 — TUI（人工查看）
+## 0.4.0 — TUI（人工查看）（进行中）
 
 **目标**：人工友好的浏览界面，作为 CLI 的补充。
 
@@ -80,6 +80,13 @@
 - 查看详情
 - 快捷键状态操作：plan/start/stage/close/reset/drop/reopen
 - **不做**内联编辑/新建表单（编辑归 CLI）
+
+**已交付**（plan #16 第一步，2026-08-09）：
+- 4 个 list 命令（`mint list`/`issue list`、`plan list`、`roadmap list`、`label list`）加 `--tui`：TTY 下 ratatui 可翻页表格（j/k 或 ↑/↓ 选行、PgUp/PgDn 或 h/l 翻页、q/Esc 退出）；非 TTY 降级输出单页表格文本（不可交互）。
+- 公共代码：分页三件套提升至 `src/cli/list_common.rs`；TUI 渲染分层 `src/tui/`（model 纯状态机/draw/rows）。
+- 依赖：ratatui 0.30 + crossterm 0.29（默认包含）；列宽按 Unicode 显示宽度对齐（中英文混排）。
+
+**待做**：查看详情（show --tui）、快捷键状态操作、各子命令默认 TUI（plan #16 后续）。
 
 **验收**：人工可滚动浏览并按状态推进 issue。
 

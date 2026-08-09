@@ -1,5 +1,21 @@
 # Change Log
 
+## 0.4.0-alpha.1
+
+### Features
+
+- list 类命令 `--tui` 表格浏览：`mint list`/`issue list`、`plan list`、`roadmap list`、`label list`。
+  - TTY：ratatui 可翻页表格（j/k 或 ↑/↓ 选行，PgUp/PgDn 或 h/l 翻页，q/Esc 退出）。
+  - 非 TTY：降级输出单页表格文本（不可交互，脚本/CI 安全）。
+  - `--tui` 与 `--json` 互斥；列宽按 Unicode 显示宽度对齐（中英文混排）。
+
+### Others
+
+- 依赖新增：ratatui 0.30、crossterm 0.29、unicode-width。
+- 分页三件套提升至 `src/cli/list_common.rs`（issue/plan/roadmap/label 共用）。
+- TUI 渲染模块 `src/tui/`（model 纯状态机 / draw 渲染 / rows 列转换）。
+- 决策记录：TUI 选型与 list --tui 落地（D25）。
+
 ## 0.3.0
 
 ### Features

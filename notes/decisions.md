@@ -264,6 +264,22 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D25. TUI 技术选型与 list --tui 落地
+
+**背景**：0.4.0 提供人工友好浏览界面（plan #16）。需在渲染库、接入方式（独立 binary vs 子命令内嵌）、依赖是否 feature-gated 之间选择。
+
+**决策**：
+- **渲染库**：ratatui 0.30 + crossterm 0.29，**默认 dependencies**（不 feature-gated）；体积增长接受，roadmap 6 体积优化版再议。
+- **接入**：子命令内嵌 + 显式 `--tui` 参数（非独立 binary，非 TTY 自动激活）。4 个 list 命令：`mint list`/`issue list`、`plan list`、`roadmap list`、`label list`。
+- **TTY 分流**：stdin+stdout 均 TTY 才进交互循环（ratatui `init()`/`restore()`；panic hook 在 panic=abort 下仍在 abort 前恢复终端，不依赖 Drop guard）；非 TTY **降级单页表格文本输出**（TestBackend 渲染第一页 → buffer 提取逐行文本），不报错、不可交互。
+- **公共代码**：分页三件套（`paginate`/`paged_json`/`print_page_footer`）从 `issue::list` 提升至 `src/cli/list_common.rs`；TUI 渲染分层 `src/tui/{model,draw,rows}`（model 纯状态机无 ratatui 依赖，可独立单测）。
+- **列宽**：按 Unicode 显示宽度（`unicode-width`）计算，中英文混排对齐。
+- **轻量范围**：仅"可翻页表格"，不做详情/搜索等多视图；吸收 #59 的 TSV 表格需求（ratatui Table widget 即满足，不引入 tsv-table crate）。
+
+**理由**：ratatui 活跃维护且 `TestBackend` 支持 headless 渲染测试；子命令内嵌避免独立 binary 的分发/命令树复杂度；非 TTY 降级让脚本/CI 安全使用 `--tui`；轻量原则控制范围、避免过度设计。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
