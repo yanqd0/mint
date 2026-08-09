@@ -46,11 +46,14 @@ Accepts an optional positional `<description>` argument summarizing intent. When
 2. **For each logical change (one or more commits)**:
    - `mint issue state plan <id>` (schedule)
    - `mint issue state start <id>` (start development)
-   - Edit code → commit
-   - `mint issue state commit <id> --sha $(git rev-parse HEAD)` (associate commit)
+   - Edit code → **immediately after git commit**, `mint issue state commit <id> --sha $(git rev-parse --short=7 HEAD)` (first 7 chars)
    - When an issue has multiple commits, run `state commit` for EACH commit (only the last SHA is stored, but the workflow requires each one)
-3. **After all commits for an issue are complete**:
-   - `mint issue state close <id> --test-cmd "cargo test"` (or `not-tested`)
+3. **Unified testing** (multiple issues in the same plan; avoid closing one-by-one which makes intermediate states invisible):
+   - Issues in the same plan each `state commit` to **test (stay in test)**, do NOT close immediately
+   - Once all are in test, run unified `cargo test` / clippy / fmt
+   - **All green** → close each: `mint issue state close <id> --test-cmd "cargo test"` (or `not-tested`)
+   - **Failure** → `mint issue state retest <id> --test-cmd "<precise method>"` (test→dev, keeps old SHA marking the failed commit) → fix → new commit → `state commit --sha $(git rev-parse --short=7 HEAD)` (new SHA overwrites) → re-test
+   - retest test_cmd should be precise (test case/file/lint); a generic command is OK to save an interaction
 4. **After all issues in a phase are closed**, the plan auto-derives to done (no manual plan close needed).
 5. **After each phase, run `mint list` to verify issue statuses under the current plan are correct**.
 

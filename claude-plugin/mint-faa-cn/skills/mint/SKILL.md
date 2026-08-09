@@ -46,11 +46,14 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 2. **每完成一个逻辑变更（对应一次或多次 commit）**：
    - `mint issue state plan <id>`（排入计划）
    - `mint issue state start <id>`（开始开发）
-   - 修改代码 → commit
-   - `mint issue state commit <id> --sha $(git rev-parse HEAD)`（关联 commit）
+   - 修改代码 → **git commit 后立即** `mint issue state commit <id> --sha $(git rev-parse --short=7 HEAD)`（前 7 位）
    - 同一 issue 有多个 commit 时，**每次 commit 都执行一次 `state commit`**（只记最后一个 SHA，但流程上每次都要走）
-3. **issue 对应的全部 commit 完成后**：
-   - `mint issue state close <id> --test-cmd "cargo test"`（或 `not-tested`）
+3. **统一测试模式**（同 plan 多 issue，避免逐个 close 致中间态瞬移）：
+   - 同 plan 的多个 issue 各自 commit 到 **test（停在 test）**，不立即 close
+   - 全部到 test 后，统一跑 `cargo test` / clippy / fmt
+   - **全绿** → 统一对每个 issue `mint issue state close <id> --test-cmd "cargo test"`（或 `not-tested`）
+   - **失败** → `mint issue state retest <id> --test-cmd "<精确手法>"`（test→dev 打回，保留旧 SHA 标记失败）→ 修复 → 新 commit → `state commit --sha $(git rev-parse --short=7 HEAD)`（新 SHA 覆盖）→ 再测试
+   - retest 的 test_cmd 尽量精确（用例/文件/lint 命令）；省一次交互可用通用命令
 4. **一个 phase 的全部 issue close 后**，plan 自动派生为 done（无需手动关 plan）。
 5. **每完成一个 phase，必须 `mint list` 确认当前计划下 issue 状态正确**。
 

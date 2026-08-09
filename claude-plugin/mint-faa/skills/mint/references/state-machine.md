@@ -8,6 +8,7 @@
 | open | plan | planned | `mint issue state plan <id>` | — |
 | planned | start | dev | `mint issue state start <id>` | — |
 | dev | commit | test | `mint issue state commit <id> --sha <SHA>` | `--sha` required |
+| test | retest | dev | `mint issue state retest <id> --test-cmd <CMD>` | test failed; keeps `last_commit_id` (dev + old SHA = failed mark); `--test-cmd` required (precise repro/re-test) |
 | test | close | done | `mint issue state close <id> --test-cmd <CMD>` | `--test-cmd` required |
 | planned/dev/test | reset | open | `mint issue state reset <id>` | clears test_cmd |
 | done/dropped | reopen | open | `mint issue state reopen <id>` | — |

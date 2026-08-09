@@ -12,8 +12,9 @@
    - 无 plan 但有目标版本 → `milestone attach <RM> <ISSUE>`。
    - 都不确定 → 不挂（独立 issue），后续排期。
 3. **解决流程**：
-   - `state plan` → `state start` → 修复代码 → `state commit --sha <SHA>`（dev→test，默认读 HEAD）→
+   - `state plan` → `state start` → 修复代码 → `state commit --sha <前7位>`（dev→test）→
      `state close --test-cmd "<cmd>"`（test→done）。
+   - **测试失败**：`state retest <id> --test-cmd "<精确手法>"`（test→dev 打回，保留旧 SHA 标记失败）→ 修复 → 新 `state commit --sha <新前7位>` → 再测。
    - **无测试项目**：commit 后 `state close --test-cmd "not-tested"`。
    - **非 git 目录**（flow-conditions）：commit 需显式 `--sha`；无 commit 场景考虑 `drop` 或说明。
 4. **验证**：`show <id>` 确认 done + last_commit_id 记录。

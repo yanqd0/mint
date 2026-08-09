@@ -10,6 +10,7 @@
 | open | plan | planned | `mint issue state plan <id>` | — |
 | planned | start | dev | `mint issue state start <id>` | — |
 | dev | commit | test | `mint issue state commit <id> --sha <SHA>` | **`--sha` 必填**（默认读 HEAD），写 last_commit_id |
+| test | retest | dev | `mint issue state retest <id> --test-cmd "<CMD>"` | 测试失败打回；**保留 last_commit_id**（dev+旧 sha=失败标记）；**`--test-cmd` 必填**（失败/复测手法，尽量精确） |
 | test | close | done | `mint issue state close <id> --test-cmd "<CMD>"` | **`--test-cmd` 必填**；测试全绿才推进 |
 | planned/dev/test | reset | open | `mint issue state reset <id>` | 打回重做，**清空 test_cmd**（需重测） |
 | done/dropped | reopen | open | `mint issue state reopen <id>` | 重开 |

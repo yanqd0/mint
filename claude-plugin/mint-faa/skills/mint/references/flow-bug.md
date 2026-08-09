@@ -15,6 +15,7 @@ Trigger: user describes finding a bug/problem ("found a bug: X causes Y"). kind=
 3. **Resolution**:
    - `state plan` → `state start` → fix code → `state commit --sha <SHA>` (dev→test, defaults to HEAD) →
      `state close --test-cmd "<cmd>"` (test→done).
-   - **No tests project**: after commit, `state close --test-cmd "not-tested"`.
+   - **Test failed**: `state retest <id> --test-cmd "<precise method>"` (test→dev, keeps old SHA marking the failed commit) → fix → new `state commit --sha <new first-7>` → re-test.
+  - **No tests project**: after commit, `state close --test-cmd "not-tested"`.
    - **Non-git directory** (flow-conditions): commit requires explicit `--sha`; if no commit, consider `drop` or note.
 4. **Verify**: `show <id>` confirms done + last_commit_id recorded.
