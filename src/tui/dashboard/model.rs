@@ -42,6 +42,12 @@ pub struct DashboardModel {
     milestone_hold: Option<u32>,
 }
 
+/// Plans 页分组：一组 panel 的数据（组标题 + plan 行引用）。
+pub struct PlanGroup<'a> {
+    pub title: String,
+    pub plans: Vec<&'a (Container, i64)>,
+}
+
 impl Default for DashboardModel {
     fn default() -> Self {
         Self::new()
@@ -376,11 +382,85 @@ impl DashboardModel {
         }
     }
 
-    /// Plans tab 行：全部 plan（按 updated_at 逆序）。
+    /// Plans tab 行：分组展平（执行中 milestone → 无 milestone → 剩余 milestone）。
     pub fn visible_plans(&self) -> Vec<&(Container, i64)> {
-        let mut ps: Vec<&(Container, i64)> = self.plans.iter().collect();
-        ps.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at));
-        ps
+        let mut out = Vec::new();
+        for g in self.plan_groups() {
+            out.extend(g.plans);
+        }
+        out
+    }
+
+    /// Plans 页分组：执行中 milestone（活跃 plan 所属）→ 无 milestone 的 plan → 剩余 milestone 按 updated_at 逆序。
+    pub fn plan_groups(&self) -> Vec<PlanGroup<'_>> {
+        let mut active: Vec<i64> = self
+            .issues
+            .iter()
+            .filter(|i| matches!(i.status, Status::Dev | Status::Test))
+            .filter_map(|i| i.plan_id)
+            .collect();
+        active.sort_unstable();
+        active.dedup();
+
+        let plan_milestone = |pid: i64| -> Option<i64> {
+            self.plans
+                .iter()
+                .find(|(c, _)| c.id == pid)
+                .and_then(|(c, _)| c.milestone_id)
+        };
+
+        // 1. 执行中的 milestone（活跃 plan 所属）。
+        let mut active_ms: Vec<i64> = active.iter().filter_map(|&p| plan_milestone(p)).collect();
+        active_ms.sort_unstable();
+        active_ms.dedup();
+        let mut groups: Vec<PlanGroup> = Vec::new();
+        for &mid in &active_ms {
+            let title = self.milestone_title(mid);
+            let plans = self.milestone_plans(mid);
+            groups.push(PlanGroup { title, plans });
+        }
+
+        // 2. 无 milestone（或 milestone 已不存在）的 plan。
+        let free: Vec<&(Container, i64)> = self
+            .plans
+            .iter()
+            .filter(|(c, _)| match c.milestone_id {
+                None => true,
+                Some(mid) => !self.milestones.iter().any(|(ms, _)| ms.id == mid),
+            })
+            .collect();
+        if !free.is_empty() {
+            groups.push(PlanGroup {
+                title: "no milestone".into(),
+                plans: free,
+            });
+        }
+
+        // 3. 剩余 milestone（非活跃）按 updated_at 逆序。
+        let mut rest: Vec<&(Container, i64)> = self
+            .milestones
+            .iter()
+            .filter(|(c, _)| !active_ms.contains(&c.id))
+            .collect();
+        rest.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at));
+        for (ms, _) in rest {
+            let title = self.milestone_title(ms.id);
+            let plans = self.milestone_plans(ms.id);
+            groups.push(PlanGroup { title, plans });
+        }
+        groups
+    }
+
+    /// milestone 标题（含 version，如 `TUI (0.4.0)`）。
+    fn milestone_title(&self, id: i64) -> String {
+        self.milestones
+            .iter()
+            .find(|(c, _)| c.id == id)
+            .map(|(c, _)| match &c.version {
+                Some(v) => format!("{} ({v})", c.title),
+                None => c.title.clone(),
+            })
+            .unwrap_or_else(|| format!("#{id}"))
     }
 
     /// 某 milestone 下的 plan（MilestoneDetail 用，按 updated_at 逆序）。
