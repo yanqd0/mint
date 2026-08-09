@@ -60,6 +60,10 @@ pub enum ChangeEvent {
         id: i64,
         title: String,
     },
+    MilestoneAdded {
+        milestone: Container,
+        count: i64,
+    },
 }
 
 impl ChangeEvent {
@@ -155,6 +159,21 @@ pub fn diff_snapshots(prev: &DashboardSnapshot, next: &DashboardSnapshot) -> Vec
             events.push(ChangeEvent::PlanRemoved {
                 id: *id,
                 title: p.title.clone(),
+            });
+        }
+    }
+
+    // milestone 新增（规则 8：跳转请求）。
+    let prev_milestones: HashMap<i64, i64> = prev
+        .milestones
+        .iter()
+        .map(|(c, count)| (c.id, *count))
+        .collect();
+    for (ms, count) in &next.milestones {
+        if !prev_milestones.contains_key(&ms.id) {
+            events.push(ChangeEvent::MilestoneAdded {
+                milestone: ms.clone(),
+                count: *count,
             });
         }
     }

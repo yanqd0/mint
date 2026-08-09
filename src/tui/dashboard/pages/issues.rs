@@ -8,8 +8,10 @@ use ratatui::widgets::Paragraph;
 
 use crate::models::Status;
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{progress_bar, status_dot, status_text_style, truncate};
-use crate::tui::dashboard::types::View;
+use crate::tui::dashboard::pages::common::{
+    flash_style, progress_bar, status_dot, status_text_style, truncate,
+};
+use crate::tui::dashboard::types::{JumpKind, View};
 use crate::tui::panel::{render_panel, stack};
 
 /// 面板标题（Issues tab 或 PlanDetail）。
@@ -48,11 +50,14 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     for (idx, i) in page.iter().enumerate() {
         let (dot, dot_style) = status_dot(i.status);
         let selected = idx == m.selected;
-        let row_style = if selected {
+        let mut row_style = if selected {
             Style::new().add_modifier(Modifier::REVERSED)
         } else {
             Style::new()
         };
+        if let Some(fs) = flash_style(m, i.id, JumpKind::Issue) {
+            row_style = row_style.patch(fs);
+        }
         let label = i
             .labels
             .first()

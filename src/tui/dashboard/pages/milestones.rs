@@ -7,7 +7,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{container_status_color, mini_bar};
+use crate::tui::dashboard::pages::common::{container_status_color, flash_style, mini_bar};
+use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::{render_panel, stack};
 
 /// 某 milestone 下 plan 聚合的 issue 数（直属 issue 因 snapshot 无直属关系暂不计，见 #105 TODO）。
@@ -24,11 +25,14 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
     let mut lines: Vec<Line> = Vec::new();
     for (idx, (ms, _)) in m.page_milestones().iter().enumerate() {
         let selected = idx == m.selected;
-        let style = if selected {
+        let mut style = if selected {
             Style::new().add_modifier(Modifier::REVERSED)
         } else {
             Style::new()
         };
+        if let Some(fs) = flash_style(m, ms.id, JumpKind::Milestone) {
+            style = style.patch(fs);
+        }
         let ver = ms.version.as_deref().unwrap_or("");
         let plan_count = m.milestone_plans(ms.id).len();
         let issue_count = milestone_issue_count(m, ms.id);

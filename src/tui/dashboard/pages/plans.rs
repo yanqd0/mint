@@ -7,7 +7,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::mini_bar;
+use crate::tui::dashboard::pages::common::{flash_style, mini_bar};
+use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::{render_panel, stack};
 
 /// Plans tab：按 milestone 分组渲染（每组一 panel 标题），行选中按展平行号映射。
@@ -37,11 +38,14 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
             }
             let selected = global - start == m.selected;
             let (done, total) = m.plan_progress(plan.id);
-            let style = if selected {
+            let mut style = if selected {
                 Style::new().add_modifier(Modifier::REVERSED)
             } else {
                 Style::new()
             };
+            if let Some(fs) = flash_style(m, plan.id, JumpKind::Plan) {
+                style = style.patch(fs);
+            }
             let bar = mini_bar(done, total, 20);
             lines.push(Line::from(vec![
                 Span::styled(format!("#{:<3}", plan.id), style),

@@ -127,12 +127,9 @@ impl DashboardModel {
         self.user_idle = self.user_idle.saturating_add(1);
         self.auto_last = self.auto_last.saturating_add(1);
         // 闪烁递减（过期清除）。
-        for f in &mut self.flash {
-            f.ticks = f.ticks.saturating_sub(1);
-        }
-        self.flash.retain(|f| f.ticks > 0);
+        self.tick_flash();
         // 事件 → queue1（原始跳转请求）。
-        for r in crate::tui::dashboard::model_nav::raw_jumps_from_events(&events) {
+        for r in crate::tui::dashboard::jump::parse::raw_jumps_from_events(&events) {
             self.pending.push_back(r);
         }
         // 合并器（延迟读空 → queue2）+ 执行器（空闲/间隔满足执行队首）。

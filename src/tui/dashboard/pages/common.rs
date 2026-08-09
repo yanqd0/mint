@@ -4,6 +4,16 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use crate::models::{ContainerStatus, Issue, Status};
+use crate::tui::dashboard::model::DashboardModel;
+use crate::tui::dashboard::types::JumpKind;
+
+/// 闪烁样式：目标（id+kind）在 `m.flash` 中 → SLOW_BLINK（列表行闪烁标记，变化内容提示）。
+pub fn flash_style(m: &DashboardModel, id: i64, kind: JumpKind) -> Option<Style> {
+    m.flash
+        .iter()
+        .find(|f| f.id == id && f.kind == kind)
+        .map(|_| Style::new().add_modifier(Modifier::SLOW_BLINK))
+}
 
 /// 容器状态基色（milestone/plan 状态点用）。
 pub fn container_status_color(status: ContainerStatus) -> Color {
@@ -183,6 +193,20 @@ mod tests {
                 .contains(Modifier::SLOW_BLINK)
         );
         assert_eq!(status_text_style(Status::Done).fg, Some(C::White));
+    }
+
+    #[test]
+    fn flash_style_marks_target() {
+        use crate::tui::dashboard::model::DashboardModel;
+        use crate::tui::dashboard::types::FlashItem;
+        let mut m = DashboardModel::new();
+        m.flash = vec![FlashItem {
+            id: 7,
+            kind: JumpKind::Plan,
+            ticks: 2,
+        }];
+        assert!(flash_style(&m, 7, JumpKind::Plan).is_some());
+        assert!(flash_style(&m, 8, JumpKind::Plan).is_none());
     }
 
     #[test]
