@@ -10,6 +10,7 @@
   - `--tui` 与 `--json` 互斥；列宽按 Unicode 显示宽度对齐（中英文混排）。
 - list 类默认输出改 TSV：表头首行 + tab 分隔数据行（token 最优，喂 LLM 场景）；`--tsv` 参数移除（默认即 TSV），`--json`/`--tui` 保留。
 - `mint tui` 大屏展示：自动变化 issue/plan/milestone 面板，进度条（open 率）+ 状态点（● 黄/绿闪/绿/白/红）；plan 执行中自动切 plan 面板、结束短暂切所属 milestone 面板再回 issue；Enter 查看 issue 详情 / milestone 面板查看其下 plan 行进度；Tab/p 手动循环全部面板。TTY 每秒自动刷新，非 TTY 输出快照文本。
+- `mint tui` 界面重构（plan #20）：6 页面（Issues/Plans/Milestones 3 tab + Issue/Plan/Milestone 3 详情），顶部 Tabs（1/2/3/Tab 切换）、Panel 圆角组件、plan 详情 kanban（6 态分列）、plans 按 milestone 分组；自动切换加空闲约束（用户操作 ≥5s 且两次切换间隔 ≥5s）。页面与 `src/tui/dashboard/pages/` 子模块一一对应。
 
 ### Others
 
@@ -17,6 +18,7 @@
 - 分页三件套提升至 `src/cli/list_common.rs`（issue/plan/milestone/label 共用）。
 - TUI 渲染模块 `src/tui/`（model 纯状态机 / draw 渲染 / rows 列转换）。
 - milestone 面板（plan #17）：snapshot 含 milestone、View::Milestone、plan 行迷你进度、倒计时自动回退。
+- dashboard 递归拆分：`src/tui/dashboard/` 子模块（data/diff/draw/model/model_nav/model_view/run/types）+ `pages/`（页面↔子模块对应）；model.rs 拆分至 ≤300 行（#99）。
 - 决策记录：TUI 选型（D25）、默认 TSV（D26）、mint tui 大屏（D27）。
 
 ## 0.3.0
