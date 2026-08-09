@@ -4,24 +4,31 @@
 //! TTY 下进入交互循环；非 TTY 降级为单页表格文本输出。
 
 use std::io::{self, IsTerminal};
+use std::time::Duration;
 
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::layout::Constraint;
-use rusqlite::Connection;
 
 use crate::error::Error;
 use crate::tui::model::ListModel;
 
+pub mod dashboard;
 pub mod dashboard_data;
 pub mod dashboard_diff;
+pub mod dashboard_draw;
+pub mod dashboard_run;
 pub mod draw;
 pub mod model;
 
 /// 事件源抽象：生产 = crossterm，测试可注入脚本序列。
 pub trait EventSource {
     fn read_event(&mut self) -> io::Result<Event>;
+    /// 超时返回 Ok(None)；事件到达返回 Ok(Some(ev))。默认退化为阻塞 read。
+    fn poll_event(&mut self, _timeout: Duration) -> io::Result<Option<Event>> {
+        self.read_event().map(Some)
+    }
 }
 
 /// 生产事件源：crossterm 阻塞读取。
@@ -31,24 +38,24 @@ impl EventSource for CrosstermEvents {
     fn read_event(&mut self) -> io::Result<Event> {
         crossterm::event::read()
     }
+    fn poll_event(&mut self, timeout: Duration) -> io::Result<Option<Event>> {
+        if crossterm::event::poll(timeout)? {
+            self.read_event().map(Some)
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 /// 只认 `KeyEventKind::Press`（忽略 Repeat/Release 与鼠标/Resize 等）。
-fn to_keycode(e: Event) -> Option<KeyCode> {
+pub(crate) fn to_keycode(e: Event) -> Option<KeyCode> {
     match e {
         Event::Key(k) if k.kind == KeyEventKind::Press => Some(k.code),
         _ => None,
     }
 }
 
-/// dashboard 大屏展示（M1 雏形：打印全量快照；M2 完善自动刷新循环）。
-pub fn run_dashboard(conn: &Connection) -> Result<(), Error> {
-    let snap = dashboard_data::load_snapshot(conn)?;
-    for i in &snap.issues {
-        println!("#{} {} {}", i.id, i.status.as_str(), i.title);
-    }
-    Ok(())
-}
+pub use dashboard_run::run_dashboard;
 
 /// 启动 list 表格浏览：TTY 交互，非 TTY 单页文本输出。
 pub fn run_list(
@@ -66,7 +73,7 @@ pub fn run_list(
 }
 
 /// stdin 与 stdout 均为 TTY 才算交互终端。
-fn is_interactive() -> bool {
+pub(crate) fn is_interactive() -> bool {
     io::stdin().is_terminal() && io::stdout().is_terminal()
 }
 
