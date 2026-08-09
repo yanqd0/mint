@@ -16,7 +16,7 @@ pub mod tests_common;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Block, Tabs};
+use ratatui::widgets::{Block, Paragraph, Tabs};
 
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::types::View;
@@ -54,6 +54,8 @@ pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
             .highlight_style(Style::new().add_modifier(Modifier::REVERSED)),
         v[0],
     );
+    // 状态操作结果提示行（无 notice 时留空，保持布局稳定；内容不溢出截断）。
+    frame.render_widget(Paragraph::new(m.notice.as_deref().unwrap_or("")), v[1]);
     match m.view {
         View::Issues => issues::draw_issues_panel(frame, m, v[2]),
         View::Plans => plans::draw_plans_panel(frame, m, v[2]),

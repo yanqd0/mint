@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::models::{ContainerStatus, Kind, Status};
+use crate::state::Action;
 use crate::tui::dashboard::diff::DashboardSnapshot;
 use rstest::rstest;
 
@@ -135,7 +136,7 @@ fn enter_detail_and_esc_back() {
     assert_eq!(m.view, View::IssueDetail { id: 1 });
     m.handle_key(KeyCode::Esc);
     assert_eq!(m.view, View::Issues);
-    assert!(m.handle_key(KeyCode::Char('q')));
+    assert_eq!(m.handle_key(KeyCode::Char('q')), KeyAction::Quit);
 }
 
 #[test]
@@ -297,4 +298,60 @@ fn pagination_with_page_size() {
     assert_eq!(m.page, 0);
     m.handle_key(KeyCode::Char('h')); // 首页无操作
     assert_eq!(m.page, 0);
+}
+
+#[test]
+fn shift_p_plans_selected_issue() {
+    let mut m = DashboardModel::new();
+    m.init(snap(
+        vec![
+            mk_issue(1, Status::Open, None, "2"), // updated 最新 → 列表首位
+            mk_issue(2, Status::Open, None, "1"),
+        ],
+        vec![],
+    ));
+    assert_eq!(
+        m.handle_key(KeyCode::Char('P')),
+        KeyAction::State {
+            id: 1,
+            action: Action::Plan
+        }
+    );
+    m.handle_key(KeyCode::Down);
+    assert_eq!(
+        m.handle_key(KeyCode::Char('S')),
+        KeyAction::State {
+            id: 2,
+            action: Action::Start
+        }
+    );
+}
+
+#[test]
+fn shift_state_key_in_issue_detail_targets_current() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![mk_issue(7, Status::Dev, None, "1")], vec![]));
+    m.handle_key(KeyCode::Enter); // → IssueDetail { id: 7 }
+    assert_eq!(
+        m.handle_key(KeyCode::Char('C')),
+        KeyAction::State {
+            id: 7,
+            action: Action::Commit
+        }
+    );
+}
+
+#[test]
+fn shift_state_key_in_plans_tab_is_noop() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![], vec![(mk_plan(7, Some(4), "1"), 0)]));
+    m.handle_key(KeyCode::Char('2')); // → Plans tab
+    assert_eq!(m.handle_key(KeyCode::Char('P')), KeyAction::None);
+}
+
+#[test]
+fn shift_state_key_with_no_selection_is_noop() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![], vec![])); // 空 issue 列表
+    assert_eq!(m.handle_key(KeyCode::Char('D')), KeyAction::None);
 }

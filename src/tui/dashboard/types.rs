@@ -1,6 +1,7 @@
 //! dashboard 公共类型：视图、变更流条目、刷新结果、执行中 plan 判定。
 
 use crate::models::{Issue, Status};
+use crate::state::Action;
 use crate::tui::dashboard::diff::{ChangeEvent, DashboardSnapshot};
 
 /// 变更流最大条目数（超出裁剪尾部）。
@@ -19,6 +20,18 @@ pub enum View {
     IssueDetail { id: i64 },
     PlanDetail { plan_id: i64 },
     MilestoneDetail { milestone_id: i64 },
+}
+
+/// 键盘处理结果：run_loop 据此执行 IO（状态命令写库）或退出 dashboard。
+/// model 保持纯状态机：识别按键产出请求，不直接接触 db。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyAction {
+    /// 仅视图内处理，无需 IO。
+    None,
+    /// 退出 dashboard。
+    Quit,
+    /// 请求对指定 issue 执行状态命令（Shift+字母 触发）。
+    State { id: i64, action: Action },
 }
 
 /// 跳转目标视图。

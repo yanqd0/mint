@@ -6,10 +6,11 @@ use std::collections::VecDeque;
 use crossterm::event::KeyCode;
 
 use crate::models::{Container, Issue};
+use crate::state::Action;
 use crate::tui::dashboard::diff::{DashboardSnapshot, diff_snapshots};
 use crate::tui::dashboard::types::{FlashItem, JumpRequest, MAX_FEED, RawJump};
 
-pub use crate::tui::dashboard::types::{FeedItem, RefreshResult, View};
+pub use crate::tui::dashboard::types::{FeedItem, KeyAction, RefreshResult, View};
 
 /// dashboard 状态机。
 pub struct DashboardModel {
@@ -41,6 +42,8 @@ pub struct DashboardModel {
     pub(crate) merge_delay: u32,
     /// 进行中的闪烁项（渲染层读取）。
     pub flash: Vec<FlashItem>,
+    /// 最近一次状态操作结果（"issue #N: from -> to" / "error: …"），渲染层标题栏显示。
+    pub notice: Option<String>,
 }
 
 impl Default for DashboardModel {
@@ -68,6 +71,7 @@ impl DashboardModel {
             ready: VecDeque::new(),
             merge_delay: 0,
             flash: Vec::new(),
+            notice: None,
         }
     }
 
@@ -99,6 +103,7 @@ impl DashboardModel {
         self.ready.clear();
         self.merge_delay = 0;
         self.flash.clear();
+        self.notice = None;
     }
 
     /// 每 tick：diff 上一轮 → 事件前置 feed；面板自动切换。
@@ -145,10 +150,28 @@ impl DashboardModel {
         }
     }
 
-    /// 处理按键：返回 true = 退出 dashboard。
-    pub fn handle_key(&mut self, key: KeyCode) -> bool {
+    /// 处理按键：返回 IO 请求（状态命令 / 退出）；视图内导航直接改状态后返回 None。
+    pub fn handle_key(&mut self, key: KeyCode) -> KeyAction {
         // 任何按键 → 用户活跃，重置空闲计时（自动切换前置失效）。
         self.user_idle = 0;
+        match key {
+            KeyCode::Char('q') => return KeyAction::Quit,
+            // 状态推进快捷键：Shift+首字母（大写），操作对象 = 选中 issue / 详情当前 issue。
+            KeyCode::Char('P') => return self.state_action(Action::Plan),
+            KeyCode::Char('S') => return self.state_action(Action::Start),
+            KeyCode::Char('C') => return self.state_action(Action::Commit),
+            KeyCode::Char('X') => return self.state_action(Action::Close),
+            KeyCode::Char('R') => return self.state_action(Action::Reset),
+            KeyCode::Char('D') => return self.state_action(Action::Drop),
+            KeyCode::Char('O') => return self.state_action(Action::Reopen),
+            _ => {}
+        }
+        self.handle_nav(key);
+        KeyAction::None
+    }
+
+    /// 视图内导航（tab / 上下行 / 翻页 / 详情跳转 / Esc 返回），仅改状态。
+    fn handle_nav(&mut self, key: KeyCode) {
         match key {
             KeyCode::Char('1') => self.switch_tab(View::Issues),
             KeyCode::Char('2') => self.switch_tab(View::Plans),
@@ -233,15 +256,24 @@ impl DashboardModel {
             KeyCode::Esc => match self.view {
                 View::IssueDetail { .. } => self.switch_tab(View::Issues),
                 View::PlanDetail { .. } => self.switch_tab(View::Plans),
-                View::MilestoneDetail { .. } => {
-                    self.switch_tab(View::Milestones);
-                }
+                View::MilestoneDetail { .. } => self.switch_tab(View::Milestones),
                 _ => {}
             },
-            KeyCode::Char('q') => return true,
             _ => {}
         }
-        false
+    }
+
+    /// 状态键目标：Issues 选中行或 IssueDetail 当前 issue；非 issue 视图 / 无选中返回 None。
+    fn state_action(&self, action: Action) -> KeyAction {
+        let id = match self.view {
+            View::Issues => self.page_issues().get(self.selected).map(|i| i.id),
+            View::IssueDetail { id } => Some(id),
+            _ => None,
+        };
+        match id {
+            Some(id) => KeyAction::State { id, action },
+            None => KeyAction::None,
+        }
     }
 }
 

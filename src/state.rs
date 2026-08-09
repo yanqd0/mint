@@ -1,8 +1,17 @@
-//! 状态机转换校验（纯函数）。
+//! 状态机转换校验与应用。
 //!
 //! 6 态：`open` `planned` `dev` `test` `done` `dropped`（见 notes/DDD.md）。
 //! `test` 语义 = testing（测试中/等待测试）。close 仅允许 test→done 且必填 test_cmd。
+//!
+//! 校验部分（`can_transition`/`target_of`/`requires_test_cmd`）为纯函数；
+//! `apply_transition` 将转换落到 db（读状态 → 校验 → 事务更新 + 容器状态同步），
+//! CLI（`cli/issue/state.rs`）与 TUI（dashboard 状态快捷键）共用同一转换核心。
 
+use rusqlite::Connection;
+
+use crate::container;
+use crate::db;
+use crate::error::Error;
 use crate::models::Status;
 
 /// 触发状态转换的命令动作。
@@ -62,10 +71,105 @@ pub fn requires_test_cmd(action: Action, test_cmd: Option<&str>) -> bool {
     test_cmd.is_some_and(|s| !s.trim().is_empty())
 }
 
+/// 应用状态转换：读当前状态 → 校验 → `BEGIN IMMEDIATE` 事务更新 + 容器状态同步 → COMMIT。
+/// 返回 `(from, to)`；校验失败 / issue 不存在 / db 错误返回 `Err`（整体回滚）。
+/// CLI 与 TUI 共用；打印由调用方决定。
+pub fn apply_transition(
+    conn: &Connection,
+    id: i64,
+    action: Action,
+    test_cmd: Option<&str>,
+    reason: Option<&str>,
+    commit_sha: Option<&str>,
+) -> Result<(Status, Status), Error> {
+    let current: Status = conn
+        .query_row(db::ISSUE_SELECT_STATUS, rusqlite::params![id], |r| r.get(0))
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => Error::Other(format!("issue #{id} not found")),
+            other => Error::from(other),
+        })?;
+
+    let target = target_of(action);
+    if !can_transition(current, action, target) {
+        return Err(Error::Other(format!(
+            "invalid transition: {} -> {} via {:?}",
+            current, target, action
+        )));
+    }
+
+    if !requires_test_cmd(action, test_cmd) {
+        return Err(Error::Other(
+            "close/retest requires --test-cmd (use 'not-tested' if tests were skipped)".to_string(),
+        ));
+    }
+
+    let reset = action == Action::Reset;
+    let reopen = action == Action::Reopen;
+    let drop_reason: Option<&str> = if action == Action::Drop { reason } else { None };
+
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let result = (|| {
+        conn.execute(
+            db::ISSUE_UPDATE_TRANSITION,
+            rusqlite::params![target, test_cmd, id, reset, drop_reason, reopen, commit_sha],
+        )?;
+        container::sync_container_status(conn, id)?;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => conn.execute_batch("COMMIT")?,
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            return Err(e);
+        }
+    }
+    Ok((current, target))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db;
     use rstest::rstest;
+
+    /// 建一个含单 issue（status 可指定）的已迁移内存库，返回 (conn, issue_id)。
+    fn db_with_issue(status: Status) -> (rusqlite::Connection, i64) {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        db::migrate_for_test(&conn);
+        conn.execute("INSERT INTO projects (name) VALUES ('mint')", [])
+            .unwrap();
+        let project_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO issues (title, project_id, kind, status, priority) VALUES ('t', ?1, 'problem', ?2, 3)",
+            rusqlite::params![project_id, status.to_string()],
+        )
+        .unwrap();
+        let id = conn.last_insert_rowid();
+        (conn, id)
+    }
+
+    #[test]
+    fn apply_plan_advances_open_to_planned() {
+        let (conn, id) = db_with_issue(Status::Open);
+        let (from, to) = apply_transition(&conn, id, Action::Plan, None, None, None).unwrap();
+        assert_eq!((from, to), (Status::Open, Status::Planned));
+    }
+
+    #[test]
+    fn apply_rejects_illegal_transition() {
+        let (conn, id) = db_with_issue(Status::Open);
+        // open 直接 close（缺 dev→test 链路）不合法。
+        let err =
+            apply_transition(&conn, id, Action::Close, Some("cargo test"), None, None).unwrap_err();
+        assert!(err.to_string().contains("invalid transition"));
+    }
+
+    #[test]
+    fn apply_close_requires_test_cmd() {
+        let (conn, id) = db_with_issue(Status::Test);
+        let err = apply_transition(&conn, id, Action::Close, None, None, None).unwrap_err();
+        assert!(err.to_string().contains("requires --test-cmd"));
+    }
 
     /// 穷举 (status, action) 全矩阵（6×7=42 组合），对**硬编码期望表**断言——
     /// 期望表独立于实现，能发现 `from_allowed` 的语义错误（非同义反复）。

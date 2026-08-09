@@ -4,11 +4,8 @@ use std::path::Path;
 
 use rusqlite::Connection;
 
-use crate::container;
-use crate::db;
 use crate::error::Error;
 use crate::git;
-use crate::models::Status;
 use crate::state::{self, Action};
 
 #[derive(clap::Args)]
@@ -161,7 +158,7 @@ fn cmd_drop(conn: &Connection, d: &DropArgs) -> Result<(), Error> {
     )
 }
 
-/// 核心状态转换：读当前 -> 校验 -> 更新。
+/// 核心状态转换：复用 `state::apply_transition`（读当前 -> 校验 -> 事务更新），仅负责打印。
 fn transition(
     conn: &Connection,
     id: i64,
@@ -171,50 +168,8 @@ fn transition(
     commit_sha: Option<&str>,
     json: bool,
 ) -> Result<(), Error> {
-    let current: Status = conn
-        .query_row(db::ISSUE_SELECT_STATUS, rusqlite::params![id], |r| r.get(0))
-        .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => Error::Other(format!("issue #{id} not found")),
-            other => Error::from(other),
-        })?;
-
-    let target = state::target_of(action);
-    if !state::can_transition(current, action, target) {
-        return Err(Error::Other(format!(
-            "invalid transition: {} -> {} via {:?}",
-            current, target, action
-        )));
-    }
-
-    if !state::requires_test_cmd(action, test_cmd) {
-        return Err(Error::Other(
-            "close/retest requires --test-cmd (use 'not-tested' if tests were skipped)".to_string(),
-        ));
-    }
-
-    let reset = action == Action::Reset;
-    let reopen = action == Action::Reopen;
-    let drop_reason: Option<&str> = if action == Action::Drop { reason } else { None };
-
-    conn.execute_batch("BEGIN IMMEDIATE")?;
-    let result = (|| {
-        conn.execute(
-            db::ISSUE_UPDATE_TRANSITION,
-            rusqlite::params![target, test_cmd, id, reset, drop_reason, reopen, commit_sha],
-        )?;
-        container::sync_container_status(conn, id)?;
-        Ok(())
-    })();
-    match result {
-        Ok(()) => {
-            conn.execute_batch("COMMIT")?;
-        }
-        Err(e) => {
-            let _ = conn.execute_batch("ROLLBACK");
-            return Err(e);
-        }
-    }
-
+    let (current, target) =
+        state::apply_transition(conn, id, action, test_cmd, reason, commit_sha)?;
     if json {
         let mut v = serde_json::json!({"id": id, "from": current, "to": target});
         if let Some(sha) = commit_sha {

@@ -1,43 +1,60 @@
 //! dashboard 运行：TTY 自动刷新循环 / 非 TTY 快照文本。
 
 use std::io;
+use std::path::Path;
 use std::time::Duration;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 use rusqlite::Connection;
 
 use crate::error::Error;
+use crate::git;
+use crate::state::{self, Action};
 use crate::tui::dashboard::DashboardModel;
 use crate::tui::dashboard::data::load_snapshot;
+use crate::tui::dashboard::types::KeyAction;
 use crate::tui::{CrosstermEvents, EventSource, is_interactive, to_keycode};
 
 /// 自动刷新间隔：每 tick 全量重查重渲。
 const REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
 
 /// 启动 dashboard：TTY 自动刷新交互；非 TTY 输出初始快照文本。
-pub fn run_dashboard(conn: &Connection, project: &str) -> Result<(), Error> {
+/// `cwd` 供状态命令 commit 取 HEAD（git 仓库路径）。
+pub fn run_dashboard(conn: &Connection, project: &str, cwd: &Path) -> Result<(), Error> {
     let snapshot = load_snapshot(conn, project)?;
     let mut model = DashboardModel::new();
     model.init(snapshot);
     if is_interactive() {
-        run_loop(conn, project, &mut model)
+        run_loop(conn, project, cwd, &mut model)
     } else {
         render_text(&model)
     }
 }
 
-/// TTY 主循环：poll 1s 超时触发 refresh，按键走 handle_key。
-fn run_loop(conn: &Connection, project: &str, model: &mut DashboardModel) -> Result<(), Error> {
+/// TTY 主循环：poll 1s 超时触发 refresh，按键走 handle_key；状态键执行写库后立即刷新。
+fn run_loop(
+    conn: &Connection,
+    project: &str,
+    cwd: &Path,
+    model: &mut DashboardModel,
+) -> Result<(), Error> {
     let mut terminal = ratatui::init();
     let result = (|| -> Result<(), Error> {
         loop {
             terminal.draw(|f| crate::tui::dashboard::draw::draw_dashboard(f, model))?;
             match CrosstermEvents.poll_event(REFRESH_INTERVAL)? {
                 Some(ev) => {
-                    if let Some(code) = to_keycode(ev)
-                        && model.handle_key(code)
-                    {
-                        return Ok(());
+                    if let Some(code) = to_keycode(ev) {
+                        match model.handle_key(code) {
+                            KeyAction::Quit => return Ok(()),
+                            KeyAction::State { id, action } => {
+                                apply_state_action(conn, cwd, id, action, model);
+                                // 操作后立即重载并刷新，面板反映最新 db 状态。
+                                let snap = load_snapshot(conn, project)?;
+                                model.refresh(&snap);
+                            }
+                            KeyAction::None => {}
+                        }
                     }
                 }
                 None => {
@@ -49,6 +66,33 @@ fn run_loop(conn: &Connection, project: &str, model: &mut DashboardModel) -> Res
     })();
     ratatui::restore();
     result
+}
+
+/// 执行 TUI 内触发的状态命令（复用 CLI 同一转换核心 `state::apply_transition`）；
+/// 结果写入 `model.notice` 供渲染层标题栏显示。
+fn apply_state_action(
+    conn: &Connection,
+    cwd: &Path,
+    id: i64,
+    action: Action,
+    model: &mut DashboardModel,
+) {
+    let commit_sha = if action == Action::Commit {
+        git::head_sha(cwd)
+    } else {
+        None
+    };
+    let result = if action == Action::Commit && commit_sha.is_none() {
+        Err(Error::Other(
+            "commit requires a git repository (no HEAD)".to_string(),
+        ))
+    } else {
+        state::apply_transition(conn, id, action, None, None, commit_sha.as_deref())
+    };
+    model.notice = Some(match result {
+        Ok((from, to)) => format!("issue #{id}: {from} -> {to}"),
+        Err(e) => format!("error: {e}"),
+    });
 }
 
 /// 非 TTY：TestBackend 渲染初始 Issue 面板 → 逐行文本。
@@ -116,6 +160,50 @@ impl EventSource for ScriptEvents {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db;
+    use tempfile::TempDir;
+
+    /// 建临时 db（已迁移）+ 一个 open issue，返回 (TempDir, conn, issue_id)。
+    fn db_with_open_issue() -> (TempDir, rusqlite::Connection, i64) {
+        let dir = TempDir::new().unwrap();
+        let conn = db::open(&dir.path().join("t.db")).unwrap();
+        conn.execute("INSERT INTO projects (name) VALUES ('mint')", [])
+            .unwrap();
+        let pid = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO issues (title, project_id, kind, status, priority) VALUES ('t', ?1, 'problem', 'open', 3)",
+            rusqlite::params![pid],
+        )
+        .unwrap();
+        let id = conn.last_insert_rowid();
+        (dir, conn, id)
+    }
+
+    #[test]
+    fn apply_state_plans_issue_and_sets_notice() {
+        let (_db_dir, conn, id) = db_with_open_issue();
+        let cwd_dir = TempDir::new().unwrap();
+        let mut m = DashboardModel::new();
+        apply_state_action(&conn, cwd_dir.path(), id, Action::Plan, &mut m);
+        assert!(
+            m.notice
+                .is_some_and(|n| n == format!("issue #{id}: open -> planned"))
+        );
+    }
+
+    #[test]
+    fn apply_state_commit_outside_git_sets_error_notice() {
+        let (_db_dir, conn, id) = db_with_open_issue();
+        let cwd_dir = TempDir::new().unwrap();
+        let mut m = DashboardModel::new();
+        apply_state_action(&conn, cwd_dir.path(), id, Action::Commit, &mut m);
+        // 非 git 目录：commit 无 HEAD → 报错提示，不写库。
+        assert!(
+            m.notice
+                .as_deref()
+                .is_some_and(|n| n.contains("commit requires a git repository"))
+        );
+    }
 
     #[test]
     fn script_events_maps_key_tick_and_exhaustion() {
