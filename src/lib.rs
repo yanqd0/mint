@@ -15,3 +15,4 @@ pub mod models;
 pub mod output;
 pub mod project;
 pub mod state;
+pub mod tui;
