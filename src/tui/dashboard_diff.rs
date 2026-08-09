@@ -4,11 +4,12 @@ use std::collections::{HashMap, HashSet};
 
 use crate::models::{Container, ContainerStatus, Issue, Status};
 
-/// 一次全量快照（dashboard 每 tick 拉取：全部 issue + 全部 plan，无 milestone）。
+/// 一次全量快照（dashboard 每 tick 拉取：全部 issue + 全部 plan + 全部 milestone）。
 #[derive(Debug, Clone)]
 pub struct DashboardSnapshot {
     pub issues: Vec<Issue>,
     pub plans: Vec<(Container, i64)>,
+    pub milestones: Vec<(Container, i64)>,
 }
 
 impl DashboardSnapshot {
@@ -17,6 +18,9 @@ impl DashboardSnapshot {
     }
     pub fn plan(&self, id: i64) -> Option<&(Container, i64)> {
         self.plans.iter().find(|(c, _)| c.id == id)
+    }
+    pub fn milestone(&self, id: i64) -> Option<&(Container, i64)> {
+        self.milestones.iter().find(|(c, _)| c.id == id)
     }
 }
 
@@ -197,7 +201,11 @@ mod tests {
     }
 
     fn snap(issues: Vec<Issue>, plans: Vec<(Container, i64)>) -> DashboardSnapshot {
-        DashboardSnapshot { issues, plans }
+        DashboardSnapshot {
+            issues,
+            plans,
+            milestones: vec![],
+        }
     }
 
     #[test]

@@ -6,11 +6,13 @@ use crate::tui::dashboard_diff::{ChangeEvent, DashboardSnapshot};
 /// 变更流最大条目数（超出裁剪尾部）。
 pub const MAX_FEED: usize = 200;
 
-/// 视图：默认 issue 面板；plan 执行中（有 dev/test issue）自动切 plan 面板。
+/// 视图：默认 issue 面板；plan 执行中（有 dev/test issue）自动切 plan 面板；
+/// milestone 面板显示其下 plan 分组（手动 Tab/p 循环进入，或 plan 结束时短暂自动切入）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
     Issue,
     Plan { plan_id: i64 },
+    Milestone { milestone_id: i64 },
 }
 
 /// 变更流条目：初始基线（当前全量按 updated_at 倒序）或会话内变化事件。
@@ -108,6 +110,7 @@ mod tests {
                 mk_issue(5, Status::Done, Some(8), "13:00"),
             ],
             plans: vec![(mk_container(7), 2), (mk_container(8), 3)],
+            milestones: vec![],
         };
         // 活跃 issue 最新更新：plan 7 的 dev(10:00) vs plan 8 的 test(11:00) → 8 在前
         let active = active_plans(&snap);

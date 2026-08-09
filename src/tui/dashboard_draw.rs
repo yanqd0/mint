@@ -66,6 +66,7 @@ fn panel_title(m: &DashboardModel) -> String {
     match m.view {
         View::Issue => "mint · issues".to_string(),
         View::Plan { plan_id } => format!("mint · plan #{plan_id}"),
+        View::Milestone { milestone_id } => format!("mint · milestone #{milestone_id}"),
     }
 }
 
@@ -211,6 +212,7 @@ mod tests {
         m.init(DashboardSnapshot {
             issues,
             plans: vec![],
+            milestones: vec![],
         });
         m
     }

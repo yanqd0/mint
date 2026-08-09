@@ -2,7 +2,7 @@
 
 use crossterm::event::KeyCode;
 
-use crate::models::{Container, Issue};
+use crate::models::{Container, Issue, Status};
 use crate::tui::dashboard_diff::{DashboardSnapshot, diff_snapshots};
 use crate::tui::dashboard_types::{MAX_FEED, active_plans};
 
@@ -18,6 +18,7 @@ pub struct DashboardModel {
     /// 最新快照（详情/进度数据源）。
     pub issues: Vec<Issue>,
     pub plans: Vec<(Container, i64)>,
+    pub milestones: Vec<(Container, i64)>,
     prev: Option<DashboardSnapshot>,
     /// 上次自动切到的 plan（用户手动 Esc 回 issue 后避免同 plan 反复抢占）。
     last_auto: Option<i64>,
@@ -27,6 +28,8 @@ pub struct DashboardModel {
     pub page: usize,
     /// 每页行数。
     pub page_size: usize,
+    /// 自动临时进入 milestone 面板的剩余 tick（Some = 自动切入，None = 用户手动/未切入）。
+    milestone_hold: Option<u32>,
 }
 
 impl Default for DashboardModel {
@@ -43,11 +46,13 @@ impl DashboardModel {
             selected: 0,
             issues: Vec::new(),
             plans: Vec::new(),
+            milestones: Vec::new(),
             prev: None,
             last_auto: None,
             detail: None,
             page: 0,
             page_size: 10,
+            milestone_hold: None,
         }
     }
 
@@ -68,10 +73,12 @@ impl DashboardModel {
         issues.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         self.issues = issues;
         self.plans = snapshot.plans.clone();
+        self.milestones = snapshot.milestones.clone();
         self.prev = Some(snapshot);
         self.view = View::Issue;
         self.selected = 0;
         self.last_auto = None;
+        self.milestone_hold = None;
     }
 
     /// 每 tick：diff 上一轮 → 事件前置 feed；面板自动切换。
@@ -88,11 +95,16 @@ impl DashboardModel {
         if self.feed.len() > MAX_FEED {
             self.feed.truncate(MAX_FEED);
         }
+        // 自动临时 milestone 面板倒计时递减（归零后 switch_panel 回 issue）。
+        if let Some(hold) = self.milestone_hold.as_mut() {
+            *hold = hold.saturating_sub(1);
+        }
         let auto_plan = self.switch_panel(snapshot);
         let mut issues = snapshot.issues.clone();
         issues.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         self.issues = issues;
         self.plans = snapshot.plans.clone();
+        self.milestones = snapshot.milestones.clone();
         self.prev = Some(snapshot.clone());
         self.clamp_selected();
         self.clamp_page();
@@ -127,6 +139,15 @@ impl DashboardModel {
                 if !active.contains(&plan_id) {
                     self.view = View::Issue;
                     self.last_auto = None;
+                    self.page = 0;
+                    self.selected = 0;
+                }
+            }
+            View::Milestone { .. } => {
+                // 自动临时切入的 milestone 面板倒计时归零 → 回 issue（#96 完善触发）。
+                if self.milestone_hold == Some(0) {
+                    self.view = View::Issue;
+                    self.milestone_hold = None;
                     self.page = 0;
                     self.selected = 0;
                 }
@@ -179,6 +200,12 @@ impl DashboardModel {
                     self.view = View::Issue;
                     self.page = 0;
                     self.clamp_selected();
+                } else if matches!(self.view, View::Milestone { .. }) {
+                    // 手动返回 issue（自动临时切入的也一并清除 hold）。
+                    self.view = View::Issue;
+                    self.milestone_hold = None;
+                    self.page = 0;
+                    self.clamp_selected();
                 }
             }
             KeyCode::Char('q') => return true,
@@ -196,7 +223,34 @@ impl DashboardModel {
                 .iter()
                 .filter(|i| i.plan_id == Some(plan_id))
                 .collect(),
+            View::Milestone { .. } => Vec::new(),
         }
+    }
+
+    /// Milestone 面板行：该 milestone 下的 plan（按 updated_at 逆序）。
+    pub fn visible_plans(&self, milestone_id: i64) -> Vec<&(Container, i64)> {
+        let mut ps: Vec<&(Container, i64)> = self
+            .plans
+            .iter()
+            .filter(|(c, _)| c.milestone_id == Some(milestone_id))
+            .collect();
+        ps.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at));
+        ps
+    }
+
+    /// 某 plan 的完成进度（done / total issue 数）。
+    pub fn plan_progress(&self, plan_id: i64) -> (usize, usize) {
+        let mut total = 0;
+        let mut done = 0;
+        for i in &self.issues {
+            if i.plan_id == Some(plan_id) {
+                total += 1;
+                if i.status == Status::Done {
+                    done += 1;
+                }
+            }
+        }
+        (done, total)
     }
 
     /// 面板切换后校正选中（避免越界）。
@@ -230,13 +284,18 @@ impl DashboardModel {
         }
     }
 
-    /// 手动在 issue 与各 plan 面板间循环（Tab/p）。
+    /// 手动在 issue / 各 plan / 各 milestone 面板间循环（Tab/p）。
     fn cycle_views(&mut self) {
         let plan_ids: Vec<i64> = self.plans.iter().map(|(c, _)| c.id).collect();
+        let milestone_ids: Vec<i64> = self.milestones.iter().map(|(c, _)| c.id).collect();
         match self.view {
             View::Issue => {
                 if let Some(&first) = plan_ids.first() {
                     self.view = View::Plan { plan_id: first };
+                } else if let Some(&first) = milestone_ids.first() {
+                    self.view = View::Milestone {
+                        milestone_id: first,
+                    };
                 }
             }
             View::Plan { plan_id } => {
@@ -247,10 +306,31 @@ impl DashboardModel {
                             plan_id: plan_ids[i + 1],
                         };
                     }
+                    Some(_) => {
+                        if let Some(&first) = milestone_ids.first() {
+                            self.view = View::Milestone {
+                                milestone_id: first,
+                            };
+                        } else {
+                            self.view = View::Issue;
+                        }
+                    }
+                    None => self.view = View::Issue,
+                }
+            }
+            View::Milestone { milestone_id } => {
+                let idx = milestone_ids.iter().position(|&x| x == milestone_id);
+                match idx {
+                    Some(i) if i + 1 < milestone_ids.len() => {
+                        self.view = View::Milestone {
+                            milestone_id: milestone_ids[i + 1],
+                        };
+                    }
                     _ => self.view = View::Issue,
                 }
             }
         }
+        self.milestone_hold = None; // 手动进入 → 用户接管，不受倒计时踢回
         self.page = 0;
         self.clamp_selected();
     }
@@ -303,8 +383,25 @@ mod tests {
         }
     }
 
+    fn mk_plan(id: i64, milestone: Option<i64>, updated: &str) -> Container {
+        Container {
+            id,
+            title: "p".into(),
+            version: None,
+            body: None,
+            milestone_id: milestone,
+            status: ContainerStatus::Open,
+            created_at: "t".into(),
+            updated_at: updated.into(),
+        }
+    }
+
     fn snap(issues: Vec<Issue>, plans: Vec<(Container, i64)>) -> DashboardSnapshot {
-        DashboardSnapshot { issues, plans }
+        DashboardSnapshot {
+            issues,
+            plans,
+            milestones: vec![],
+        }
     }
 
     #[test]
@@ -440,6 +537,66 @@ mod tests {
         assert_eq!(m.view, View::Plan { plan_id: 8 });
         m.handle_key(KeyCode::Tab);
         assert_eq!(m.view, View::Issue);
+    }
+
+    #[test]
+    fn visible_plans_filters_by_milestone_sorted_recent() {
+        let mut m = DashboardModel::new();
+        m.init(snap(
+            vec![],
+            vec![
+                (mk_plan(7, Some(4), "10:00"), 0),
+                (mk_plan(8, Some(4), "12:00"), 0),
+                (mk_plan(9, None, "11:00"), 0),
+            ],
+        ));
+        let ps = m.visible_plans(4);
+        assert_eq!(ps.len(), 2);
+        assert_eq!(ps[0].0.id, 8); // updated_at 最新在前
+        assert_eq!(ps[1].0.id, 7);
+    }
+
+    #[test]
+    fn plan_progress_counts_done_over_total() {
+        let mut m = DashboardModel::new();
+        m.init(snap(
+            vec![
+                mk_issue(1, Status::Done, Some(7), "1"),
+                mk_issue(2, Status::Open, Some(7), "2"),
+                mk_issue(3, Status::Dev, Some(7), "3"),
+                mk_issue(4, Status::Open, None, "4"),
+            ],
+            vec![],
+        ));
+        assert_eq!(m.plan_progress(7), (1, 3));
+        assert_eq!(m.plan_progress(8), (0, 0));
+    }
+
+    #[test]
+    fn manual_navigation_cycles_through_milestones() {
+        let mut m = DashboardModel::new();
+        m.init(snap(vec![], vec![(mk_plan(7, Some(4), "1"), 0)]));
+        m.milestones = vec![(mk_container(4), 0)];
+        // Issue → plan7 → milestone4 → Issue
+        m.handle_key(KeyCode::Tab);
+        assert_eq!(m.view, View::Plan { plan_id: 7 });
+        m.handle_key(KeyCode::Char('p'));
+        assert_eq!(m.view, View::Milestone { milestone_id: 4 });
+        m.handle_key(KeyCode::Tab);
+        assert_eq!(m.view, View::Issue);
+    }
+
+    #[test]
+    fn milestone_hold_expires_back_to_issue() {
+        let mut m = DashboardModel::new();
+        m.init(snap(vec![], vec![]));
+        m.view = View::Milestone { milestone_id: 4 };
+        m.milestone_hold = Some(2);
+        m.refresh(&snap(vec![], vec![])); // 2 → 1，仍显示
+        assert_eq!(m.view, View::Milestone { milestone_id: 4 });
+        m.refresh(&snap(vec![], vec![])); // 1 → 0 → 回 issue
+        assert_eq!(m.view, View::Issue);
+        assert_eq!(m.milestone_hold, None);
     }
 
     #[test]

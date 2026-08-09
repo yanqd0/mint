@@ -1,4 +1,4 @@
-//! dashboard 数据加载：全量快照（全部 issue + 全部 plan，无 milestone）。
+//! dashboard 数据加载：全量快照（全部 issue + 全部 plan + 全部 milestone）。
 
 use rusqlite::Connection;
 
@@ -25,7 +25,12 @@ pub fn load_snapshot(conn: &Connection) -> Result<DashboardSnapshot, Error> {
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
     fill_labels(conn, &mut issues)?;
     let plans = container::list(conn, ContainerKind::Plan, true)?;
-    Ok(DashboardSnapshot { issues, plans })
+    let milestones = container::list(conn, ContainerKind::Milestone, true)?;
+    Ok(DashboardSnapshot {
+        issues,
+        plans,
+        milestones,
+    })
 }
 
 #[cfg(test)]
@@ -61,6 +66,11 @@ mod tests {
             [],
         )
         .unwrap();
+        conn.execute(
+            "INSERT INTO milestones (title, version, status) VALUES ('0.5.0', '0.5.0', 'open')",
+            [],
+        )
+        .unwrap();
 
         let snap = load_snapshot(&conn).unwrap();
         assert_eq!(snap.issues.len(), 2);
@@ -74,6 +84,8 @@ mod tests {
         assert_eq!(snap.plans[0].0.title, "sprint");
         // 直接挂载计数：plan 无直接 issue → 0
         assert_eq!(snap.plans[0].1, 0);
+        assert_eq!(snap.milestones.len(), 1);
+        assert_eq!(snap.milestones[0].0.title, "0.5.0");
     }
 
     #[test]
