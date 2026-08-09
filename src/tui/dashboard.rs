@@ -23,6 +23,10 @@ pub struct DashboardModel {
     last_auto: Option<i64>,
     /// 展开详情的 issue id（Enter 进入，Esc 收起）。
     pub detail: Option<i64>,
+    /// 当前面板页（0-based，每页 page_size 行）。
+    pub page: usize,
+    /// 每页行数。
+    pub page_size: usize,
 }
 
 impl Default for DashboardModel {
@@ -42,6 +46,8 @@ impl DashboardModel {
             prev: None,
             last_auto: None,
             detail: None,
+            page: 0,
+            page_size: 10,
         }
     }
 
@@ -89,6 +95,7 @@ impl DashboardModel {
         self.plans = snapshot.plans.clone();
         self.prev = Some(snapshot.clone());
         self.clamp_selected();
+        self.clamp_page();
         // 详情指向的 issue 已删除 → 收起
         if let Some(id) = self.detail
             && !self.issues.iter().any(|i| i.id == id)
@@ -111,6 +118,8 @@ impl DashboardModel {
                 {
                     self.view = View::Plan { plan_id: *p };
                     self.last_auto = Some(*p);
+                    self.page = 0;
+                    self.selected = 0;
                     return Some(*p);
                 }
             }
@@ -118,6 +127,8 @@ impl DashboardModel {
                 if !active.contains(&plan_id) {
                     self.view = View::Issue;
                     self.last_auto = None;
+                    self.page = 0;
+                    self.selected = 0;
                 }
             }
         }
@@ -128,7 +139,7 @@ impl DashboardModel {
     pub fn handle_key(&mut self, key: KeyCode) -> bool {
         match key {
             KeyCode::Char('j') | KeyCode::Down => {
-                let len = self.visible_issues().len();
+                let len = self.page_issues().len();
                 if self.selected + 1 < len {
                     self.selected += 1;
                 }
@@ -138,12 +149,24 @@ impl DashboardModel {
                     self.selected -= 1;
                 }
             }
+            KeyCode::Char('h') | KeyCode::Left | KeyCode::PageUp => {
+                if self.page > 0 {
+                    self.page -= 1;
+                    self.selected = 0;
+                }
+            }
+            KeyCode::Char('l') | KeyCode::Right | KeyCode::PageDown => {
+                if self.page + 1 < self.pages() {
+                    self.page += 1;
+                    self.selected = 0;
+                }
+            }
             KeyCode::Tab | KeyCode::Char('p') => {
                 self.cycle_views();
             }
             KeyCode::Enter => {
                 if self.detail.is_none()
-                    && let Some(i) = self.visible_issues().get(self.selected)
+                    && let Some(i) = self.page_issues().get(self.selected)
                 {
                     self.detail = Some(i.id);
                 }
@@ -154,6 +177,7 @@ impl DashboardModel {
                 } else if matches!(self.view, View::Plan { .. }) {
                     // 用户手动返回 issue；保留 last_auto，同 plan 继续执行时不反复抢占
                     self.view = View::Issue;
+                    self.page = 0;
                     self.clamp_selected();
                 }
             }
@@ -177,9 +201,32 @@ impl DashboardModel {
 
     /// 面板切换后校正选中（避免越界）。
     fn clamp_selected(&mut self) {
-        let len = self.visible_issues().len();
+        let len = self.page_issues().len();
         if self.selected >= len {
             self.selected = len.saturating_sub(1);
+        }
+    }
+
+    /// 当前面板页内的 issue 集合（列表渲染用）。
+    pub fn page_issues(&self) -> Vec<&Issue> {
+        let all = self.visible_issues();
+        let start = self.page * self.page_size;
+        if start >= all.len() {
+            return Vec::new();
+        }
+        let end = (start + self.page_size).min(all.len());
+        all[start..end].to_vec()
+    }
+
+    /// 当前面板总页数（至少 1）。
+    pub fn pages(&self) -> usize {
+        self.visible_issues().len().div_ceil(self.page_size).max(1)
+    }
+
+    /// 面板数据变化后校正页号（避免越界）。
+    fn clamp_page(&mut self) {
+        if self.page >= self.pages() {
+            self.page = self.pages().saturating_sub(1);
         }
     }
 
@@ -204,6 +251,7 @@ impl DashboardModel {
                 }
             }
         }
+        self.page = 0;
         self.clamp_selected();
     }
 
@@ -392,5 +440,39 @@ mod tests {
         assert_eq!(m.view, View::Plan { plan_id: 8 });
         m.handle_key(KeyCode::Tab);
         assert_eq!(m.view, View::Issue);
+    }
+
+    #[test]
+    fn pagination_with_page_size() {
+        let mut m = DashboardModel::new();
+        m.page_size = 2;
+        m.init(snap(
+            vec![
+                mk_issue(1, Status::Open, None, "1"),
+                mk_issue(2, Status::Open, None, "2"),
+                mk_issue(3, Status::Open, None, "3"),
+                mk_issue(4, Status::Open, None, "4"),
+                mk_issue(5, Status::Open, None, "5"),
+            ],
+            vec![],
+        ));
+        // page_size 2 → 3 页（updated 倒序：5,4 | 3,2 | 1）
+        assert_eq!(m.pages(), 3);
+        assert_eq!(m.page_issues().len(), 2);
+        assert_eq!(m.page_issues()[0].id, 5);
+        m.handle_key(KeyCode::Char('l'));
+        assert_eq!(m.page, 1);
+        assert_eq!(m.page_issues()[0].id, 3);
+        m.handle_key(KeyCode::PageDown);
+        assert_eq!(m.page, 2);
+        assert_eq!(m.page_issues().len(), 1);
+        m.handle_key(KeyCode::Char('l')); // 末页无操作
+        assert_eq!(m.page, 2);
+        m.handle_key(KeyCode::PageUp);
+        assert_eq!(m.page, 1);
+        m.handle_key(KeyCode::Char('h'));
+        assert_eq!(m.page, 0);
+        m.handle_key(KeyCode::Char('h')); // 首页无操作
+        assert_eq!(m.page, 0);
     }
 }

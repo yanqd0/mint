@@ -106,12 +106,13 @@ pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
     if let Some(id) = m.detail {
         return draw_detail(frame, m, id);
     }
-    let issues = m.visible_issues();
-    let total = issues
+    let all = m.visible_issues();
+    let page = m.page_issues();
+    let total = all
         .iter()
         .filter(|i| !matches!(i.status, Status::Dropped))
         .count();
-    let done = issues
+    let done = all
         .iter()
         .filter(|i| matches!(i.status, Status::Done))
         .count();
@@ -121,9 +122,9 @@ pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
         .unwrap_or(0);
 
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(progress_bar(&issues));
+    lines.push(progress_bar(&all));
     lines.push(Line::from(format!("  open rate: {open_rate}%")));
-    for (idx, i) in issues.iter().enumerate() {
+    for (idx, i) in page.iter().enumerate() {
         let (dot, dot_style) = status_dot(i.status);
         let selected = idx == m.selected;
         let text_style = if selected {
@@ -141,8 +142,9 @@ pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
     }
 
     let footer = format!(
-        "j/k or ↑↓ navigate · Enter detail · q quit · {} issue(s)",
-        issues.len()
+        "j/k ↑↓ row · h/l PgUp/PgDn page · Tab plan · Enter detail · q quit · Page {}/{}",
+        m.page + 1,
+        m.pages()
     );
     let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(frame.area());
     frame.render_widget(
