@@ -277,7 +277,12 @@ mod tests {
         m
     }
 
-    fn mk_container(id: i64, title: &str, version: Option<&str>, milestone_id: Option<i64>) -> Container {
+    fn mk_container(
+        id: i64,
+        title: &str,
+        version: Option<&str>,
+        milestone_id: Option<i64>,
+    ) -> Container {
         Container {
             id,
             title: title.into(),

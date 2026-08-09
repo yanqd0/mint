@@ -8,6 +8,9 @@ use crate::tui::dashboard_types::{MAX_FEED, active_plans};
 
 pub use crate::tui::dashboard_types::{FeedItem, RefreshResult, View};
 
+/// plan 执行结束 → 所属 milestone 面板的自动停留 tick 数（1 tick = 1s）。
+const MILESTONE_HOLD_TICKS: u32 = 3;
+
 /// dashboard 状态机。
 pub struct DashboardModel {
     pub view: View,
@@ -137,14 +140,25 @@ impl DashboardModel {
             }
             View::Plan { plan_id } => {
                 if !active.contains(&plan_id) {
-                    self.view = View::Issue;
-                    self.last_auto = None;
-                    self.page = 0;
-                    self.selected = 0;
+                    // plan 执行结束：若属某 milestone，短暂切到其 milestone 面板供扫一眼再回 issue
+                    if let Some((plan, _)) = snap.plans.iter().find(|(c, _)| c.id == plan_id)
+                        && let Some(mid) = plan.milestone_id
+                    {
+                        self.view = View::Milestone { milestone_id: mid };
+                        self.milestone_hold = Some(MILESTONE_HOLD_TICKS);
+                        self.last_auto = None;
+                        self.page = 0;
+                        self.selected = 0;
+                    } else {
+                        self.view = View::Issue;
+                        self.last_auto = None;
+                        self.page = 0;
+                        self.selected = 0;
+                    }
                 }
             }
             View::Milestone { .. } => {
-                // 自动临时切入的 milestone 面板倒计时归零 → 回 issue（#96 完善触发）。
+                // 自动临时切入的 milestone 面板倒计时归零 → 回 issue。
                 if self.milestone_hold == Some(0) {
                     self.view = View::Issue;
                     self.milestone_hold = None;
@@ -158,6 +172,13 @@ impl DashboardModel {
 
     /// 处理按键：返回 true = 退出 dashboard。
     pub fn handle_key(&mut self, key: KeyCode) -> bool {
+        // 用户手动操作 milestone 面板（Esc/q 之外）→ 接管，取消自动倒计时踢回。
+        if matches!(self.view, View::Milestone { .. })
+            && self.milestone_hold.is_some()
+            && !matches!(key, KeyCode::Esc | KeyCode::Char('q'))
+        {
+            self.milestone_hold = None;
+        }
         match key {
             KeyCode::Char('j') | KeyCode::Down => {
                 let len = self.current_page_len();
@@ -662,6 +683,59 @@ mod tests {
         m.refresh(&snap(vec![], vec![])); // 1 → 0 → 回 issue
         assert_eq!(m.view, View::Issue);
         assert_eq!(m.milestone_hold, None);
+    }
+
+    #[test]
+    fn plan_end_switches_to_milestone_then_back() {
+        let mut m = DashboardModel::new();
+        m.init(snap(vec![], vec![(mk_plan(7, Some(4), "1"), 0)]));
+        // plan 执行中 → 自动切 plan 面板
+        m.refresh(&snap(
+            vec![mk_issue(1, Status::Dev, Some(7), "11:00")],
+            vec![(mk_plan(7, Some(4), "1"), 0)],
+        ));
+        assert_eq!(m.view, View::Plan { plan_id: 7 });
+        // plan 结束（全 done）→ 切所属 milestone 4，hold 启动
+        m.refresh(&snap(
+            vec![mk_issue(1, Status::Done, Some(7), "12:00")],
+            vec![(mk_plan(7, Some(4), "1"), 0)],
+        ));
+        assert_eq!(m.view, View::Milestone { milestone_id: 4 });
+        assert!(m.milestone_hold.is_some());
+        // 倒计时 3 tick 归零 → 自动回 issue
+        for _ in 0..3 {
+            m.refresh(&snap(
+                vec![mk_issue(1, Status::Done, Some(7), "12:00")],
+                vec![(mk_plan(7, Some(4), "1"), 0)],
+            ));
+        }
+        assert_eq!(m.view, View::Issue);
+        assert_eq!(m.milestone_hold, None);
+    }
+
+    #[test]
+    fn user_interaction_cancels_milestone_hold() {
+        let mut m = DashboardModel::new();
+        m.init(snap(vec![], vec![(mk_plan(7, Some(4), "1"), 0)]));
+        m.refresh(&snap(
+            vec![mk_issue(1, Status::Dev, Some(7), "11:00")],
+            vec![(mk_plan(7, Some(4), "1"), 0)],
+        ));
+        m.refresh(&snap(
+            vec![mk_issue(1, Status::Done, Some(7), "12:00")],
+            vec![(mk_plan(7, Some(4), "1"), 0)],
+        ));
+        assert!(matches!(m.view, View::Milestone { .. }));
+        assert!(m.milestone_hold.is_some());
+        // 用户按键 → 接管，取消自动倒计时
+        m.handle_key(KeyCode::Char('j'));
+        assert_eq!(m.milestone_hold, None);
+        // 后续 refresh 不再自动回 issue
+        m.refresh(&snap(
+            vec![mk_issue(1, Status::Done, Some(7), "12:00")],
+            vec![(mk_plan(7, Some(4), "1"), 0)],
+        ));
+        assert!(matches!(m.view, View::Milestone { .. }));
     }
 
     #[test]
