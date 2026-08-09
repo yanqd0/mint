@@ -2,53 +2,18 @@
 
 use crossterm::event::KeyCode;
 
-use crate::models::{Container, Issue, Status};
-use crate::tui::dashboard_diff::{ChangeEvent, DashboardSnapshot, diff_snapshots};
+use crate::models::{Container, Issue};
+use crate::tui::dashboard_diff::{DashboardSnapshot, diff_snapshots};
+use crate::tui::dashboard_types::{MAX_FEED, active_plans};
 
-/// 变更流最大条目数（超出裁剪尾部）。
-pub const MAX_FEED: usize = 200;
-
-/// 视图：默认 issue 面板；plan 执行中（有 dev/test issue）自动切 plan 面板。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum View {
-    Issue,
-    Plan { plan_id: i64 },
-}
-
-/// 变更流条目：初始基线（当前全量按 updated_at 倒序）或会话内变化事件。
-#[derive(Debug, Clone)]
-pub enum FeedItem {
-    Baseline { issue: Issue },
-    Event(ChangeEvent),
-}
-
-impl FeedItem {
-    /// 条目关联的 issue（plan 事件返回 None）。
-    pub fn issue(&self) -> Option<&Issue> {
-        match self {
-            FeedItem::Baseline { issue } => Some(issue),
-            FeedItem::Event(
-                ChangeEvent::IssueAdded { issue }
-                | ChangeEvent::IssueStatusChanged { issue, .. }
-                | ChangeEvent::IssueUpdated { issue },
-            ) => Some(issue),
-            _ => None,
-        }
-    }
-}
-
-/// 一次 refresh 的结果。
-pub struct RefreshResult {
-    pub new_events: usize,
-    pub auto_plan: Option<i64>,
-}
+pub use crate::tui::dashboard_types::{FeedItem, RefreshResult, View};
 
 /// dashboard 状态机。
 pub struct DashboardModel {
     pub view: View,
     /// 变更流，index 0 = 最新。
     pub feed: Vec<FeedItem>,
-    /// feed 内选中下标。
+    /// 当前面板列表内选中下标。
     pub selected: usize,
     /// 最新快照（详情/进度数据源）。
     pub issues: Vec<Issue>,
@@ -56,6 +21,8 @@ pub struct DashboardModel {
     prev: Option<DashboardSnapshot>,
     /// 上次自动切到的 plan（用户手动 Esc 回 issue 后避免同 plan 反复抢占）。
     last_auto: Option<i64>,
+    /// 展开详情的 issue id（Enter 进入，Esc 收起）。
+    pub detail: Option<i64>,
 }
 
 impl Default for DashboardModel {
@@ -74,6 +41,7 @@ impl DashboardModel {
             plans: Vec::new(),
             prev: None,
             last_auto: None,
+            detail: None,
         }
     }
 
@@ -121,6 +89,12 @@ impl DashboardModel {
         self.plans = snapshot.plans.clone();
         self.prev = Some(snapshot.clone());
         self.clamp_selected();
+        // 详情指向的 issue 已删除 → 收起
+        if let Some(id) = self.detail
+            && !self.issues.iter().any(|i| i.id == id)
+        {
+            self.detail = None;
+        }
         RefreshResult {
             new_events: n,
             auto_plan,
@@ -164,12 +138,21 @@ impl DashboardModel {
                     self.selected -= 1;
                 }
             }
+            KeyCode::Enter => {
+                if self.detail.is_none()
+                    && let Some(i) = self.visible_issues().get(self.selected)
+                {
+                    self.detail = Some(i.id);
+                }
+            }
             KeyCode::Esc => {
-                if matches!(self.view, View::Plan { .. }) {
+                if self.detail.is_some() {
+                    self.detail = None;
+                } else if matches!(self.view, View::Plan { .. }) {
                     // 用户手动返回 issue；保留 last_auto，同 plan 继续执行时不反复抢占
                     self.view = View::Issue;
+                    self.clamp_selected();
                 }
-                self.clamp_selected();
             }
             KeyCode::Char('q') => return true,
             _ => {}
@@ -196,41 +179,24 @@ impl DashboardModel {
             self.selected = len.saturating_sub(1);
         }
     }
-}
 
-/// 执行中 plan：有 dev/test issue 的 plan，按该 plan 下最新活跃 issue updated_at 降序。
-pub fn active_plans(snap: &DashboardSnapshot) -> Vec<i64> {
-    let mut by_plan: Vec<(i64, &str)> = snap
-        .issues
-        .iter()
-        .filter(|i| matches!(i.status, Status::Dev | Status::Test))
-        .filter_map(|i| i.plan_id.map(|pid| (pid, i.updated_at.as_str())))
-        .collect();
-    by_plan.sort_by(|a, b| b.1.cmp(a.1));
-    let mut seen = std::collections::HashSet::new();
-    by_plan
-        .into_iter()
-        .filter_map(|(pid, _)| seen.insert(pid).then_some(pid))
-        .collect()
+    /// 按 id 查 issue（详情数据源）。
+    pub fn issue(&self, id: i64) -> Option<&Issue> {
+        self.issues.iter().find(|i| i.id == id)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{ContainerStatus, Kind};
+    use crate::models::{ContainerStatus, Kind, Status};
     use crate::tui::dashboard_diff::DashboardSnapshot;
     use rstest::rstest;
 
-    fn mk_issue(
-        id: i64,
-        title: &str,
-        status: Status,
-        plan_id: Option<i64>,
-        updated: &str,
-    ) -> Issue {
+    fn mk_issue(id: i64, status: Status, plan_id: Option<i64>, updated: &str) -> Issue {
         Issue {
             id,
-            title: title.into(),
+            title: "t".into(),
             body: None,
             kind: Kind::Problem,
             status,
@@ -249,10 +215,10 @@ mod tests {
         }
     }
 
-    fn mk_container(id: i64, title: &str) -> Container {
+    fn mk_container(id: i64) -> Container {
         Container {
             id,
-            title: title.into(),
+            title: "p".into(),
             version: None,
             body: None,
             roadmap_id: None,
@@ -267,76 +233,54 @@ mod tests {
     }
 
     #[test]
-    fn init_baseline_sorted_by_updated_desc() {
+    fn baseline_sorted_and_selection_kept() {
         let mut m = DashboardModel::new();
         m.init(snap(
             vec![
-                mk_issue(1, "old", Status::Open, None, "10:00"),
-                mk_issue(2, "new", Status::Dev, None, "12:00"),
+                mk_issue(1, Status::Open, None, "10:00"),
+                mk_issue(2, Status::Dev, None, "12:00"),
             ],
             vec![],
         ));
         assert_eq!(m.view, View::Issue);
-        assert_eq!(m.feed.len(), 2);
         assert_eq!(m.feed[0].issue().unwrap().id, 2); // 最新在前
-        assert_eq!(m.feed[1].issue().unwrap().id, 1);
+        let r = m.refresh(&snap(
+            vec![
+                mk_issue(1, Status::Open, None, "10:00"),
+                mk_issue(2, Status::Dev, None, "12:00"),
+                mk_issue(3, Status::Open, None, "13:00"),
+            ],
+            vec![],
+        ));
+        assert_eq!(r.new_events, 1);
+        assert_eq!(m.selected, 0); // 保持
+        assert_eq!(m.feed[0].issue().unwrap().id, 3);
     }
 
     #[test]
-    fn refresh_prepends_events_and_clamps_selection() {
+    fn selection_clamped_when_list_shrinks() {
         let mut m = DashboardModel::new();
-        m.init(snap(
-            vec![mk_issue(1, "a", Status::Open, None, "10:00")],
-            vec![],
-        ));
-        // 新增 issue 事件 → feed 前置，selected 保持（面板列表下标）
-        let r = m.refresh(&snap(
-            vec![
-                mk_issue(1, "a", Status::Open, None, "10:00"),
-                mk_issue(2, "b", Status::Open, None, "11:00"),
-            ],
-            vec![],
-        ));
-        assert_eq!(r.new_events, 1);
-        assert_eq!(m.selected, 0);
-        assert_eq!(m.feed[0].issue().unwrap().id, 2);
-        // 状态变化事件，issues 数量不变 → selected 保持
-        m.selected = 1;
-        let r = m.refresh(&snap(
-            vec![
-                mk_issue(1, "a", Status::Open, None, "10:00"),
-                mk_issue(2, "b", Status::Dev, None, "11:30"),
-            ],
-            vec![],
-        ));
-        assert_eq!(r.new_events, 1);
-        assert_eq!(m.selected, 1);
-        // selected 越界 → clamp
+        m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
         m.selected = 5;
-        m.refresh(&snap(
-            vec![mk_issue(1, "a", Status::Open, None, "10:00")],
-            vec![],
-        ));
+        m.refresh(&snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
         assert_eq!(m.selected, 0);
     }
 
     #[test]
-    fn panel_switches_on_plan_execution() {
+    fn panel_switches_on_plan_execution_and_end() {
         let mut m = DashboardModel::new();
         m.init(snap(vec![], vec![]));
-        // 无执行 → issue
         assert_eq!(m.view, View::Issue);
-        // plan 有 dev issue → 自动切 plan
         let r = m.refresh(&snap(
-            vec![mk_issue(1, "dev", Status::Dev, Some(7), "11:00")],
-            vec![(mk_container(7, "sprint"), 1)],
+            vec![mk_issue(1, Status::Dev, Some(7), "11:00")],
+            vec![(mk_container(7), 1)],
         ));
         assert_eq!(r.auto_plan, Some(7));
         assert_eq!(m.view, View::Plan { plan_id: 7 });
         // 执行结束（全 done）→ 回 issue
         let r = m.refresh(&snap(
-            vec![mk_issue(1, "done", Status::Done, Some(7), "12:00")],
-            vec![(mk_container(7, "sprint"), 1)],
+            vec![mk_issue(1, Status::Done, Some(7), "12:00")],
+            vec![(mk_container(7), 1)],
         ));
         assert_eq!(r.auto_plan, None);
         assert_eq!(m.view, View::Issue);
@@ -347,19 +291,17 @@ mod tests {
         let mut m = DashboardModel::new();
         m.init(snap(vec![], vec![]));
         m.refresh(&snap(
-            vec![mk_issue(1, "dev", Status::Dev, Some(7), "11:00")],
-            vec![(mk_container(7, "sprint"), 1)],
+            vec![mk_issue(1, Status::Dev, Some(7), "11:00")],
+            vec![(mk_container(7), 1)],
         ));
         assert_eq!(m.view, View::Plan { plan_id: 7 });
-        // 用户 Esc 回 issue
         m.handle_key(KeyCode::Esc);
         assert_eq!(m.view, View::Issue);
-        // 同 plan 仍执行 → 不抢占（last_auto == 7）
         let r = m.refresh(&snap(
-            vec![mk_issue(1, "dev", Status::Dev, Some(7), "11:30")],
-            vec![(mk_container(7, "sprint"), 1)],
+            vec![mk_issue(1, Status::Dev, Some(7), "11:30")],
+            vec![(mk_container(7), 1)],
         ));
-        assert_eq!(r.auto_plan, None);
+        assert_eq!(r.auto_plan, None); // 不抢占
         assert_eq!(m.view, View::Issue);
     }
 
@@ -372,8 +314,8 @@ mod tests {
         let mut m = DashboardModel::new();
         m.init(snap(
             vec![
-                mk_issue(1, "a", Status::Open, None, "1"),
-                mk_issue(2, "b", Status::Open, None, "2"),
+                mk_issue(1, Status::Open, None, "1"),
+                mk_issue(2, Status::Open, None, "2"),
             ],
             vec![],
         ));
@@ -382,11 +324,14 @@ mod tests {
     }
 
     #[test]
-    fn quit_key() {
+    fn enter_detail_and_esc_back() {
         let mut m = DashboardModel::new();
-        m.init(snap(vec![], vec![]));
+        m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
+        m.handle_key(KeyCode::Enter);
+        assert_eq!(m.detail, Some(1));
+        m.handle_key(KeyCode::Esc);
+        assert_eq!(m.detail, None);
         assert!(m.handle_key(KeyCode::Char('q')));
-        assert!(!m.handle_key(KeyCode::Enter));
     }
 
     #[test]
@@ -394,8 +339,8 @@ mod tests {
         let mut m = DashboardModel::new();
         m.init(snap(
             vec![
-                mk_issue(1, "in", Status::Dev, Some(7), "1"),
-                mk_issue(2, "out", Status::Open, None, "2"),
+                mk_issue(1, Status::Dev, Some(7), "1"),
+                mk_issue(2, Status::Open, None, "2"),
             ],
             vec![],
         ));

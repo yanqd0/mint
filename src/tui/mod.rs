@@ -19,6 +19,7 @@ pub mod dashboard_data;
 pub mod dashboard_diff;
 pub mod dashboard_draw;
 pub mod dashboard_run;
+pub mod dashboard_types;
 pub mod draw;
 pub mod model;
 

@@ -1492,3 +1492,53 @@ fn st_search_default_tsv() {
     );
     assert!(text.contains("searchable token"), "缺数据: {text}");
 }
+
+// ── mint tui（dashboard 大屏）────────────────────────────────────
+
+/// mint tui 非 TTY 输出 issue 面板（进度条 + 状态点 + 列表）。
+#[test]
+fn st_tui_dashboard_output() {
+    let (_dir, db) = empty_db();
+    add_issue(&db, "dashboard issue");
+    let out = mint(&db)
+        .args(["tui"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("mint · issues"), "标题: {text}");
+    assert!(text.contains("open rate"), "进度: {text}");
+    assert!(text.contains("dashboard issue"), "issue: {text}");
+    assert!(text.contains("●"), "状态点: {text}");
+}
+
+/// mint tui 空库优雅输出。
+#[test]
+fn st_tui_dashboard_empty_db() {
+    let (_dir, db) = empty_db();
+    let out = mint(&db)
+        .args(["tui"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("mint · issues"), "标题: {text}");
+}
+
+/// help 展示 tui 子命令。
+#[test]
+fn st_tui_in_help() {
+    let (_dir, db) = empty_db();
+    let out = mint(&db)
+        .arg("--help")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert!(String::from_utf8_lossy(&out).contains("tui"));
+}
