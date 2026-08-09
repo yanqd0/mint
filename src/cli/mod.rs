@@ -8,9 +8,11 @@ use rusqlite::Connection;
 use crate::container::{self, ContainerKind};
 use crate::error::Error;
 use crate::output;
+use list_common::{paged_json, paginate, print_page_footer};
 
 pub mod delete;
 pub mod issue;
+mod list_common;
 pub mod plan;
 pub mod project;
 pub mod roadmap;
@@ -423,7 +425,7 @@ pub(crate) fn cmd_container_list(
     a: &ListContainersArgs,
 ) -> Result<(), Error> {
     let items = container::list(conn, kind, a.all)?;
-    let (items, total, page) = issue::list::paginate(items, a.page, a.page_size);
+    let (items, total, page) = paginate(items, a.page, a.page_size);
     if a.json {
         let arr: Vec<serde_json::Value> = items
             .iter()
@@ -436,13 +438,10 @@ pub(crate) fn cmd_container_list(
                 })
             })
             .collect();
-        println!(
-            "{}",
-            issue::list::paged_json(&arr, page, a.page_size, total)
-        );
+        println!("{}", paged_json(&arr, page, a.page_size, total));
     } else {
         print!("{}", output::format_container_list(&items));
-        issue::list::print_page_footer(page, a.page_size, total);
+        print_page_footer(page, a.page_size, total);
     }
     Ok(())
 }
@@ -505,7 +504,7 @@ pub(crate) fn kind_noun(kind: ContainerKind) -> &'static str {
 /// label list：列出所有 label（含关联 issue 数）。
 fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
     let labels = crate::label::list(conn)?;
-    let (labels, total, page) = issue::list::paginate(labels, l.page, l.page_size);
+    let (labels, total, page) = paginate(labels, l.page, l.page_size);
     if l.json {
         let arr: Vec<serde_json::Value> = labels
             .iter()
@@ -517,16 +516,13 @@ fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
                 })
             })
             .collect();
-        println!(
-            "{}",
-            issue::list::paged_json(&arr, page, l.page_size, total)
-        );
+        println!("{}", paged_json(&arr, page, l.page_size, total));
     } else {
         for (t, count) in &labels {
             let desc = t.description.as_deref().unwrap_or("");
             println!("{:<16} {:>5} issues  {}", t.name, count, desc);
         }
-        issue::list::print_page_footer(page, l.page_size, total);
+        print_page_footer(page, l.page_size, total);
     }
     Ok(())
 }

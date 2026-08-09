@@ -2,6 +2,7 @@
 
 use rusqlite::Connection;
 
+use crate::cli::list_common::{paged_json, paginate, print_page_footer};
 use crate::db;
 use crate::error::Error;
 use crate::label;
@@ -176,47 +177,6 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
         print_page_footer(page, s.page_size, total);
     }
     Ok(())
-}
-
-/// Rust-side pagination：fetch all → slice。
-/// 返回 (items, total, page, page_size)。
-pub(crate) fn paginate<T>(
-    items: Vec<T>,
-    page: Option<u32>,
-    page_size: u32,
-) -> (Vec<T>, usize, u32) {
-    let p = page.unwrap_or(1).max(1);
-    let total = items.len();
-    let offset = ((p - 1) * page_size) as usize;
-    if offset >= total {
-        return (Vec::new(), total, p);
-    }
-    let end = (offset + page_size as usize).min(total);
-    let page_items = items.into_iter().skip(offset).take(end - offset).collect();
-    (page_items, total, p)
-}
-
-/// 构建分页信封 JSON 对象。
-pub(crate) fn paged_json(
-    items: &[serde_json::Value],
-    page: u32,
-    page_size: u32,
-    total: usize,
-) -> serde_json::Value {
-    let pages = total.div_ceil(page_size as usize).max(1);
-    serde_json::json!({
-        "items": items,
-        "page": page,
-        "page_size": page_size,
-        "total": total,
-        "pages": pages,
-    })
-}
-
-/// 打印分页脚注（stderr，人体输出）。
-pub(crate) fn print_page_footer(page: u32, page_size: u32, total: usize) {
-    let pages = total.div_ceil(page_size as usize).max(1);
-    eprintln!("--- Page {page}/{pages} ({page_size} per page, {total} total) ---");
 }
 
 /// JSON 序列化 issue（list 视图：永远不包含 body）。
