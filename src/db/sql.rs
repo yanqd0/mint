@@ -7,6 +7,7 @@ pub const MIGRATION_001: &str = include_str!("migrations/001_init.sql");
 pub const MIGRATION_002: &str = include_str!("migrations/002_issue_hit_count.sql");
 pub const MIGRATION_003: &str = include_str!("migrations/003_fts.sql");
 pub const MIGRATION_004: &str = include_str!("migrations/004_priority_deps.sql");
+pub const MIGRATION_005: &str = include_str!("migrations/005_rename_roadmap_milestone.sql");
 
 pub const ISSUE_INSERT: &str = include_str!("queries/issue_insert.sql");
 pub const ISSUE_LIST: &str = include_str!("queries/issue_list.sql");
@@ -43,17 +44,17 @@ pub const LABEL_LIST: &str = include_str!("queries/label_list.sql");
 pub const LABEL_NAMES_FOR_ISSUE: &str = include_str!("queries/label_names_for_issue.sql");
 pub const LABEL_DELETE: &str = include_str!("queries/label_delete.sql");
 
-pub const ROADMAP_INSERT: &str = include_str!("queries/roadmap_insert.sql");
-pub const ROADMAP_LIST: &str = include_str!("queries/roadmap_list.sql");
-pub const ROADMAP_SELECT: &str = include_str!("queries/roadmap_select.sql");
-pub const ROADMAP_ATTACH: &str = include_str!("queries/roadmap_attach.sql");
-pub const ROADMAP_DETACH: &str = include_str!("queries/roadmap_detach.sql");
-pub const ROADMAP_DIRECT_DELETE_BY_ISSUE: &str =
-    include_str!("queries/roadmap_direct_delete_by_issue.sql");
-pub const ROADMAP_ISSUES_FOR: &str = include_str!("queries/roadmap_issues_for.sql");
-pub const ROADMAP_UPDATE_STATUS: &str = include_str!("queries/roadmap_update_status.sql");
-pub const ROADMAP_UPDATE: &str = include_str!("queries/roadmap_update.sql");
-pub const ROADMAP_DELETE: &str = include_str!("queries/roadmap_delete.sql");
+pub const MILESTONE_INSERT: &str = include_str!("queries/milestone_insert.sql");
+pub const MILESTONE_LIST: &str = include_str!("queries/milestone_list.sql");
+pub const MILESTONE_SELECT: &str = include_str!("queries/milestone_select.sql");
+pub const MILESTONE_ATTACH: &str = include_str!("queries/milestone_attach.sql");
+pub const MILESTONE_DETACH: &str = include_str!("queries/milestone_detach.sql");
+pub const MILESTONE_DIRECT_DELETE_BY_ISSUE: &str =
+    include_str!("queries/milestone_direct_delete_by_issue.sql");
+pub const MILESTONE_ISSUES_FOR: &str = include_str!("queries/milestone_issues_for.sql");
+pub const MILESTONE_UPDATE_STATUS: &str = include_str!("queries/milestone_update_status.sql");
+pub const MILESTONE_UPDATE: &str = include_str!("queries/milestone_update.sql");
+pub const MILESTONE_DELETE: &str = include_str!("queries/milestone_delete.sql");
 
 pub const PLAN_INSERT: &str = include_str!("queries/plan_insert.sql");
 pub const PLAN_LIST: &str = include_str!("queries/plan_list.sql");
@@ -64,9 +65,9 @@ pub const PLAN_UPDATE: &str = include_str!("queries/plan_update.sql");
 pub const PLAN_DELETE: &str = include_str!("queries/plan_delete.sql");
 
 pub const PLAN_ISSUE_STATUSES: &str = include_str!("queries/plan_issue_statuses.sql");
-pub const ROADMAP_PLAN_STATUSES: &str = include_str!("queries/roadmap_plan_statuses.sql");
-pub const ROADMAP_DIRECT_ISSUE_STATUSES: &str =
-    include_str!("queries/roadmap_direct_issue_statuses.sql");
+pub const MILESTONE_PLAN_STATUSES: &str = include_str!("queries/milestone_plan_statuses.sql");
+pub const MILESTONE_DIRECT_ISSUE_STATUSES: &str =
+    include_str!("queries/milestone_direct_issue_statuses.sql");
 pub const PLAN_IDS_FOR_ISSUE: &str = include_str!("queries/plan_ids_for_issue.sql");
-pub const ROADMAP_IDS_FOR_PLAN: &str = include_str!("queries/roadmap_ids_for_plan.sql");
-pub const ROADMAP_IDS_FOR_ISSUE: &str = include_str!("queries/roadmap_ids_for_issue.sql");
+pub const MILESTONE_IDS_FOR_PLAN: &str = include_str!("queries/milestone_ids_for_plan.sql");
+pub const MILESTONE_IDS_FOR_ISSUE: &str = include_str!("queries/milestone_ids_for_issue.sql");

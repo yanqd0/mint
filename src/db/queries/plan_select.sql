@@ -6,7 +6,7 @@ SELECT
     p.title,
     NULL AS version,
     p.body,
-    p.roadmap_id,
+    p.milestone_id,
     p.status,
     datetime(p.created_at, 'localtime') AS created_at,
     datetime(p.updated_at, 'localtime') AS updated_at,

@@ -26,9 +26,9 @@ pub fn dispatch(conn: &Connection, cmd: &super::DeleteCmd) -> Result<(), Error> 
             container::delete_plan(conn, a.id)?;
             print_deleted("plan", a.id, a.json)
         }
-        super::DeleteCmd::Roadmap(a) => {
-            container::delete_roadmap(conn, a.id)?;
-            print_deleted("roadmap", a.id, a.json)
+        super::DeleteCmd::Milestone(a) => {
+            container::delete_milestone(conn, a.id)?;
+            print_deleted("milestone", a.id, a.json)
         }
         super::DeleteCmd::Label(a) => {
             label::delete(conn, &a.name)?;

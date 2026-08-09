@@ -10,7 +10,7 @@ use crate::container::{self, ContainerKind};
 use crate::error::Error;
 use crate::models::Container;
 
-/// Plan create：可带 --roadmap。
+/// Plan create：可带 --milestone。
 pub fn cmd_plan_create(conn: &Connection, a: &PlanCreateArgs) -> Result<(), Error> {
     if a.title.trim().is_empty() {
         return Err(Error::Other("title must not be empty".to_string()));
@@ -21,13 +21,13 @@ pub fn cmd_plan_create(conn: &Connection, a: &PlanCreateArgs) -> Result<(), Erro
         a.title.trim(),
         None,
         a.body.as_deref(),
-        a.roadmap,
+        a.milestone,
     )?;
     if a.json {
         println!(
             "{}",
             serde_json::to_string(&serde_json::json!({
-                "id": id, "title": a.title, "roadmap_id": a.roadmap, "status": "open",
+                "id": id, "title": a.title, "milestone_id": a.milestone, "status": "open",
             }))?
         );
     } else {
@@ -85,7 +85,7 @@ pub fn dispatch(conn: &Connection, cmd: &super::PlanCmd) -> Result<(), Error> {
     }
 }
 
-/// Plan/Roadmap get：读取单字段，裸值输出。
+/// Plan/Milestone get：读取单字段，裸值输出。
 pub fn cmd_container_get(
     conn: &Connection,
     kind: ContainerKind,
@@ -114,7 +114,7 @@ fn container_field(c: &Container, field: &str) -> Result<String, Error> {
         "body" => Ok(c.body.clone().unwrap_or_default()),
         "status" => Ok(c.status.to_string()),
         "version" => Ok(c.version.clone().unwrap_or_default()),
-        "roadmap_id" => Ok(c.roadmap_id.map(|v| v.to_string()).unwrap_or_default()),
+        "milestone_id" => Ok(c.milestone_id.map(|v| v.to_string()).unwrap_or_default()),
         "created_at" => Ok(c.created_at.clone()),
         "updated_at" => Ok(c.updated_at.clone()),
         other => Err(Error::Other(format!("unknown field: {other}"))),

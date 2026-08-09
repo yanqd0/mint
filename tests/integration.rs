@@ -195,7 +195,7 @@ fn migration_is_idempotent() {
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 4);
+    assert_eq!(version, 5);
 }
 
 /// link 数据流：create → links_for → remove → 表空。

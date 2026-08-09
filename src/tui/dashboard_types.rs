@@ -90,7 +90,7 @@ mod tests {
             title: "p".into(),
             version: None,
             body: None,
-            roadmap_id: None,
+            milestone_id: None,
             status: ContainerStatus::Open,
             created_at: "t".into(),
             updated_at: "t".into(),

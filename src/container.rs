@@ -1,7 +1,7 @@
-//! 容器（roadmap/plan）共享模块：聚合 issue/plan。
+//! 容器（milestone/plan）共享模块：聚合 issue/plan。
 //!
-//! 层级：roadmap → plan（roadmap_id）→ issue（plan_id）；roadmap 可直接挂无 plan 的 issue
-//! （roadmap_direct_issues，二选一约束）。容器状态 5 态派生（写后同步，CLI 只读）。
+//! 层级：milestone → plan（milestone_id）→ issue（plan_id）；milestone 可直接挂无 plan 的 issue
+//! （milestone_direct_issues，二选一约束）。容器状态 5 态派生（写后同步，CLI 只读）。
 
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -9,31 +9,31 @@ use crate::db;
 use crate::error::Error;
 use crate::models::{Container, ContainerStatus, IssueSummary, Status};
 
-/// 容器类型：roadmap / plan。
+/// 容器类型：milestone / plan。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContainerKind {
-    Roadmap,
+    Milestone,
     Plan,
 }
 
 impl ContainerKind {
     fn insert_sql(self) -> &'static str {
         match self {
-            ContainerKind::Roadmap => db::ROADMAP_INSERT,
+            ContainerKind::Milestone => db::MILESTONE_INSERT,
             ContainerKind::Plan => db::PLAN_INSERT,
         }
     }
 
     fn list_sql(self) -> &'static str {
         match self {
-            ContainerKind::Roadmap => db::ROADMAP_LIST,
+            ContainerKind::Milestone => db::MILESTONE_LIST,
             ContainerKind::Plan => db::PLAN_LIST,
         }
     }
 
     fn select_sql(self) -> &'static str {
         match self {
-            ContainerKind::Roadmap => db::ROADMAP_SELECT,
+            ContainerKind::Milestone => db::MILESTONE_SELECT,
             ContainerKind::Plan => db::PLAN_SELECT,
         }
     }
@@ -109,25 +109,25 @@ fn derive_status(statuses: &[DeriveState]) -> ContainerStatus {
     ContainerStatus::Open
 }
 
-/// 新建容器，返回 id。roadmap 必填 version；plan 可带 roadmap_id。
+/// 新建容器，返回 id。milestone 必填 version；plan 可带 milestone_id。
 pub fn create(
     conn: &Connection,
     kind: ContainerKind,
     title: &str,
     version: Option<&str>,
     body: Option<&str>,
-    roadmap_id: Option<i64>,
+    milestone_id: Option<i64>,
 ) -> Result<i64, Error> {
     match kind {
-        ContainerKind::Roadmap => {
+        ContainerKind::Milestone => {
             let v = version.filter(|s| !s.trim().is_empty());
             if v.is_none() {
-                return Err(Error::Other("roadmap requires --version".to_string()));
+                return Err(Error::Other("milestone requires --version".to_string()));
             }
             conn.execute(kind.insert_sql(), params![title, v, body])?;
         }
         ContainerKind::Plan => {
-            conn.execute(kind.insert_sql(), params![title, body, roadmap_id])?;
+            conn.execute(kind.insert_sql(), params![title, body, milestone_id])?;
         }
     }
     Ok(conn.last_insert_rowid())
@@ -147,7 +147,7 @@ pub fn list(
             title: r.get(1)?,
             version: r.get(2)?,
             body: r.get(3)?,
-            roadmap_id: r.get(4)?,
+            milestone_id: r.get(4)?,
             status: r.get(5)?,
             created_at: r.get(6)?,
             updated_at: r.get(7)?,
@@ -166,7 +166,7 @@ pub fn get(conn: &Connection, kind: ContainerKind, id: i64) -> Result<Option<Con
             title: r.get(1)?,
             version: r.get(2)?,
             body: r.get(3)?,
-            roadmap_id: r.get(4)?,
+            milestone_id: r.get(4)?,
             status: r.get(5)?,
             created_at: r.get(6)?,
             updated_at: r.get(7)?,
@@ -191,18 +191,18 @@ pub fn update_plan(
     Ok(())
 }
 
-/// 更新 roadmap 的 title/version/body（COALESCE 保留未提供字段）。
-/// 不涉及派生状态同步（title/version/body 变更不影响 roadmap 状态）。
-pub fn update_roadmap(
+/// 更新 milestone 的 title/version/body（COALESCE 保留未提供字段）。
+/// 不涉及派生状态同步（title/version/body 变更不影响 milestone 状态）。
+pub fn update_milestone(
     conn: &Connection,
     id: i64,
     title: Option<&str>,
     version: Option<&str>,
     body: Option<&str>,
 ) -> Result<(), Error> {
-    let affected = conn.execute(db::ROADMAP_UPDATE, params![id, title, version, body])?;
+    let affected = conn.execute(db::MILESTONE_UPDATE, params![id, title, version, body])?;
     if affected == 0 {
-        return Err(Error::Other(format!("roadmap #{id} not found")));
+        return Err(Error::Other(format!("milestone #{id} not found")));
     }
     Ok(())
 }
@@ -243,24 +243,24 @@ pub(crate) fn delete_txn(
 pub fn delete_plan(conn: &Connection, id: i64) -> Result<(), Error> {
     let c = get(conn, ContainerKind::Plan, id)?
         .ok_or_else(|| Error::Other(format!("plan #{id} not found")))?;
-    let roadmap_id = c.roadmap_id;
+    let milestone_id = c.milestone_id;
     delete_txn(conn, db::PLAN_DELETE, id, |conn| {
-        if let Some(rid) = roadmap_id {
-            sync_roadmap(conn, rid)?;
+        if let Some(rid) = milestone_id {
+            sync_milestone(conn, rid)?;
         }
         Ok(())
     })
 }
 
-/// 删除 roadmap：关联操作（清直接挂载 + 解绑其下 plan 的 roadmap_id + 删 roadmap）在同一事务。
-pub fn delete_roadmap(conn: &Connection, id: i64) -> Result<(), Error> {
-    if get(conn, ContainerKind::Roadmap, id)?.is_none() {
-        return Err(Error::Other(format!("roadmap #{id} not found")));
+/// 删除 milestone：关联操作（清直接挂载 + 解绑其下 plan 的 milestone_id + 删 milestone）在同一事务。
+pub fn delete_milestone(conn: &Connection, id: i64) -> Result<(), Error> {
+    if get(conn, ContainerKind::Milestone, id)?.is_none() {
+        return Err(Error::Other(format!("milestone #{id} not found")));
     }
-    delete_txn(conn, db::ROADMAP_DELETE, id, |_| Ok(()))
+    delete_txn(conn, db::MILESTONE_DELETE, id, |_| Ok(()))
 }
 
-/// 物理删除 issue：关联操作（清 label/links/roadmap 挂载 + 删行）与所属容器派生状态同步在同一事务。
+/// 物理删除 issue：关联操作（清 label/links/milestone 挂载 + 删行）与所属容器派生状态同步在同一事务。
 /// 所属容器在删除前记录（删除后无法查询）。
 pub fn delete_issue(conn: &Connection, id: i64) -> Result<(), Error> {
     let exists: Option<i64> = conn
@@ -275,8 +275,8 @@ pub fn delete_issue(conn: &Connection, id: i64) -> Result<(), Error> {
         .query_map(params![id], |r| r.get(0))?
         .collect::<Result<_, _>>()
         .map_err(Error::from)?;
-    let roadmap_ids: Vec<i64> = conn
-        .prepare(db::ROADMAP_IDS_FOR_ISSUE)?
+    let milestone_ids: Vec<i64> = conn
+        .prepare(db::MILESTONE_IDS_FOR_ISSUE)?
         .query_map(params![id], |r| r.get(0))?
         .collect::<Result<_, _>>()
         .map_err(Error::from)?;
@@ -284,8 +284,8 @@ pub fn delete_issue(conn: &Connection, id: i64) -> Result<(), Error> {
         for pid in &plan_ids {
             sync_plan(conn, *pid)?;
         }
-        for rid in &roadmap_ids {
-            sync_roadmap(conn, *rid)?;
+        for rid in &milestone_ids {
+            sync_milestone(conn, *rid)?;
         }
         Ok(())
     })
@@ -298,7 +298,7 @@ pub fn issues_for(
     id: i64,
 ) -> Result<Vec<IssueSummary>, Error> {
     let sql = match kind {
-        ContainerKind::Roadmap => db::ROADMAP_ISSUES_FOR,
+        ContainerKind::Milestone => db::MILESTONE_ISSUES_FOR,
         ContainerKind::Plan => db::PLAN_ISSUES_FOR,
     };
     let mut stmt = conn.prepare(sql)?;
@@ -314,10 +314,10 @@ pub fn issues_for(
     rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
 }
 
-/// roadmap 直接挂 issue（仅接受无 plan 的 issue）。幂等。
-pub fn link_direct(conn: &Connection, roadmap_id: i64, issue_id: i64) -> Result<(), Error> {
-    if get(conn, ContainerKind::Roadmap, roadmap_id)?.is_none() {
-        return Err(Error::Other(format!("roadmap #{roadmap_id} not found")));
+/// milestone 直接挂 issue（仅接受无 plan 的 issue）。幂等。
+pub fn link_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Result<(), Error> {
+    if get(conn, ContainerKind::Milestone, milestone_id)?.is_none() {
+        return Err(Error::Other(format!("milestone #{milestone_id} not found")));
     }
     let plan_id: Option<Option<i64>> = conn
         .query_row(db::ISSUE_SELECT_PLAN_ID, params![issue_id], |r| r.get(0))
@@ -332,14 +332,14 @@ pub fn link_direct(conn: &Connection, roadmap_id: i64, issue_id: i64) -> Result<
         }
         Some(None) => {}
     }
-    conn.execute(db::ROADMAP_ATTACH, params![roadmap_id, issue_id])?;
+    conn.execute(db::MILESTONE_ATTACH, params![milestone_id, issue_id])?;
     sync_container_status(conn, issue_id)?;
     Ok(())
 }
 
-/// 解除 roadmap 直接挂的 issue。无行静默 no-op。
-pub fn unlink_direct(conn: &Connection, roadmap_id: i64, issue_id: i64) -> Result<(), Error> {
-    conn.execute(db::ROADMAP_DETACH, params![roadmap_id, issue_id])?;
+/// 解除 milestone 直接挂的 issue。无行静默 no-op。
+pub fn unlink_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Result<(), Error> {
+    conn.execute(db::MILESTONE_DETACH, params![milestone_id, issue_id])?;
     sync_container_status(conn, issue_id)?;
     Ok(())
 }
@@ -356,8 +356,8 @@ pub fn set_issue_plan(conn: &Connection, issue_id: i64, plan_id: i64) -> Result<
     if exists.is_none() {
         return Err(Error::Other(format!("issue #{issue_id} not found")));
     }
-    // 若该 issue 已直接挂 roadmap，需先解除（二选一）
-    conn.execute(db::ROADMAP_DIRECT_DELETE_BY_ISSUE, params![issue_id])?;
+    // 若该 issue 已直接挂 milestone，需先解除（二选一）
+    conn.execute(db::MILESTONE_DIRECT_DELETE_BY_ISSUE, params![issue_id])?;
     conn.execute(db::ISSUE_SET_PLAN, params![plan_id, issue_id])?;
     sync_container_status(conn, issue_id)?;
     Ok(())
@@ -370,7 +370,7 @@ pub fn unset_issue_plan(conn: &Connection, issue_id: i64) -> Result<(), Error> {
     Ok(())
 }
 
-/// 写后级联同步：某 issue 状态/归属变化后，重算其所属 plan 与 roadmap 的状态。
+/// 写后级联同步：某 issue 状态/归属变化后，重算其所属 plan 与 milestone 的状态。
 /// 事务由调用方保证（transition 等写路径在事务内调用）。
 pub fn sync_container_status(conn: &Connection, issue_id: i64) -> Result<(), Error> {
     // plan 同步
@@ -382,45 +382,45 @@ pub fn sync_container_status(conn: &Connection, issue_id: i64) -> Result<(), Err
     for pid in plan_ids {
         sync_plan(conn, pid)?;
     }
-    // roadmap 直接挂的同步
+    // milestone 直接挂的同步
     let r_ids: Vec<i64> = conn
-        .prepare(db::ROADMAP_IDS_FOR_ISSUE)?
+        .prepare(db::MILESTONE_IDS_FOR_ISSUE)?
         .query_map(params![issue_id], |r| r.get(0))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(Error::from)?;
     for rid in r_ids {
-        sync_roadmap(conn, rid)?;
+        sync_milestone(conn, rid)?;
     }
     Ok(())
 }
 
-/// 重算某 plan 状态并写回；随后同步其所属 roadmap。
+/// 重算某 plan 状态并写回；随后同步其所属 milestone。
 fn sync_plan(conn: &Connection, plan_id: i64) -> Result<(), Error> {
     let statuses = issue_statuses_from(conn, db::PLAN_ISSUE_STATUSES, plan_id)?;
     let st = derive_status(&statuses);
     conn.execute(db::PLAN_UPDATE_STATUS, params![st, plan_id])?;
-    // plan 变更 → 检查 roadmap
-    let roadmap_ids: Vec<i64> = conn
-        .prepare(db::ROADMAP_IDS_FOR_PLAN)?
+    // plan 变更 → 检查 milestone
+    let milestone_ids: Vec<i64> = conn
+        .prepare(db::MILESTONE_IDS_FOR_PLAN)?
         .query_map(params![plan_id], |r| r.get(0))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(Error::from)?;
-    for rid in roadmap_ids {
-        sync_roadmap(conn, rid)?;
+    for rid in milestone_ids {
+        sync_milestone(conn, rid)?;
     }
     Ok(())
 }
 
-/// 重算某 roadmap 状态（plan 状态 + 直接挂 issue 状态合并）并写回。
-fn sync_roadmap(conn: &Connection, roadmap_id: i64) -> Result<(), Error> {
-    let mut statuses = container_statuses_from(conn, db::ROADMAP_PLAN_STATUSES, roadmap_id)?;
+/// 重算某 milestone 状态（plan 状态 + 直接挂 issue 状态合并）并写回。
+fn sync_milestone(conn: &Connection, milestone_id: i64) -> Result<(), Error> {
+    let mut statuses = container_statuses_from(conn, db::MILESTONE_PLAN_STATUSES, milestone_id)?;
     statuses.extend(issue_statuses_from(
         conn,
-        db::ROADMAP_DIRECT_ISSUE_STATUSES,
-        roadmap_id,
+        db::MILESTONE_DIRECT_ISSUE_STATUSES,
+        milestone_id,
     )?);
     let st = derive_status(&statuses);
-    conn.execute(db::ROADMAP_UPDATE_STATUS, params![st, roadmap_id])?;
+    conn.execute(db::MILESTONE_UPDATE_STATUS, params![st, milestone_id])?;
     Ok(())
 }
 
@@ -495,15 +495,15 @@ mod tests {
         assert_eq!(derive_status(states), expected);
     }
 
-    /// roadmap create 必填 version。
+    /// milestone create 必填 version。
     #[test]
     fn create_requires_version() {
         let (conn, _) = setup();
-        let err = create(&conn, ContainerKind::Roadmap, "r", None, None, None).unwrap_err();
+        let err = create(&conn, ContainerKind::Milestone, "r", None, None, None).unwrap_err();
         assert!(err.to_string().contains("--version"));
         let id = create(
             &conn,
-            ContainerKind::Roadmap,
+            ContainerKind::Milestone,
             "r",
             Some("0.1.0"),
             None,
@@ -513,13 +513,13 @@ mod tests {
         assert!(id > 0);
     }
 
-    /// roadmap 直接挂 issue（无 plan）+ 派生状态同步。
+    /// milestone 直接挂 issue（无 plan）+ 派生状态同步。
     #[test]
-    fn roadmap_direct_issue_derives_status() {
+    fn milestone_direct_issue_derives_status() {
         let (conn, iid) = setup();
         let rid = create(
             &conn,
-            ContainerKind::Roadmap,
+            ContainerKind::Milestone,
             "r",
             Some("0.1.0"),
             None,
@@ -528,7 +528,7 @@ mod tests {
         .unwrap();
         link_direct(&conn, rid, iid).unwrap();
         assert_eq!(
-            get(&conn, ContainerKind::Roadmap, rid)
+            get(&conn, ContainerKind::Milestone, rid)
                 .unwrap()
                 .unwrap()
                 .status,
@@ -538,7 +538,7 @@ mod tests {
         set_status(&conn, iid, "done");
         sync_container_status(&conn, iid).unwrap();
         assert_eq!(
-            get(&conn, ContainerKind::Roadmap, rid)
+            get(&conn, ContainerKind::Milestone, rid)
                 .unwrap()
                 .unwrap()
                 .status,
@@ -546,7 +546,7 @@ mod tests {
         );
     }
 
-    /// 二选一：issue 挂 plan 后不能再直接挂 roadmap。
+    /// 二选一：issue 挂 plan 后不能再直接挂 milestone。
     #[test]
     fn plan_issue_cannot_direct_link() {
         let (conn, iid) = setup();
@@ -554,7 +554,7 @@ mod tests {
         set_issue_plan(&conn, iid, pid).unwrap();
         let rid = create(
             &conn,
-            ContainerKind::Roadmap,
+            ContainerKind::Milestone,
             "r",
             Some("0.1.0"),
             None,
@@ -565,13 +565,13 @@ mod tests {
         assert!(err.to_string().contains("already belongs to a plan"));
     }
 
-    /// plan → roadmap 级联：issue 变更同步 plan，再同步 roadmap。
+    /// plan → milestone 级联：issue 变更同步 plan，再同步 milestone。
     #[test]
-    fn issue_plan_roadmap_cascade() {
+    fn issue_plan_milestone_cascade() {
         let (conn, iid) = setup();
         let rid = create(
             &conn,
-            ContainerKind::Roadmap,
+            ContainerKind::Milestone,
             "r",
             Some("0.1.0"),
             None,
@@ -591,7 +591,7 @@ mod tests {
             ContainerStatus::Done
         );
         assert_eq!(
-            get(&conn, ContainerKind::Roadmap, rid)
+            get(&conn, ContainerKind::Milestone, rid)
                 .unwrap()
                 .unwrap()
                 .status,
@@ -617,13 +617,13 @@ mod tests {
         assert_eq!(plan_id, None);
     }
 
-    /// 删除 roadmap：直接挂 issue 解绑、其下 plan 保留（roadmap_id 置 NULL）、roadmap 消失。
+    /// 删除 milestone：直接挂 issue 解绑、其下 plan 保留（milestone_id 置 NULL）、milestone 消失。
     #[test]
-    fn delete_roadmap_detaches_plan_and_direct() {
+    fn delete_milestone_detaches_plan_and_direct() {
         let (conn, iid) = setup();
         let rid = create(
             &conn,
-            ContainerKind::Roadmap,
+            ContainerKind::Milestone,
             "r",
             Some("0.1.0"),
             None,
@@ -632,12 +632,12 @@ mod tests {
         .unwrap();
         let pid = create(&conn, ContainerKind::Plan, "p", None, None, Some(rid)).unwrap();
         link_direct(&conn, rid, iid).unwrap();
-        delete_roadmap(&conn, rid).unwrap();
-        assert!(get(&conn, ContainerKind::Roadmap, rid).unwrap().is_none());
+        delete_milestone(&conn, rid).unwrap();
+        assert!(get(&conn, ContainerKind::Milestone, rid).unwrap().is_none());
         let p = get(&conn, ContainerKind::Plan, pid).unwrap().unwrap();
-        assert_eq!(p.roadmap_id, None);
+        assert_eq!(p.milestone_id, None);
         let cnt: i64 = conn
-            .query_row("SELECT COUNT(*) FROM roadmap_direct_issues", [], |r| {
+            .query_row("SELECT COUNT(*) FROM milestone_direct_issues", [], |r| {
                 r.get(0)
             })
             .unwrap();
@@ -650,19 +650,22 @@ mod tests {
         let (conn, _) = setup();
         let err = delete_plan(&conn, 999).unwrap_err();
         assert!(err.to_string().contains("plan #999 not found"), "{err}");
-        let err = delete_roadmap(&conn, 999).unwrap_err();
-        assert!(err.to_string().contains("roadmap #999 not found"), "{err}");
+        let err = delete_milestone(&conn, 999).unwrap_err();
+        assert!(
+            err.to_string().contains("milestone #999 not found"),
+            "{err}"
+        );
         let err = delete_issue(&conn, 999).unwrap_err();
         assert!(err.to_string().contains("issue #999 not found"), "{err}");
     }
 
-    /// 删除 plan 后，其上级 roadmap 派生状态回落（plan 不再参与派生）。
+    /// 删除 plan 后，其上级 milestone 派生状态回落（plan 不再参与派生）。
     #[test]
-    fn delete_plan_syncs_roadmap_status() {
+    fn delete_plan_syncs_milestone_status() {
         let (conn, iid) = setup();
         let rid = create(
             &conn,
-            ContainerKind::Roadmap,
+            ContainerKind::Milestone,
             "r",
             Some("0.1.0"),
             None,
@@ -674,7 +677,7 @@ mod tests {
         set_status(&conn, iid, "done");
         sync_container_status(&conn, iid).unwrap();
         assert_eq!(
-            get(&conn, ContainerKind::Roadmap, rid)
+            get(&conn, ContainerKind::Milestone, rid)
                 .unwrap()
                 .unwrap()
                 .status,
@@ -682,7 +685,7 @@ mod tests {
         );
         delete_plan(&conn, pid).unwrap();
         assert_eq!(
-            get(&conn, ContainerKind::Roadmap, rid)
+            get(&conn, ContainerKind::Milestone, rid)
                 .unwrap()
                 .unwrap()
                 .status,
@@ -736,32 +739,35 @@ mod tests {
         assert!(err.to_string().contains("plan #999 not found"), "{err}");
     }
 
-    /// update_roadmap 更新 version，title/body 不变。
+    /// update_milestone 更新 version，title/body 不变。
     #[test]
-    fn update_roadmap_changes_version() {
+    fn update_milestone_changes_version() {
         let (conn, _) = setup();
         let rid = create(
             &conn,
-            ContainerKind::Roadmap,
+            ContainerKind::Milestone,
             "r",
             Some("0.1.0"),
             Some("old body"),
             None,
         )
         .unwrap();
-        update_roadmap(&conn, rid, None, Some("0.2.0"), None).unwrap();
-        let r = get(&conn, ContainerKind::Roadmap, rid).unwrap().unwrap();
+        update_milestone(&conn, rid, None, Some("0.2.0"), None).unwrap();
+        let r = get(&conn, ContainerKind::Milestone, rid).unwrap().unwrap();
         assert_eq!(r.version, Some("0.2.0".to_string()));
         assert_eq!(r.title, "r");
         assert_eq!(r.body.as_deref(), Some("old body"));
     }
 
-    /// update_roadmap 不存在的 roadmap 报 not found。
+    /// update_milestone 不存在的 milestone 报 not found。
     #[test]
-    fn update_roadmap_missing_errors() {
+    fn update_milestone_missing_errors() {
         let (conn, _) = setup();
-        let err = update_roadmap(&conn, 999, Some("x"), None, None).unwrap_err();
-        assert!(err.to_string().contains("roadmap #999 not found"), "{err}");
+        let err = update_milestone(&conn, 999, Some("x"), None, None).unwrap_err();
+        assert!(
+            err.to_string().contains("milestone #999 not found"),
+            "{err}"
+        );
     }
 
     /// 物理删除属容器的 issue 后，父容器派生状态回落（done → open）。

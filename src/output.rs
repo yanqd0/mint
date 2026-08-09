@@ -53,8 +53,8 @@ pub fn format_container_show(c: &Container, issues: &[IssueSummary]) -> String {
     if let Some(v) = &c.version {
         out.push_str(&format!("  version: {v}\n"));
     }
-    if let Some(rid) = c.roadmap_id {
-        out.push_str(&format!("  roadmap: #{rid}\n"));
+    if let Some(rid) = c.milestone_id {
+        out.push_str(&format!("  milestone: #{rid}\n"));
     }
     if let Some(b) = &c.body {
         out.push_str(&format!("  body:    {b}\n"));
@@ -131,7 +131,7 @@ mod tests {
         title: &str,
         version: Option<&str>,
         body: Option<&str>,
-        roadmap_id: Option<i64>,
+        milestone_id: Option<i64>,
         status: ContainerStatus,
     ) -> Container {
         Container {
@@ -139,7 +139,7 @@ mod tests {
             title: title.into(),
             version: version.map(Into::into),
             body: body.map(Into::into),
-            roadmap_id,
+            milestone_id,
             status,
             created_at: "2026-01-01 00:00:00".into(),
             updated_at: "2026-01-01 00:00:00".into(),
@@ -225,9 +225,9 @@ mod tests {
         assert_eq!(out.contains("hit:"), show, "hit_count={n} 显示: {out}");
     }
 
-    /// format_container_show：roadmap/plan 字段与 issue 计数。
+    /// format_container_show：milestone/plan 字段与 issue 计数。
     #[rstest]
-    #[case::roadmap(
+    #[case::milestone(
         mk_container(1, "r", Some("0.3.0"), Some("body"), None, ContainerStatus::Open),
         vec![],
         "version: 0.3.0",
@@ -236,7 +236,7 @@ mod tests {
     #[case::plan(
         mk_container(2, "p", None, None, Some(9), ContainerStatus::Done),
         vec![mk_summary(1, "s", Kind::Problem, Status::Done)],
-        "roadmap: #9",
+        "milestone: #9",
         "issues:  1",
     )]
     fn format_container_show_fields(

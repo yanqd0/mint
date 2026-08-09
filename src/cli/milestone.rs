@@ -1,22 +1,22 @@
-//! Roadmap container CLI 子命令（create/list/show/attach/detach/set/get）。
+//! Milestone container CLI 子命令（create/list/show/attach/detach/set/get）。
 
 use rusqlite::Connection;
 
 use crate::cli::{
-    RoadmapCreateArgs, RoadmapSetArgs, cmd_container_list, cmd_container_show,
+    MilestoneCreateArgs, MilestoneSetArgs, cmd_container_list, cmd_container_show,
     print_issue_link_json,
 };
 use crate::container::{self, ContainerKind};
 use crate::error::Error;
 
-/// Roadmap create：必填 --version。
-pub fn cmd_roadmap_create(conn: &Connection, a: &RoadmapCreateArgs) -> Result<(), Error> {
+/// Milestone create：必填 --version。
+pub fn cmd_milestone_create(conn: &Connection, a: &MilestoneCreateArgs) -> Result<(), Error> {
     if a.title.trim().is_empty() {
         return Err(Error::Other("title must not be empty".to_string()));
     }
     let id = container::create(
         conn,
-        ContainerKind::Roadmap,
+        ContainerKind::Milestone,
         a.title.trim(),
         Some(&a.version),
         a.body.as_deref(),
@@ -30,13 +30,13 @@ pub fn cmd_roadmap_create(conn: &Connection, a: &RoadmapCreateArgs) -> Result<()
             }))?
         );
     } else {
-        println!("Created roadmap #{id} ({})", a.title);
+        println!("Created milestone #{id} ({})", a.title);
     }
     Ok(())
 }
 
-/// Roadmap set：更新 title/version/body。
-pub fn cmd_roadmap_set(conn: &Connection, s: &RoadmapSetArgs) -> Result<(), Error> {
+/// Milestone set：更新 title/version/body。
+pub fn cmd_milestone_set(conn: &Connection, s: &MilestoneSetArgs) -> Result<(), Error> {
     let title = s.title.as_deref().map(str::trim);
     let version = s.version.as_deref().map(str::trim);
     let body = s.body.as_deref();
@@ -51,7 +51,7 @@ pub fn cmd_roadmap_set(conn: &Connection, s: &RoadmapSetArgs) -> Result<(), Erro
     if version.is_some_and(|v| v.is_empty()) {
         return Err(Error::Other("version must not be empty".to_string()));
     }
-    container::update_roadmap(conn, s.id, title, version, body)?;
+    container::update_milestone(conn, s.id, title, version, body)?;
     if s.json {
         let mut obj = serde_json::Map::new();
         obj.insert("id".into(), serde_json::Value::from(s.id));
@@ -69,28 +69,28 @@ pub fn cmd_roadmap_set(conn: &Connection, s: &RoadmapSetArgs) -> Result<(), Erro
             serde_json::to_string(&serde_json::Value::Object(obj))?
         );
     } else {
-        println!("Updated roadmap #{}", s.id);
+        println!("Updated milestone #{}", s.id);
     }
     Ok(())
 }
 
-/// Roadmap 命令分发。
-pub fn dispatch(conn: &Connection, cmd: &super::RoadmapCmd) -> Result<(), Error> {
+/// Milestone 命令分发。
+pub fn dispatch(conn: &Connection, cmd: &super::MilestoneCmd) -> Result<(), Error> {
     match cmd {
-        super::RoadmapCmd::Create(a) => cmd_roadmap_create(conn, a),
-        super::RoadmapCmd::List(a) => cmd_container_list(conn, ContainerKind::Roadmap, a),
-        super::RoadmapCmd::Show(a) => cmd_container_show(conn, ContainerKind::Roadmap, a),
-        super::RoadmapCmd::Attach(a) => {
+        super::MilestoneCmd::Create(a) => cmd_milestone_create(conn, a),
+        super::MilestoneCmd::List(a) => cmd_container_list(conn, ContainerKind::Milestone, a),
+        super::MilestoneCmd::Show(a) => cmd_container_show(conn, ContainerKind::Milestone, a),
+        super::MilestoneCmd::Attach(a) => {
             container::link_direct(conn, a.id, a.issue_id)?;
             print_issue_link_json(a.id, a.issue_id, "attached", a.json)
         }
-        super::RoadmapCmd::Detach(a) => {
+        super::MilestoneCmd::Detach(a) => {
             container::unlink_direct(conn, a.id, a.issue_id)?;
             print_issue_link_json(a.id, a.issue_id, "detached", a.json)
         }
-        super::RoadmapCmd::Get(g) => {
-            super::plan::cmd_container_get(conn, ContainerKind::Roadmap, g)
+        super::MilestoneCmd::Get(g) => {
+            super::plan::cmd_container_get(conn, ContainerKind::Milestone, g)
         }
-        super::RoadmapCmd::Set(s) => cmd_roadmap_set(conn, s),
+        super::MilestoneCmd::Set(s) => cmd_milestone_set(conn, s),
     }
 }

@@ -1,6 +1,6 @@
 //! list 公共逻辑：分页 + JSON 信封 + 页码脚注 + 列矩阵转换。
 //!
-//! 供 issue/plan/roadmap/label 各 list 命令共用（分页原 `issue::list` 内、
+//! 供 issue/plan/milestone/label 各 list 命令共用（分页原 `issue::list` 内、
 //! 列矩阵原 `tui::rows`，均提升至此）。
 
 use crate::models::{Container, Issue, Label};
@@ -81,7 +81,7 @@ pub(crate) fn issues(items: &[Issue]) -> (Vec<String>, Vec<Vec<String>>) {
     (headers, rows)
 }
 
-/// 容器列表（roadmap/plan，含直接挂载 issue 计数）→ (表头, 行矩阵)。
+/// 容器列表（milestone/plan，含直接挂载 issue 计数）→ (表头, 行矩阵)。
 pub(crate) fn containers(items: &[(Container, i64)]) -> (Vec<String>, Vec<Vec<String>>) {
     let headers: Vec<String> = ["ID", "Status", "Issues", "Title", "Version"]
         .into_iter()
@@ -154,7 +154,7 @@ mod tests {
             title: title.into(),
             version: version.map(Into::into),
             body: None,
-            roadmap_id: None,
+            milestone_id: None,
             status: ContainerStatus::Open,
             created_at: "t".into(),
             updated_at: "t".into(),

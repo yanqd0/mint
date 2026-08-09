@@ -13,14 +13,14 @@ use list_common::{containers, paged_json, paginate, print_page_footer};
 pub mod delete;
 pub mod issue;
 mod list_common;
+pub mod milestone;
 pub mod plan;
 pub mod project;
-pub mod roadmap;
 
 use issue::IssueArgs;
 use issue::list::{ListArgs, SearchArgs, ShowArgs};
 
-// ── 共享 clap args（plan/roadmap 共用）────────────────────────────
+// ── 共享 clap args（plan/milestone 共用）────────────────────────────
 
 #[derive(clap::Args)]
 pub struct ListContainersArgs {
@@ -50,7 +50,7 @@ pub struct ContainerIdArgs {
 }
 
 #[derive(clap::Args)]
-pub struct RoadmapCreateArgs {
+pub struct MilestoneCreateArgs {
     pub title: String,
     /// Version, e.g. 0.1.0 or any user form (required)
     #[arg(long)]
@@ -69,16 +69,16 @@ pub struct PlanCreateArgs {
     /// Full markdown body/description
     #[arg(long)]
     pub body: Option<String>,
-    /// Roadmap this plan belongs to
+    /// Milestone this plan belongs to
     #[arg(long)]
-    pub roadmap: Option<i64>,
+    pub milestone: Option<i64>,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
 }
 
 #[derive(clap::Args)]
-pub struct RoadmapIssueArgs {
+pub struct MilestoneIssueArgs {
     pub id: i64,
     pub issue_id: i64,
     /// Output as JSON
@@ -98,7 +98,7 @@ pub struct PlanIssueArgs {
 #[derive(clap::Args)]
 pub struct ContainerGetArgs {
     pub id: i64,
-    /// Field name: title, body, status, version (roadmap), roadmap_id (plan),
+    /// Field name: title, body, status, version (milestone), milestone_id (plan),
     /// created_at, updated_at
     pub field: String,
     /// Output as JSON
@@ -121,7 +121,7 @@ pub struct PlanSetArgs {
 }
 
 #[derive(clap::Args)]
-pub struct RoadmapSetArgs {
+pub struct MilestoneSetArgs {
     pub id: i64,
     /// New title (omit to keep; empty rejected)
     #[arg(long)]
@@ -270,8 +270,8 @@ pub enum Commands {
     Label(LabelArgs),
     /// Project subcommands
     Project(ProjectArgs),
-    /// Roadmap container subcommands
-    Roadmap(RoadmapArgs),
+    /// Milestone container subcommands
+    Milestone(MilestoneArgs),
     /// Plan container subcommands
     Plan(PlanArgs),
     /// Live dashboard: auto-refreshing issue/plan activity feed (TTY) or snapshot (non-TTY)
@@ -293,27 +293,27 @@ pub enum LabelCmd {
 }
 
 #[derive(clap::Args)]
-pub struct RoadmapArgs {
+pub struct MilestoneArgs {
     #[command(subcommand)]
-    pub(crate) command: RoadmapCmd,
+    pub(crate) command: MilestoneCmd,
 }
 
 #[derive(Subcommand)]
-pub enum RoadmapCmd {
-    /// Create a roadmap (requires --version)
-    Create(RoadmapCreateArgs),
-    /// List roadmaps (with direct issue counts)
+pub enum MilestoneCmd {
+    /// Create a milestone (requires --version)
+    Create(MilestoneCreateArgs),
+    /// List milestones (with direct issue counts)
     List(ListContainersArgs),
-    /// Show a roadmap's details and its issues
+    /// Show a milestone's details and its issues
     Show(ContainerIdArgs),
-    /// Attach an issue directly to a roadmap (must not belong to a plan)
-    Attach(RoadmapIssueArgs),
-    /// Detach an issue from a roadmap
-    Detach(RoadmapIssueArgs),
+    /// Attach an issue directly to a milestone (must not belong to a plan)
+    Attach(MilestoneIssueArgs),
+    /// Detach an issue from a milestone
+    Detach(MilestoneIssueArgs),
     /// Get a single field's value (bare output; --json for structured)
     Get(ContainerGetArgs),
     /// Set fields: --title / --body / --version
-    Set(RoadmapSetArgs),
+    Set(MilestoneSetArgs),
 }
 
 #[derive(clap::Args)]
@@ -324,7 +324,7 @@ pub struct PlanArgs {
 
 #[derive(Subcommand)]
 pub enum PlanCmd {
-    /// Create a plan (optionally under a roadmap)
+    /// Create a plan (optionally under a milestone)
     Create(PlanCreateArgs),
     /// List plans (with issue counts)
     List(ListContainersArgs),
@@ -352,8 +352,8 @@ pub enum DeleteCmd {
     Issue(ContainerIdArgs),
     /// Delete a plan (detaches its issues; DANGEROUS)
     Plan(ContainerIdArgs),
-    /// Delete a roadmap (detaches its plans and direct issues; DANGEROUS)
-    Roadmap(ContainerIdArgs),
+    /// Delete a milestone (detaches its plans and direct issues; DANGEROUS)
+    Milestone(ContainerIdArgs),
     /// Delete a label by name (clears its issue associations; DANGEROUS)
     Label(DeleteLabelArgs),
     /// Delete a project by name (refuse if issues exist; DANGEROUS)
@@ -388,7 +388,7 @@ impl Cli {
                 LabelCmd::List(l) => cmd_label_list(&conn, l),
             },
             Commands::Project(p) => project::dispatch(&conn, &p.command),
-            Commands::Roadmap(r) => roadmap::dispatch(&conn, &r.command),
+            Commands::Milestone(r) => milestone::dispatch(&conn, &r.command),
             Commands::Plan(p) => plan::dispatch(&conn, &p.command),
             Commands::Delete(d) => delete::dispatch(&conn, &d.command),
             Commands::Tui => crate::tui::run_dashboard(&conn),
@@ -425,7 +425,7 @@ impl Cli {
     }
 }
 
-// ── 共享 helpers（plan/roadmap 共用）───────────────────────────────
+// ── 共享 helpers（plan/milestone 共用）───────────────────────────────
 
 /// 容器 list：默认只显非 done，--all/-a 全列。
 pub(crate) fn cmd_container_list(
@@ -437,7 +437,7 @@ pub(crate) fn cmd_container_list(
     if a.tui {
         let (headers, rows) = containers(&items);
         let title = match kind {
-            ContainerKind::Roadmap => "Roadmaps",
+            ContainerKind::Milestone => "Milestones",
             ContainerKind::Plan => "Plans",
         };
         return crate::tui::run_list(title, headers, rows, a.page_size);
@@ -449,7 +449,7 @@ pub(crate) fn cmd_container_list(
             .map(|(c, count)| {
                 serde_json::json!({
                     "id": c.id, "title": c.title, "version": c.version,
-                    "roadmap_id": c.roadmap_id, "status": c.status,
+                    "milestone_id": c.milestone_id, "status": c.status,
                     "issue_count": count,
                     "created_at": c.created_at, "updated_at": c.updated_at,
                 })
@@ -478,7 +478,7 @@ pub(crate) fn cmd_container_show(
             "{}",
             serde_json::to_string(&serde_json::json!({
                 "id": c.id, "title": c.title, "version": c.version,
-                "body": c.body, "roadmap_id": c.roadmap_id,
+                "body": c.body, "milestone_id": c.milestone_id,
                 "status": c.status, "issues": issues,
                 "created_at": c.created_at, "updated_at": c.updated_at,
             }))?
@@ -512,7 +512,7 @@ pub(crate) fn print_issue_link_json(
 /// 容器名词（错误文案用）。
 pub(crate) fn kind_noun(kind: ContainerKind) -> &'static str {
     match kind {
-        ContainerKind::Roadmap => "roadmap",
+        ContainerKind::Milestone => "milestone",
         ContainerKind::Plan => "plan",
     }
 }

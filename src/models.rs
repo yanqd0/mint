@@ -219,7 +219,7 @@ pub struct Label {
     pub updated_at: String,
 }
 
-/// 容器状态（roadmap/plan 共享，5 态派生）：open/running/partial/dropped/done。
+/// 容器状态（milestone/plan 共享，5 态派生）：open/running/partial/dropped/done。
 /// open=从未开始；running=曾/正运行；partial=done+dropped 混合无活跃。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
@@ -270,14 +270,14 @@ impl rusqlite::types::FromSql for ContainerStatus {
     }
 }
 
-/// 容器（roadmap/plan 共享模型）：roadmap 有 version，plan 有 roadmap_id。
+/// 容器（milestone/plan 共享模型）：milestone 有 version，plan 有 milestone_id。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Container {
     pub id: i64,
     pub title: String,
     pub version: Option<String>,
     pub body: Option<String>,
-    pub roadmap_id: Option<i64>,
+    pub milestone_id: Option<i64>,
     pub status: ContainerStatus,
     pub created_at: String,
     pub updated_at: String,

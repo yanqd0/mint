@@ -741,64 +741,76 @@ fn st_project_autodetect_explicit() {
     assert_eq!(v["project"], "mint");
 }
 
-/// roadmap crud：create（必填 version）、list 带计数、show 聚合直接挂的 issue。
+/// milestone crud：create（必填 version）、list 带计数、show 聚合直接挂的 issue。
 #[test]
-fn st_roadmap_crud() {
+fn st_milestone_crud() {
     let (_dir, db) = empty_db();
     let v = run_json(
         &db,
-        &["roadmap", "create", "r1", "--version", "0.1.0", "--json"],
+        &["milestone", "create", "r1", "--version", "0.1.0", "--json"],
     );
     assert_eq!(v["status"], "open");
     run_json(
         &db,
-        &["roadmap", "create", "r2", "--version", "0.2.0", "--json"],
+        &["milestone", "create", "r2", "--version", "0.2.0", "--json"],
     );
 
-    let v = run_json(&db, &["roadmap", "list", "--json"]);
+    let v = run_json(&db, &["milestone", "list", "--json"]);
     assert_eq!(v["items"].as_array().unwrap().len(), 2);
     assert_eq!(v["items"][0]["issue_count"], 0);
 
     // 直接挂两个 issue 后 show 聚合
     let i1 = add_issue(&db, "a");
     let i2 = add_issue(&db, "b");
-    run_json(&db, &["roadmap", "attach", "1", &i1.to_string(), "--json"]);
-    run_json(&db, &["roadmap", "attach", "1", &i2.to_string(), "--json"]);
-    let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
+    run_json(
+        &db,
+        &["milestone", "attach", "1", &i1.to_string(), "--json"],
+    );
+    run_json(
+        &db,
+        &["milestone", "attach", "1", &i2.to_string(), "--json"],
+    );
+    let v = run_json(&db, &["milestone", "show", "1", "--json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 2);
 }
 
-/// roadmap 直接挂/解挂 issue；show 聚合归零。
+/// milestone 直接挂/解挂 issue；show 聚合归零。
 #[test]
-fn st_roadmap_issue_detach() {
+fn st_milestone_issue_detach() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "x");
     run_json(
         &db,
-        &["roadmap", "create", "r", "--version", "0.1.0", "--json"],
+        &["milestone", "create", "r", "--version", "0.1.0", "--json"],
     );
-    run_json(&db, &["roadmap", "attach", "1", &id.to_string(), "--json"]);
-    let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
+    run_json(
+        &db,
+        &["milestone", "attach", "1", &id.to_string(), "--json"],
+    );
+    let v = run_json(&db, &["milestone", "show", "1", "--json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 1);
-    run_json(&db, &["roadmap", "detach", "1", &id.to_string(), "--json"]);
-    let v = run_json(&db, &["roadmap", "show", "1", "--json"]);
+    run_json(
+        &db,
+        &["milestone", "detach", "1", &id.to_string(), "--json"],
+    );
+    let v = run_json(&db, &["milestone", "show", "1", "--json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 0);
 }
 
-/// roadmap create 必填 version；不存在的 roadmap/issue 报错。
+/// milestone create 必填 version；不存在的 milestone/issue 报错。
 #[test]
-fn st_roadmap_create_requires_version_and_missing() {
+fn st_milestone_create_requires_version_and_missing() {
     let (_dir, db) = empty_db();
-    let stderr = run_fail(&db, &["roadmap", "create", "r", "--json"]);
+    let stderr = run_fail(&db, &["milestone", "create", "r", "--json"]);
     assert!(stderr.contains("--version"), "stderr: {stderr}");
     run_json(
         &db,
-        &["roadmap", "create", "r", "--version", "0.1.0", "--json"],
+        &["milestone", "create", "r", "--version", "0.1.0", "--json"],
     );
     let id = add_issue(&db, "x");
-    let stderr = run_fail(&db, &["roadmap", "attach", "999", &id.to_string()]);
+    let stderr = run_fail(&db, &["milestone", "attach", "999", &id.to_string()]);
     assert!(
-        stderr.contains("roadmap #999 not found"),
+        stderr.contains("milestone #999 not found"),
         "stderr: {stderr}"
     );
 }
@@ -1255,15 +1267,15 @@ fn st_list_alias_short_a() {
     assert_eq!(v["items"].as_array().unwrap().len(), 1);
 }
 
-/// roadmap version 重复创建冲突（UNIQUE 约束报错）。
+/// milestone version 重复创建冲突（UNIQUE 约束报错）。
 #[test]
-fn st_roadmap_version_duplicate_conflict() {
+fn st_milestone_version_duplicate_conflict() {
     let (_dir, db) = empty_db();
     run_json(
         &db,
-        &["roadmap", "create", "r1", "--version", "0.1.0", "--json"],
+        &["milestone", "create", "r1", "--version", "0.1.0", "--json"],
     );
-    let stderr = run_fail(&db, &["roadmap", "create", "r2", "--version", "0.1.0"]);
+    let stderr = run_fail(&db, &["milestone", "create", "r2", "--version", "0.1.0"]);
     assert!(stderr.contains("UNIQUE"), "stderr: {stderr}");
 }
 
@@ -1332,24 +1344,24 @@ fn st_delete_plan_detaches() {
     assert!(stderr.contains("not found"), "stderr: {stderr}");
 }
 
-/// 顶层 delete：删除 roadmap 解绑直接挂 issue，roadmap 消失、issue 保留。
+/// 顶层 delete：删除 milestone 解绑直接挂 issue，milestone 消失、issue 保留。
 #[test]
-fn st_delete_roadmap_detaches() {
+fn st_delete_milestone_detaches() {
     let (_dir, db) = empty_db();
     run_json(
         &db,
-        &["roadmap", "create", "r", "--version", "0.1.0", "--json"],
+        &["milestone", "create", "r", "--version", "0.1.0", "--json"],
     );
     let i = add_issue(&db, "x");
-    run_json(&db, &["roadmap", "attach", "1", &i.to_string(), "--json"]);
-    run_json(&db, &["delete", "roadmap", "1", "--json"]);
-    let stderr = run_fail(&db, &["roadmap", "show", "1"]);
+    run_json(&db, &["milestone", "attach", "1", &i.to_string(), "--json"]);
+    run_json(&db, &["delete", "milestone", "1", "--json"]);
+    let stderr = run_fail(&db, &["milestone", "show", "1"]);
     assert!(stderr.contains("not found"), "stderr: {stderr}");
     let v = run_json(&db, &["show", &i.to_string(), "--json"]);
     assert_eq!(v["id"].as_i64().unwrap(), i);
 }
 
-/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=4（001+002+003+004）。
+/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=5（001-005）。
 #[test]
 fn st_empty_db_initialized_v1() {
     let (_dir, db) = empty_db();
@@ -1358,7 +1370,7 @@ fn st_empty_db_initialized_v1() {
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 4);
+    assert_eq!(version, 5);
 }
 
 // ── --tui（list 表格浏览）────────────────────────────────────────
@@ -1381,14 +1393,21 @@ fn st_tui_issue_list_single_page() {
     assert!(text.contains("Page 1/1"), "缺页码 footer: {text}");
 }
 
-/// plan/roadmap/label 三个 list 的 --tui 降级。
+/// plan/milestone/label 三个 list 的 --tui 降级。
 #[test]
 fn st_tui_containers_and_label() {
     let (_dir, db) = empty_db();
     run_json(&db, &["plan", "create", "sprint-1", "--json"]);
     run_json(
         &db,
-        &["roadmap", "create", "v0.4", "--version", "0.4.0", "--json"],
+        &[
+            "milestone",
+            "create",
+            "v0.4",
+            "--version",
+            "0.4.0",
+            "--json",
+        ],
     );
     let out = mint(&db)
         .args(["plan", "list", "--tui"])
@@ -1402,7 +1421,7 @@ fn st_tui_containers_and_label() {
         "plan --tui 缺数据"
     );
     let out = mint(&db)
-        .args(["roadmap", "list", "--tui"])
+        .args(["milestone", "list", "--tui"])
         .assert()
         .success()
         .get_output()
@@ -1410,7 +1429,7 @@ fn st_tui_containers_and_label() {
         .clone();
     assert!(
         String::from_utf8_lossy(&out).contains("v0.4"),
-        "roadmap --tui 缺数据"
+        "milestone --tui 缺数据"
     );
     let out = mint(&db)
         .args(["label", "list", "--tui"])

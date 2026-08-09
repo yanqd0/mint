@@ -1,4 +1,4 @@
-//! dashboard 数据加载：全量快照（全部 issue + 全部 plan，无 roadmap）。
+//! dashboard 数据加载：全量快照（全部 issue + 全部 plan，无 milestone）。
 
 use rusqlite::Connection;
 

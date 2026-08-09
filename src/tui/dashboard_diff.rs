@@ -4,7 +4,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::models::{Container, ContainerStatus, Issue, Status};
 
-/// 一次全量快照（dashboard 每 tick 拉取：全部 issue + 全部 plan，无 roadmap）。
+/// 一次全量快照（dashboard 每 tick 拉取：全部 issue + 全部 plan，无 milestone）。
+#[derive(Debug, Clone)]
 pub struct DashboardSnapshot {
     pub issues: Vec<Issue>,
     pub plans: Vec<(Container, i64)>,
@@ -188,7 +189,7 @@ mod tests {
             title: title.into(),
             version: None,
             body: None,
-            roadmap_id: None,
+            milestone_id: None,
             status,
             created_at: "t".into(),
             updated_at: "t".into(),
