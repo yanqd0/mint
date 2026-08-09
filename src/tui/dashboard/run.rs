@@ -89,20 +89,15 @@ fn apply_state_action(
     } else {
         None
     };
-    let result = if action == Action::Commit && commit_sha.is_none() {
-        Err(Error::Other(
-            "commit requires a git repository (no HEAD)".to_string(),
-        ))
-    } else {
-        state::apply_transition(
-            conn,
-            id,
-            action,
-            test_cmd.as_deref(),
-            reason.as_deref(),
-            commit_sha.as_deref(),
-        )
-    };
+    // 无 sha 时的 git 错误由 apply_transition 在状态校验之后报（状态合法性优先）。
+    let result = state::apply_transition(
+        conn,
+        id,
+        action,
+        test_cmd.as_deref(),
+        reason.as_deref(),
+        commit_sha.as_deref(),
+    );
     let ok = result.is_ok();
     let text = match result {
         Ok((from, to)) => format!("issue #{id}: {from} -> {to}"),
@@ -208,8 +203,12 @@ mod tests {
 
     #[test]
     fn apply_state_commit_outside_git_sets_error_notice() {
+        use crate::state;
         let (_db_dir, conn, id) = db_with_open_issue();
         let cwd_dir = TempDir::new().unwrap();
+        // 推进到 dev：非 git 目录 commit 无 HEAD → git 错误（状态校验之后）。
+        state::apply_transition(&conn, id, Action::Plan, None, None, None).unwrap();
+        state::apply_transition(&conn, id, Action::Start, None, None, None).unwrap();
         let mut m = DashboardModel::new();
         apply_state_action(
             &conn,
@@ -220,10 +219,48 @@ mod tests {
             None,
             &mut m,
         );
-        // 非 git 目录：commit 无 HEAD → 报错提示，不写库。
         let n = m.notice.as_ref().unwrap();
         assert!(n.text.contains("commit requires a git repository"));
         assert!(!n.ok);
+    }
+
+    #[test]
+    fn apply_state_commit_illegal_from_open_reports_transition() {
+        let (_db_dir, conn, id) = db_with_open_issue();
+        let cwd_dir = TempDir::new().unwrap();
+        let mut m = DashboardModel::new();
+        // open 直接 commit：状态合法性优先于 git 错误。
+        apply_state_action(
+            &conn,
+            cwd_dir.path(),
+            id,
+            Action::Commit,
+            None,
+            None,
+            &mut m,
+        );
+        let n = m.notice.as_ref().unwrap();
+        assert!(n.text.contains("invalid transition"));
+        assert!(!n.ok);
+    }
+
+    #[test]
+    fn apply_state_drop_with_reason_notice() {
+        let (_db_dir, conn, id) = db_with_open_issue();
+        let cwd_dir = TempDir::new().unwrap();
+        let mut m = DashboardModel::new();
+        apply_state_action(
+            &conn,
+            cwd_dir.path(),
+            id,
+            Action::Drop,
+            None,
+            Some("no longer needed".into()),
+            &mut m,
+        );
+        let n = m.notice.as_ref().unwrap();
+        assert_eq!(n.text, format!("issue #{id}: open -> dropped"));
+        assert!(n.ok);
     }
 
     #[test]

@@ -296,6 +296,8 @@ impl DashboardModel {
         match id {
             Some(id) => match action {
                 Action::Close | Action::Drop => {
+                    // 进输入态清掉旧操作结果，避免 Esc 取消输入后旧 notice 重现。
+                    self.notice = None;
                     self.input = Some(InputState {
                         id,
                         action,
@@ -329,14 +331,14 @@ impl DashboardModel {
             }
             KeyCode::Enter => {
                 let value = inp.value.trim().to_string();
-                if value.is_empty() {
-                    // close 必填 test_cmd：空值不放行，保持输入态。
+                // close 必填 test_cmd：空值不放行；drop 的 reason 可选（对齐 CLI drop --reason）。
+                if inp.action == Action::Close && value.is_empty() {
                     self.input = Some(inp);
                     return KeyAction::None;
                 }
                 let (test_cmd, reason) = match inp.action {
                     Action::Close => (Some(value.clone()), None),
-                    Action::Drop => (None, Some(value.clone())),
+                    Action::Drop => (None, (!value.is_empty()).then_some(value)),
                     _ => (None, None),
                 };
                 KeyAction::State {

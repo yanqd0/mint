@@ -449,3 +449,32 @@ fn input_state_drop_commits_reason() {
         }
     );
 }
+
+#[test]
+fn input_state_drop_empty_reason_commits() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
+    m.handle_key(KeyCode::Char('D')); // 进输入态
+    let r = m.handle_key(KeyCode::Enter); // 空 reason 直接提交（reason=None，对齐 CLI）
+    assert_eq!(
+        r,
+        KeyAction::State {
+            id: 1,
+            action: Action::Drop,
+            test_cmd: None,
+            reason: None
+        }
+    );
+    assert!(m.input.is_none());
+}
+
+#[test]
+fn input_state_other_key_keeps_editing() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![mk_issue(1, Status::Test, None, "1")], vec![]));
+    m.handle_key(KeyCode::Char('X')); // 进输入态
+    m.handle_key(KeyCode::Char('a'));
+    m.handle_key(KeyCode::Down); // 导航键在输入态下不打断编辑
+    assert_eq!(m.input.as_ref().unwrap().value, "a");
+    assert_eq!(m.selected, 0); // 视图导航不生效
+}

@@ -103,6 +103,14 @@ pub fn apply_transition(
         ));
     }
 
+    // commit 需 sha 写 last_commit_id；无 HEAD（非 git 目录）报错置于状态校验之后，
+    // 保证状态非法（如 open 直接 commit）时优先报 invalid transition 而非 git 错误。
+    if action == Action::Commit && commit_sha.is_none() {
+        return Err(Error::Other(
+            "commit requires a git repository (no HEAD)".to_string(),
+        ));
+    }
+
     let reset = action == Action::Reset;
     let reopen = action == Action::Reopen;
     let drop_reason: Option<&str> = if action == Action::Drop { reason } else { None };
