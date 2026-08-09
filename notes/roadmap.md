@@ -86,8 +86,9 @@
 - 同一批 list 命令默认输出改 TSV（表头首行 + tab 分隔数据行，token 最优）；`--tsv` 参数移除（默认即 TSV）。
 - 公共代码：分页三件套提升至 `src/cli/list_common.rs`；TUI 渲染分层 `src/tui/`（model 纯状态机/draw/rows）。
 - 依赖：ratatui 0.30 + crossterm 0.29（默认包含）；列宽按 Unicode 显示宽度对齐（中英文混排）。
+- **`mint tui` 大屏展示**（plan #13，2026-08-09）：自动变化 issue/plan 面板，进度条（open 率）+ 状态点（黄=待做、绿闪=开发、绿=在做、白=完成、红=drop）；plan 执行中（有 dev/test issue）自动切 plan 面板、结束切回 issue；Enter 查看 issue 详情。roadmap 面板另建 plan #17 记录（下次单独做）。
 
-**待做**：查看详情（show --tui）、快捷键状态操作、各子命令默认 TUI（plan #16 后续）。
+**待做**：快捷键状态操作（plan/start/close 等推进，编辑仍归 CLI）、各子命令默认 TUI、roadmap 面板（plan #17）。
 
 **验收**：人工可滚动浏览并按状态推进 issue。
 

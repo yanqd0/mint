@@ -296,6 +296,23 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D27. mint tui 大屏展示（issue/plan 面板 + 进度条）
+
+**背景**：plan #13 落地。从另一角度反映 CC 等编程客户端的工作进展，零操作自动动，用户可介入查看详情。
+
+**决策**：
+- **显示方案**：默认 issue 面板（issue 变更流）；plan 执行中（有 dev/test issue）自动切 plan 面板，执行结束切回 issue。用户手动 Esc 回 issue 后同 plan 继续执行不反复抢占（`last_auto` 记录）。
+- **进度条**：open 率 = done / 非 dropped 总数；每段 = 一个 issue（亮=未完成、亮闪=在做、暗=完成、红=drop）。
+- **状态点**：`●` 黄=待做、绿闪=开发、绿=在做、白=完成、红=drop。
+- **自动刷新**：每 1s 全量快照重查重渲（关联写入不 bump `updated_at`，增量 diff 会漏）；`EventSource::poll_event` 超时触发 refresh（默认方法退化阻塞 read，`CrosstermEvents` 覆写 `poll`）。
+- **变化检测**：会话内基线 + `diff_snapshots`（新增/状态 from→to/字段/删除），`from` 取自上一轮快照（无状态历史表）。忽略 `hit_count`/`updated_at` 字段变化（dedup 噪声）。
+- **roadmap 不做**（低频变更且部分项目无），另建 plan #17 记录下次单独做。
+- **架构**：`src/tui/dashboard_{diff,data,dashboard,dashboard_types,dashboard_draw,dashboard_run}` 分层；`DashboardModel` 纯状态机（无 ratatui）可单测，渲染 TestBackend 可测，非 TTY 降级文本输出。
+
+**理由**：全量轮询简单可靠；进度条/状态点让状态流转直观；plan 自动切面板聚焦当前开发；纯状态机 + TestBackend 保证可测性。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
