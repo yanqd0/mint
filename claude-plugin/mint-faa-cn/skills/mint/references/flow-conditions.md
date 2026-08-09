@@ -1,5 +1,7 @@
 # 条件分支决策表（flow-conditions）
 
+> 标题/body 模板：`body-templates/11.md、14.md`
+
 供各 flow 在登记/推进时按场景选择。
 
 ## 挂载规则（issue 二选一：属 plan 后不能直接挂 milestone）

@@ -94,6 +94,19 @@ mint plan attach 12 42
 
 详细用法见 `references/commands.md` 及各子命令 `mint <sub> --help`。
 
+## 标题与 body 模板（省 token）
+
+写 issue/plan/milestone 的标题与 body 时套模板，**只记 LLM 未知**：
+
+- **不写已知**：公共知识/技能/常识不描述（如"issue 是待办"这类定义不写）
+- **不瞎猜**：不明确的信息不虚构，写 `? 待确认 <简述>` 尾节；读取方看到后找用户确认，或按上下文准确推定后消除
+- **标题**：≤60 字符（约 30 汉字）；语义见 `references/title-templates/`（issue=类型概述、plan=实现目标、milestone=业务目标）；**好标题可省 body**
+- **body**：套 `references/body-templates/N.md` 模板，≤4 字段、每字段 ≤1 句、要点用 `-`。常用：
+  - T1 bug：`**现象** / **位置**`
+  - T2 需求：`**目标** / **要点**`
+  - T6 plan：`## 目标 / ## 拆解 / ## 验收`
+- 各 flow 已标注对应模板（小索引）；总清单见 `references/title-templates/` 与 `references/body-templates/`
+
 ## 约束
 
 - **去重已内置**：`add` 对同项目非终态 issue 做标题归一化+模糊匹配，重复自动合并（`hit_count+1`）。

@@ -1,5 +1,7 @@
 # 遗留问题 / TODO / 观察项处理流程（flow-todo）
 
+> 标题/body 模板：`title-templates/issue.md + body-templates/4.md`
+
 触发：用户提到遗留问题 / TODO / 改进点 / 观察项 / 技术债。
 
 ## 步骤

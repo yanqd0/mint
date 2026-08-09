@@ -1,5 +1,7 @@
 # 审查/复查报告处理流程（flow-review）
 
+> 标题/body 模板：`title-templates/issue.md + body-templates/5.md`
+
 触发：收到 code-reviewer / security-auditor / tester 报告。
 
 ## 步骤

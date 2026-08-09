@@ -1,5 +1,7 @@
 # 版本规划与执行计划流程（flow-planning）
 
+> 标题/body 模板：`title-templates/plan.md、milestone.md + body-templates/7.md、8.md、15.md`
+
 触发：版本 / 计划 / 里程碑 / milestone / milestone / plan / sprint / 拆解执行计划 / 方案执行。
 
 ## 步骤

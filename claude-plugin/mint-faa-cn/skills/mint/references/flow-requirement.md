@@ -1,5 +1,7 @@
 # 需求处理流程（flow-requirement）
 
+> 标题/body 模板：`title-templates/issue.md + body-templates/2.md、6.md`
+
 触发：用户描述需求/改进（"有个需求：Z"）。kind=requirement。
 
 ## 步骤

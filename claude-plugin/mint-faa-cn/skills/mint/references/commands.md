@@ -1,5 +1,7 @@
 # mint 命令参考
 
+> 标题/body 模板：`title-templates/ + body-templates/（add/plan/milestone 标题与 body 示例）`
+
 所有命令支持 `--json`。全局 `--db <PATH>`（或 `MINT_DB_PATH`）覆盖默认库。
 `mint <sub> --help` 查看完整参数和选项。
 

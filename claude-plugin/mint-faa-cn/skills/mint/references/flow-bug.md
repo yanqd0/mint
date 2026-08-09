@@ -4,7 +4,8 @@
 
 ## 步骤
 
-1. **登记**：先 `list --json` 查重（标题模糊匹配），未重复 → `add "<bug 标题>" --body "<复现/影响>" --kind problem`。
+1. **登记**：先 `list --json` 查重（标题模糊匹配），未重复 → `add "<标题>" --body "<现象>/<位置>" --kind problem`。
+   - 标题/body 模板：`title-templates/issue.md` + `body-templates/1.md`（≤4 字段、只记未知、不明确写 `? 待确认`）。
    - 若被别的修改引入（回归）→ 找到引入它的 issue → `link create <bug_id> solves <引入 issue_id>`。
 2. **挂载**（按 flow-conditions 决策表）：
    - 有关联的 plan（正在开发的计划）→ `plan attach <PLAN> <ISSUE>`。

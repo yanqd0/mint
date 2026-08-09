@@ -1,5 +1,7 @@
 # 接管初始化流程（flow-session）
 
+> 标题/body 模板：`title-templates/issue.md + body-templates/4.md`
+
 触发：skill 无 `<description>` 参数时进入接管模式。目标：让用户**立即知道下一步开发什么**（mint 代替初始化思考）。
 
 ## 步骤
