@@ -363,6 +363,21 @@ fn shift_state_key_with_no_selection_is_noop() {
 }
 
 #[test]
+fn notice_expires_after_ticks() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
+    m.notice = Some(Notice {
+        text: "issue #1: open -> planned".into(),
+        ok: true,
+        ticks: 0,
+    });
+    for _ in 0..=NOTICE_TICKS {
+        m.refresh(&snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
+    }
+    assert!(m.notice.is_none());
+}
+
+#[test]
 fn close_key_enters_input_state() {
     let mut m = DashboardModel::new();
     m.init(snap(vec![mk_issue(1, Status::Test, None, "1")], vec![]));

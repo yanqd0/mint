@@ -15,7 +15,7 @@ pub mod tests_common;
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Paragraph, Tabs};
 
 use crate::state::Action;
@@ -55,18 +55,21 @@ pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
             .highlight_style(Style::new().add_modifier(Modifier::REVERSED)),
         v[0],
     );
-    // 标题栏：输入态显示参数输入框（prompt + 已输入值）；否则显示操作结果 notice。
-    let title_line = if let Some(inp) = &m.input {
+    // 标题栏：输入态显示参数输入框（prompt + 已输入值）；否则显示操作结果 notice（成功绿/失败红）。
+    let (title_line, style) = if let Some(inp) = &m.input {
         let prompt = match inp.action {
             Action::Close => "test_cmd (Enter commit / Esc cancel): ",
             Action::Drop => "reason (Enter commit / Esc cancel): ",
             _ => "",
         };
-        format!("{prompt}{}", inp.value)
+        (format!("{prompt}{}", inp.value), Style::default())
+    } else if let Some(n) = &m.notice {
+        let fg = if n.ok { Color::Green } else { Color::Red };
+        (n.text.clone(), Style::default().fg(fg))
     } else {
-        m.notice.clone().unwrap_or_default()
+        (String::new(), Style::default())
     };
-    frame.render_widget(Paragraph::new(title_line), v[1]);
+    frame.render_widget(Paragraph::new(title_line).style(style), v[1]);
     match m.view {
         View::Issues => issues::draw_issues_panel(frame, m, v[2]),
         View::Plans => plans::draw_plans_panel(frame, m, v[2]),

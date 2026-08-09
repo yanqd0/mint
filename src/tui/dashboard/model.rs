@@ -8,7 +8,9 @@ use crossterm::event::KeyCode;
 use crate::models::{Container, Issue};
 use crate::state::Action;
 use crate::tui::dashboard::diff::{DashboardSnapshot, diff_snapshots};
-use crate::tui::dashboard::types::{FlashItem, InputState, JumpRequest, MAX_FEED, RawJump};
+use crate::tui::dashboard::types::{
+    FlashItem, InputState, JumpRequest, MAX_FEED, NOTICE_TICKS, Notice, RawJump,
+};
 
 pub use crate::tui::dashboard::types::{FeedItem, KeyAction, RefreshResult, View};
 
@@ -42,8 +44,8 @@ pub struct DashboardModel {
     pub(crate) merge_delay: u32,
     /// 进行中的闪烁项（渲染层读取）。
     pub flash: Vec<FlashItem>,
-    /// 最近一次状态操作结果（"issue #N: from -> to" / "error: …"），渲染层标题栏显示。
-    pub notice: Option<String>,
+    /// 最近一次状态操作结果（成功/失败着色，`Notice` tick 过期自动清除），标题栏显示。
+    pub notice: Option<Notice>,
     /// 参数输入态（close 的 test_cmd / drop 的 reason）；None = 普通导航。
     pub input: Option<InputState>,
 }
@@ -129,6 +131,8 @@ impl DashboardModel {
         self.auto_last = self.auto_last.saturating_add(1);
         // 闪烁递减（过期清除）。
         self.tick_flash();
+        // 操作结果提示递减（过期清除）。
+        self.tick_notice();
         // 事件 → queue1（原始跳转请求）。
         for r in crate::tui::dashboard::jump::parse::raw_jumps_from_events(&events) {
             self.pending.push_back(r);
@@ -151,6 +155,16 @@ impl DashboardModel {
         RefreshResult {
             new_events: n,
             jumped,
+        }
+    }
+
+    /// notice 过期：tick 递增，超过 NOTICE_TICKS 自动清除（避免操作结果永久残留）。
+    fn tick_notice(&mut self) {
+        if let Some(n) = &mut self.notice {
+            n.ticks += 1;
+            if n.ticks > NOTICE_TICKS {
+                self.notice = None;
+            }
         }
     }
 

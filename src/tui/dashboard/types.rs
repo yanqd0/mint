@@ -49,6 +49,14 @@ pub struct InputState {
     pub value: String,
 }
 
+/// 操作结果提示（标题栏显示）：成功/失败着色，`ticks` 递增超过 `NOTICE_TICKS` 自动清除。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notice {
+    pub text: String,
+    pub ok: bool,
+    pub ticks: u32,
+}
+
 /// 跳转目标视图。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JumpTarget {
@@ -95,6 +103,8 @@ pub const JUMP_QUEUE_LIMIT: usize = 5;
 pub const JUMP_MERGE_DELAY: u32 = 1;
 /// 变化内容闪烁时长（tick）。
 pub const FLASH_TICKS: u32 = 2;
+/// 操作结果提示显示时长（tick；1 tick = 1s 刷新间隔）。
+pub const NOTICE_TICKS: u32 = 5;
 /// 空闲回首页阈值（tick）：无操作、无跳转 60s。
 pub const HOME_TIMEOUT: u32 = 60;
 

@@ -12,7 +12,7 @@ use crate::git;
 use crate::state::{self, Action};
 use crate::tui::dashboard::DashboardModel;
 use crate::tui::dashboard::data::load_snapshot;
-use crate::tui::dashboard::types::KeyAction;
+use crate::tui::dashboard::types::{KeyAction, Notice};
 use crate::tui::{CrosstermEvents, EventSource, is_interactive, to_keycode};
 
 /// 自动刷新间隔：每 tick 全量重查重渲。
@@ -103,10 +103,12 @@ fn apply_state_action(
             commit_sha.as_deref(),
         )
     };
-    model.notice = Some(match result {
+    let ok = result.is_ok();
+    let text = match result {
         Ok((from, to)) => format!("issue #{id}: {from} -> {to}"),
         Err(e) => format!("error: {e}"),
-    });
+    };
+    model.notice = Some(Notice { text, ok, ticks: 0 });
 }
 
 /// 非 TTY：TestBackend 渲染初始 Issue 面板 → 逐行文本。
@@ -199,10 +201,9 @@ mod tests {
         let cwd_dir = TempDir::new().unwrap();
         let mut m = DashboardModel::new();
         apply_state_action(&conn, cwd_dir.path(), id, Action::Plan, None, None, &mut m);
-        assert!(
-            m.notice
-                .is_some_and(|n| n == format!("issue #{id}: open -> planned"))
-        );
+        let n = m.notice.as_ref().unwrap();
+        assert_eq!(n.text, format!("issue #{id}: open -> planned"));
+        assert!(n.ok);
     }
 
     #[test]
@@ -220,11 +221,9 @@ mod tests {
             &mut m,
         );
         // 非 git 目录：commit 无 HEAD → 报错提示，不写库。
-        assert!(
-            m.notice
-                .as_deref()
-                .is_some_and(|n| n.contains("commit requires a git repository"))
-        );
+        let n = m.notice.as_ref().unwrap();
+        assert!(n.text.contains("commit requires a git repository"));
+        assert!(!n.ok);
     }
 
     #[test]
@@ -267,7 +266,8 @@ mod tests {
         );
         assert!(
             m.notice
-                .is_some_and(|n| n == format!("issue #{id}: test -> done"))
+                .as_ref()
+                .is_some_and(|n| n.text == format!("issue #{id}: test -> done"))
         );
     }
 }
