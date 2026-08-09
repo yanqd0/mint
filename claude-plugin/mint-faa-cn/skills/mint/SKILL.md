@@ -75,6 +75,7 @@ mint issue add "登录按钮点击无响应" --body "Firefox 上点击无反馈�
 # 查看与搜索
 mint list --status open --priority 0
 mint search "登录" --project mint --json
+mint issue get 42 body   # 详情正文走 get body（裸值最准；show 的 TSV 已含状态/标题等）
 
 # 状态机（逐态推进）
 mint issue state plan 42

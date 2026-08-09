@@ -29,9 +29,22 @@ mint list --label 0.4.0 --project mint       # 按 label + 项目筛选
 ## show
 
 ```bash
-mint show 42            # 详情含 labels/links/commit/priority
+mint show 42            # 默认 TSV：ID/Status/Kind/Priority/Title/Plan/Labels/TestCmd/…/Body
 mint show 42 --json
+mint show 42 --tui      # TUI 详情页（复用 mint tui 对应页面）
 ```
+
+## get（取单个字段，body 走此路最准）
+
+```bash
+mint issue get 42 body        # body 原文（裸值，换行/格式原样）
+mint issue get 42 title       # 任意字段：title/status/priority/labels/test_cmd/plan_id/…
+mint plan get 12 body         # plan/milestone 同样支持
+mint milestone get 8 body
+mint issue get 42 body --json # 结构化 {"id","field","value"}
+```
+
+> **取 body 优先走 `get body`**：裸值最准。`show` 的 TSV 已含状态/标题/优先级等；时间/优先级对决策无效勿依赖。需要详情正文时用 get body 即可，不必 show。
 
 ## search
 

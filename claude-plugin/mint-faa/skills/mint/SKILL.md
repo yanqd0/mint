@@ -75,6 +75,7 @@ mint issue add "login button unresponsive" --body "Firefox click no feedback, co
 # View & search
 mint list --status open --priority 0
 mint search "login" --project mint --json
+mint issue get 42 body   # detail body via get body (raw value, most precise; show TSV already has status/title etc.)
 
 # State machine (step by step)
 mint issue state plan 42

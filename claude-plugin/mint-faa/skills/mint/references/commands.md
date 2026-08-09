@@ -29,9 +29,22 @@ mint list --label 0.4.0 --project mint       # filter by label + project
 ## show
 
 ```bash
-mint show 42            # details including labels/links/commit/priority
+mint show 42            # default TSV: ID/Status/Kind/Priority/Title/Plan/Labels/TestCmd/…/Body
 mint show 42 --json
+mint show 42 --tui      # TUI detail page (reuses the mint tui page)
 ```
+
+## get (single field; use get body for the body)
+
+```bash
+mint issue get 42 body        # body verbatim (raw value, formatting preserved)
+mint issue get 42 title       # any field: title/status/priority/labels/test_cmd/plan_id/…
+mint plan get 12 body         # plan/milestone also supported
+mint milestone get 8 body
+mint issue get 42 body --json # structured {"id","field","value"}
+```
+
+> **Use `get body` for the body**: raw value is most precise. `show` TSV already has status/title/priority etc.; time/priority carry no decision value, don't rely on them. When you need the detail body, `get body` is enough — no need for `show`.
 
 ## search
 
