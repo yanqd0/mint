@@ -74,7 +74,10 @@ fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64) {
     let mut lines: Vec<Line> = Vec::new();
     if let Some(i) = m.issue(id) {
         lines.push(Line::from(format!("#{} {}", i.id, i.title)));
-        lines.push(Line::from(format!("  status:   {}", i.status.as_str())));
+        lines.push(Line::from(vec![
+            Span::raw("  status:   "),
+            Span::styled(i.status.as_str(), status_text_style(i.status)),
+        ]));
         lines.push(Line::from(format!("  kind:     {}", i.kind.as_str())));
         lines.push(Line::from(format!("  priority: {}", i.priority)));
         if let Some(p) = &i.project {
@@ -85,9 +88,6 @@ fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64) {
         }
         if !i.labels.is_empty() {
             lines.push(Line::from(format!("  labels:   {}", i.labels.join(", "))));
-        }
-        if let Some(b) = &i.body {
-            lines.push(Line::from(format!("  body:     {b}")));
         }
         if let Some(tc) = &i.test_cmd {
             lines.push(Line::from(format!("  test:     {tc}")));
@@ -109,6 +109,9 @@ fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64) {
         }
         lines.push(Line::from(format!("  created:  {}", i.created_at)));
         lines.push(Line::from(format!("  updated:  {}", i.updated_at)));
+        if let Some(b) = &i.body {
+            lines.push(Line::from(format!("  body:     {b}")));
+        }
     } else {
         lines.push(Line::from(format!("#{id} (deleted)")));
     }

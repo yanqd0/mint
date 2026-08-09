@@ -1509,7 +1509,7 @@ fn st_tui_dashboard_output() {
         .clone();
     let text = String::from_utf8_lossy(&out).to_string();
     assert!(text.contains("mint · issues"), "标题: {text}");
-    assert!(text.contains("open rate"), "进度: {text}");
+    assert!(text.contains("progress:"), "进度: {text}");
     assert!(text.contains("dashboard issue"), "issue: {text}");
     assert!(text.contains("●"), "状态点: {text}");
 }

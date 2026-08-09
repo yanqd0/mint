@@ -13,9 +13,6 @@ pub fn format_issue(i: &Issue) -> String {
         "  project: {}\n",
         i.project.as_deref().unwrap_or("?")
     ));
-    if let Some(b) = &i.body {
-        out.push_str(&format!("  body:    {b}\n"));
-    }
     if i.hit_count > 0 {
         out.push_str(&format!("  hit:     {}\n", i.hit_count));
     }
@@ -42,6 +39,9 @@ pub fn format_issue(i: &Issue) -> String {
     }
     out.push_str(&format!("  created: {}\n", i.created_at));
     out.push_str(&format!("  updated: {}\n", i.updated_at));
+    if let Some(b) = &i.body {
+        out.push_str(&format!("  body:    {b}\n"));
+    }
     out
 }
 
