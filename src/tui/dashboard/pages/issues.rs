@@ -1,15 +1,16 @@
 //! issues 页面：进度条（open 率）+ 状态点列表（Issue/Plan 面板共用）。
 
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::{Constraint, Rect};
 use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use crate::models::Status;
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{progress_bar, status_dot, status_text_style};
 use crate::tui::dashboard::types::View;
+use crate::tui::panel::{render_panel, stack};
 
 /// 面板标题（Issues tab 或 PlanDetail）。
 fn panel_title(m: &DashboardModel) -> String {
@@ -20,7 +21,7 @@ fn panel_title(m: &DashboardModel) -> String {
     }
 }
 
-/// 渲染 issue 列表面板：进度条（open 率）+ 状态点列表 + footer（Issues tab / PlanDetail 共用）。
+/// 渲染 issues 页面：进度 panel（上）+ 列表 panel（下）+ footer（Issues tab / PlanDetail 共用）。
 pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let all = m.visible_issues();
     let page = m.page_issues();
@@ -37,9 +38,12 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
         .and_then(|d| d.checked_div(total))
         .unwrap_or(0);
 
-    let mut lines: Vec<Line> = Vec::new();
-    lines.push(progress_bar(&all));
-    lines.push(Line::from(format!("  progress: {progress_rate}%")));
+    // 进度 panel：open 率进度条 + 百分比。
+    let mut prog_lines = vec![progress_bar(&all)];
+    prog_lines.push(Line::from(format!("  progress: {progress_rate}%")));
+
+    // 列表 panel：状态点 + issue 行。
+    let mut list_lines: Vec<Line> = Vec::new();
     for (idx, i) in page.iter().enumerate() {
         let (dot, dot_style) = status_dot(i.status);
         let selected = idx == m.selected;
@@ -48,7 +52,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
         } else {
             status_text_style(i.status)
         };
-        lines.push(Line::from(vec![
+        list_lines.push(Line::from(vec![
             Span::styled(format!("{dot} "), dot_style),
             Span::styled(
                 format!("#{} {} {}", i.id, i.status.as_str(), i.title),
@@ -62,12 +66,17 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
         m.page + 1,
         m.pages()
     );
-    let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
-    frame.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title(panel_title(m))),
-        chunks[0],
+    let chunks = stack(
+        area,
+        &[
+            Constraint::Length(4),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ],
     );
-    frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
+    render_panel(frame, chunks[0], "progress", prog_lines);
+    render_panel(frame, chunks[1], &panel_title(m), list_lines);
+    frame.render_widget(Paragraph::new(Line::from(footer)), chunks[2]);
 }
 
 #[cfg(test)]
