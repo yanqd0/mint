@@ -53,6 +53,7 @@ pub fn model_with(issues: Vec<Issue>) -> DashboardModel {
         plans: vec![],
         milestones: vec![],
         project: "mint".into(),
+        milestone_directs: vec![],
     });
     m
 }
@@ -68,6 +69,7 @@ pub fn model_full(
         plans,
         milestones,
         project: "mint".into(),
+        milestone_directs: vec![],
     });
     m
 }

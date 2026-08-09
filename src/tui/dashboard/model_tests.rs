@@ -60,6 +60,7 @@ fn snap(issues: Vec<Issue>, plans: Vec<(Container, i64)>) -> DashboardSnapshot {
         plans,
         milestones: vec![],
         project: "mint".into(),
+        milestone_directs: vec![],
     }
 }
 
@@ -73,6 +74,7 @@ fn snap_full(
         plans,
         milestones,
         project: "mint".into(),
+        milestone_directs: vec![],
     }
 }
 

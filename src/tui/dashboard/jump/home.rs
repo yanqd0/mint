@@ -34,6 +34,7 @@ mod tests {
             plans: vec![],
             milestones: vec![],
             project: "mint".into(),
+            milestone_directs: vec![],
         }
     }
 

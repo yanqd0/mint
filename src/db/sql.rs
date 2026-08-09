@@ -51,6 +51,7 @@ pub const MILESTONE_ATTACH: &str = include_str!("queries/milestone_attach.sql");
 pub const MILESTONE_DETACH: &str = include_str!("queries/milestone_detach.sql");
 pub const MILESTONE_DIRECT_DELETE_BY_ISSUE: &str =
     include_str!("queries/milestone_direct_delete_by_issue.sql");
+pub const MILESTONE_DIRECTS_ALL: &str = include_str!("queries/milestone_directs_all.sql");
 pub const MILESTONE_ISSUES_FOR: &str = include_str!("queries/milestone_issues_for.sql");
 pub const MILESTONE_UPDATE_STATUS: &str = include_str!("queries/milestone_update_status.sql");
 pub const MILESTONE_UPDATE: &str = include_str!("queries/milestone_update.sql");

@@ -31,11 +31,18 @@ pub fn load_snapshot(conn: &Connection, project: &str) -> Result<DashboardSnapsh
     }
     let plans = container::list(conn, ContainerKind::Plan, true)?;
     let milestones = container::list(conn, ContainerKind::Milestone, true)?;
+    // milestone 直属 issue 关联（详情页直属 issue 列表用）。
+    let milestone_directs = {
+        let mut stmt = conn.prepare(db::MILESTONE_DIRECTS_ALL)?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<Result<Vec<_>, _>>()?
+    };
     Ok(DashboardSnapshot {
         issues,
         plans,
         milestones,
         project: project.to_string(),
+        milestone_directs,
     })
 }
 

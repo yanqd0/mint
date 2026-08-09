@@ -27,6 +27,8 @@ pub struct DashboardModel {
     pub issues: Vec<Issue>,
     pub plans: Vec<(Container, i64)>,
     pub milestones: Vec<(Container, i64)>,
+    /// milestone 直属 issue 关联（详情页直属 issue 列表用）。
+    pub milestone_directs: Vec<(i64, i64)>,
     pub(crate) prev: Option<DashboardSnapshot>,
     /// 当前面板页（0-based，每页 page_size 行）。
     pub page: usize,
@@ -66,6 +68,7 @@ impl DashboardModel {
             issues: Vec::new(),
             plans: Vec::new(),
             milestones: Vec::new(),
+            milestone_directs: Vec::new(),
             prev: None,
             page: 0,
             page_size: 10,
@@ -98,6 +101,7 @@ impl DashboardModel {
         self.issues = issues;
         self.plans = snapshot.plans.clone();
         self.milestones = snapshot.milestones.clone();
+        self.milestone_directs = snapshot.milestone_directs.clone();
         self.project = snapshot.project.clone();
         self.prev = Some(snapshot);
         self.view = View::Issues;
@@ -145,6 +149,7 @@ impl DashboardModel {
         self.issues = issues;
         self.plans = snapshot.plans.clone();
         self.milestones = snapshot.milestones.clone();
+        self.milestone_directs = snapshot.milestone_directs.clone();
         self.prev = Some(snapshot.clone());
         self.clamp_selected();
         self.clamp_page();

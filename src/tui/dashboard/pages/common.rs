@@ -2,6 +2,7 @@
 
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
 
 use crate::models::{ContainerStatus, Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
@@ -111,6 +112,19 @@ pub fn truncate(s: &str, max: usize) -> String {
     }
     out.push('…');
     out
+}
+
+/// body 段落：wrap 多行 + 圆角 border + 标题（issue/plan/milestone 详情 body panel 共用）。
+pub fn body_paragraph(body: &str, title: &str) -> Paragraph<'static> {
+    let lines: Vec<Line> = body
+        .split('\n')
+        .map(|l| Line::from(l.to_string()))
+        .collect();
+    Paragraph::new(lines).wrap(Wrap { trim: true }).block(
+        Block::bordered()
+            .border_type(BorderType::Rounded)
+            .title(title.to_string()),
+    )
 }
 
 /// 键值对多列布局：按可用宽度估算列数，逐列对齐（列宽 = 该列最宽 + 2 padding）。

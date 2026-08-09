@@ -12,6 +12,8 @@ pub struct DashboardSnapshot {
     pub milestones: Vec<(Container, i64)>,
     /// 当前项目名（外框标题用）。
     pub project: String,
+    /// milestone 直属 issue 关联（milestone_id, issue_id），详情页直属 issue 列表用。
+    pub milestone_directs: Vec<(i64, i64)>,
 }
 
 impl DashboardSnapshot {
@@ -227,6 +229,7 @@ mod tests {
             plans,
             milestones: vec![],
             project: "mint".into(),
+            milestone_directs: vec![],
         }
     }
 

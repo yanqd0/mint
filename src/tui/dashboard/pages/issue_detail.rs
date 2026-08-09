@@ -3,10 +3,9 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::text::Line;
-use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::kv_lines;
+use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines};
 use crate::tui::panel::{render_panel, stack};
 
 /// 渲染 issue 详情：basic（键值对动态多列）→ tags → test → body（弹性）→ links。
@@ -92,15 +91,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64, area: Rect) {
         ci += 1;
     }
     if let Some(b) = &issue.body {
-        let lines: Vec<Line> = b.split('\n').map(|l| Line::from(l.to_string())).collect();
-        frame.render_widget(
-            Paragraph::new(lines).wrap(Wrap { trim: true }).block(
-                Block::bordered()
-                    .border_type(BorderType::Rounded)
-                    .title("body"),
-            ),
-            chunks[ci],
-        );
+        frame.render_widget(body_paragraph(b, "body"), chunks[ci]);
         ci += 1;
     }
     if !issue.links.is_empty() {

@@ -1,14 +1,13 @@
-//! plan 详情页：自身信息 panel + kanban（6 态分列）+ issue list panel。
+//! plan 详情页：basic（键值对）+ body + kanban（6 态分列）+ issue list panel。
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
-use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
+use ratatui::text::Line;
 use ratatui::widgets::Paragraph;
 
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{container_status_color, truncate};
+use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, truncate};
 use crate::tui::dashboard::pages::issues;
 use crate::tui::panel::{columns, render_panel, stack};
 
@@ -22,27 +21,59 @@ const STATUSES: [Status; 6] = [
     Status::Dropped,
 ];
 
-/// PlanDetail：自身信息 / kanban / issue list 三个 panel。
+/// PlanDetail：basic / body / kanban / issue list 四个 panel。
 pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Rect) {
-    // 1. 自身信息 panel。
+    let Some((c, _)) = m.plans.iter().find(|(c, _)| c.id == plan_id) else {
+        render_panel(
+            frame,
+            area,
+            "plan",
+            vec![Line::from(format!("#{plan_id} (deleted)"))],
+        );
+        return;
+    };
     let (done, total) = m.plan_progress(plan_id);
-    let mut info_lines = Vec::new();
-    if let Some((c, _)) = m.plans.iter().find(|(c, _)| c.id == plan_id) {
-        info_lines.push(Line::from(vec![
-            Span::raw(format!("#{} ", c.id)),
-            Span::styled(c.title.as_str(), Style::new().add_modifier(Modifier::BOLD)),
-        ]));
-        info_lines.push(Line::from(vec![
-            Span::raw("  status: "),
-            Span::styled(
-                c.status.as_str(),
-                Style::new().fg(container_status_color(c.status)),
-            ),
-            Span::raw(format!("   progress: {done}/{total}")),
-        ]));
+
+    // 1. basic 键值对（有值才显；milestone 显 #N）。
+    let mut kv: Vec<(String, String)> = vec![
+        ("status".into(), c.status.as_str().to_string()),
+        ("progress".into(), format!("{done}/{total}")),
+    ];
+    if let Some(mid) = c.milestone_id {
+        kv.push(("milestone".into(), format!("#{mid}")));
+    }
+    if let Some(v) = &c.version {
+        kv.push(("version".into(), v.clone()));
+    }
+    kv.push(("created".into(), c.created_at.clone()));
+    kv.push(("updated".into(), c.updated_at.clone()));
+    let basic_rows = kv_lines(&kv, area.width.saturating_sub(4));
+
+    // 布局：basic + body(有) + kanban(10) + issues(弹性) + footer。
+    let mut constraints: Vec<Constraint> = vec![Constraint::Length(basic_rows.len() as u16 + 2)];
+    if c.body.is_some() {
+        constraints.push(Constraint::Length(4));
+    }
+    constraints.push(Constraint::Length(10));
+    constraints.push(Constraint::Min(0));
+    constraints.push(Constraint::Length(1));
+    let chunks = stack(area, &constraints);
+    let mut ci = 0;
+
+    render_panel(
+        frame,
+        chunks[ci],
+        &format!("#{} {}", c.id, c.title),
+        basic_rows,
+    );
+    ci += 1;
+
+    if let Some(b) = &c.body {
+        frame.render_widget(body_paragraph(b, "body"), chunks[ci]);
+        ci += 1;
     }
 
-    // 2. kanban panel（6 态分列，ID+截断标题）。
+    // kanban panel（6 态分列，ID+截断标题）。
     let plan_issues: Vec<&Issue> = m.visible_issues();
     let kanban_cols: Vec<(String, Vec<String>)> = STATUSES
         .iter()
@@ -64,18 +95,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
         })
         .collect();
 
-    let chunks = stack(
-        area,
-        &[
-            Constraint::Length(4),
-            Constraint::Length(10),
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ],
-    );
-    render_panel(frame, chunks[0], &format!("plan #{plan_id}"), info_lines);
-
-    let k_cols = columns(chunks[1], &[Constraint::Percentage(17); 6]);
+    let k_cols = columns(chunks[ci], &[Constraint::Percentage(17); 6]);
     for (i, (title, rows)) in kanban_cols.iter().enumerate() {
         let mut lines: Vec<Line> = rows.iter().map(|r| Line::from(r.clone())).collect();
         if lines.is_empty() {
@@ -83,13 +103,14 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
         }
         render_panel(frame, k_cols[i], title, lines);
     }
+    ci += 1;
 
-    // 3. issue list panel（复用 issues 页）。
-    issues::draw_issues_panel(frame, m, chunks[2]);
-    // 4. footer。
+    // issue list panel（复用 issues 页）。
+    issues::draw_issues_panel(frame, m, chunks[ci]);
+    ci += 1;
     frame.render_widget(
         Paragraph::new(Line::from("Esc back · 1/2/3 tab · q quit")),
-        chunks[3],
+        chunks[ci],
     );
 }
 
@@ -126,5 +147,20 @@ mod tests {
         assert!(text.contains("open (1)"), "kanban open 列: {text}");
         assert!(text.contains("done (1)"), "kanban done 列: {text}");
         assert!(text.contains("#1 open"), "kanban 行: {text}");
+    }
+
+    #[test]
+    fn plan_detail_shows_body_panel_when_present() {
+        let mut m = model_full(
+            vec![mk_issue(1, "task", Status::Open, Some(7))],
+            vec![(mk_container(7, "tui plan", None, None), 0)],
+            vec![],
+        );
+        m.plans[0].0.body = Some("plan body content".into());
+        m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
+        let mut terminal = test_backend(120, 24);
+        terminal.draw(|f| draw_detail(f, &m, 7, f.area())).unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("plan body content"), "body panel: {text}");
     }
 }
