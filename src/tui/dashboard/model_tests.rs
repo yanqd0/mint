@@ -314,7 +314,9 @@ fn shift_p_plans_selected_issue() {
         m.handle_key(KeyCode::Char('P')),
         KeyAction::State {
             id: 1,
-            action: Action::Plan
+            action: Action::Plan,
+            test_cmd: None,
+            reason: None
         }
     );
     m.handle_key(KeyCode::Down);
@@ -322,7 +324,9 @@ fn shift_p_plans_selected_issue() {
         m.handle_key(KeyCode::Char('S')),
         KeyAction::State {
             id: 2,
-            action: Action::Start
+            action: Action::Start,
+            test_cmd: None,
+            reason: None
         }
     );
 }
@@ -336,7 +340,9 @@ fn shift_state_key_in_issue_detail_targets_current() {
         m.handle_key(KeyCode::Char('C')),
         KeyAction::State {
             id: 7,
-            action: Action::Commit
+            action: Action::Commit,
+            test_cmd: None,
+            reason: None
         }
     );
 }
@@ -354,4 +360,77 @@ fn shift_state_key_with_no_selection_is_noop() {
     let mut m = DashboardModel::new();
     m.init(snap(vec![], vec![])); // 空 issue 列表
     assert_eq!(m.handle_key(KeyCode::Char('D')), KeyAction::None);
+}
+
+#[test]
+fn close_key_enters_input_state() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![mk_issue(1, Status::Test, None, "1")], vec![]));
+    let r = m.handle_key(KeyCode::Char('X')); // Shift+X close → 输入态
+    assert_eq!(r, KeyAction::None);
+    let inp = m.input.as_ref().unwrap();
+    assert_eq!(inp.id, 1);
+    assert_eq!(inp.action, Action::Close);
+    assert_eq!(inp.value, "");
+}
+
+#[test]
+fn input_state_typing_and_enter_commits_close() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![mk_issue(1, Status::Test, None, "1")], vec![]));
+    m.handle_key(KeyCode::Char('X')); // 进输入态
+    for c in "go test".chars() {
+        m.handle_key(KeyCode::Char(c));
+    }
+    let r = m.handle_key(KeyCode::Enter);
+    assert_eq!(
+        r,
+        KeyAction::State {
+            id: 1,
+            action: Action::Close,
+            test_cmd: Some("go test".into()),
+            reason: None
+        }
+    );
+    assert!(m.input.is_none()); // 提交后退出输入态
+}
+
+#[test]
+fn input_state_empty_enter_stays_in_input() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![mk_issue(1, Status::Test, None, "1")], vec![]));
+    m.handle_key(KeyCode::Char('X'));
+    let r = m.handle_key(KeyCode::Enter); // 空值不放行
+    assert_eq!(r, KeyAction::None);
+    assert!(m.input.is_some());
+}
+
+#[test]
+fn input_state_esc_cancels() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![mk_issue(1, Status::Test, None, "1")], vec![]));
+    m.handle_key(KeyCode::Char('X'));
+    m.handle_key(KeyCode::Char('a'));
+    m.handle_key(KeyCode::Esc);
+    assert!(m.input.is_none());
+}
+
+#[test]
+fn input_state_drop_commits_reason() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
+    m.handle_key(KeyCode::Char('D')); // Shift+D drop → 输入态
+    for c in "won't fix".chars() {
+        m.handle_key(KeyCode::Char(c));
+    }
+    let r = m.handle_key(KeyCode::Enter);
+    assert_eq!(
+        r,
+        KeyAction::State {
+            id: 1,
+            action: Action::Drop,
+            test_cmd: None,
+            reason: Some("won't fix".into())
+        }
+    );
 }

@@ -47,8 +47,13 @@ fn run_loop(
                     if let Some(code) = to_keycode(ev) {
                         match model.handle_key(code) {
                             KeyAction::Quit => return Ok(()),
-                            KeyAction::State { id, action } => {
-                                apply_state_action(conn, cwd, id, action, model);
+                            KeyAction::State {
+                                id,
+                                action,
+                                test_cmd,
+                                reason,
+                            } => {
+                                apply_state_action(conn, cwd, id, action, test_cmd, reason, model);
                                 // 操作后立即重载并刷新，面板反映最新 db 状态。
                                 let snap = load_snapshot(conn, project)?;
                                 model.refresh(&snap);
@@ -69,12 +74,14 @@ fn run_loop(
 }
 
 /// 执行 TUI 内触发的状态命令（复用 CLI 同一转换核心 `state::apply_transition`）；
-/// 结果写入 `model.notice` 供渲染层标题栏显示。
+/// `test_cmd`/`reason` 来自输入态（close/drop）；结果写入 `model.notice` 供渲染层标题栏显示。
 fn apply_state_action(
     conn: &Connection,
     cwd: &Path,
     id: i64,
     action: Action,
+    test_cmd: Option<String>,
+    reason: Option<String>,
     model: &mut DashboardModel,
 ) {
     let commit_sha = if action == Action::Commit {
@@ -87,7 +94,14 @@ fn apply_state_action(
             "commit requires a git repository (no HEAD)".to_string(),
         ))
     } else {
-        state::apply_transition(conn, id, action, None, None, commit_sha.as_deref())
+        state::apply_transition(
+            conn,
+            id,
+            action,
+            test_cmd.as_deref(),
+            reason.as_deref(),
+            commit_sha.as_deref(),
+        )
     };
     model.notice = Some(match result {
         Ok((from, to)) => format!("issue #{id}: {from} -> {to}"),
@@ -184,7 +198,7 @@ mod tests {
         let (_db_dir, conn, id) = db_with_open_issue();
         let cwd_dir = TempDir::new().unwrap();
         let mut m = DashboardModel::new();
-        apply_state_action(&conn, cwd_dir.path(), id, Action::Plan, &mut m);
+        apply_state_action(&conn, cwd_dir.path(), id, Action::Plan, None, None, &mut m);
         assert!(
             m.notice
                 .is_some_and(|n| n == format!("issue #{id}: open -> planned"))
@@ -196,7 +210,15 @@ mod tests {
         let (_db_dir, conn, id) = db_with_open_issue();
         let cwd_dir = TempDir::new().unwrap();
         let mut m = DashboardModel::new();
-        apply_state_action(&conn, cwd_dir.path(), id, Action::Commit, &mut m);
+        apply_state_action(
+            &conn,
+            cwd_dir.path(),
+            id,
+            Action::Commit,
+            None,
+            None,
+            &mut m,
+        );
         // 非 git 目录：commit 无 HEAD → 报错提示，不写库。
         assert!(
             m.notice
@@ -222,5 +244,30 @@ mod tests {
             Some(Event::Key(..))
         ));
         assert_eq!(s.poll_event(Duration::ZERO).unwrap(), None); // 空 → None
+    }
+
+    #[test]
+    fn apply_state_close_with_test_cmd_advances_to_done() {
+        use crate::state;
+        let (_db_dir, conn, id) = db_with_open_issue();
+        let cwd_dir = TempDir::new().unwrap();
+        // 走完 open→planned→dev→test，close 才能通过。
+        state::apply_transition(&conn, id, Action::Plan, None, None, None).unwrap();
+        state::apply_transition(&conn, id, Action::Start, None, None, None).unwrap();
+        state::apply_transition(&conn, id, Action::Commit, None, None, Some("abc")).unwrap();
+        let mut m = DashboardModel::new();
+        apply_state_action(
+            &conn,
+            cwd_dir.path(),
+            id,
+            Action::Close,
+            Some("not-tested".into()),
+            None,
+            &mut m,
+        );
+        assert!(
+            m.notice
+                .is_some_and(|n| n == format!("issue #{id}: test -> done"))
+        );
     }
 }

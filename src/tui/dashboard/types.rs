@@ -24,14 +24,29 @@ pub enum View {
 
 /// 键盘处理结果：run_loop 据此执行 IO（状态命令写库）或退出 dashboard。
 /// model 保持纯状态机：识别按键产出请求，不直接接触 db。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeyAction {
     /// 仅视图内处理，无需 IO。
     None,
     /// 退出 dashboard。
     Quit,
     /// 请求对指定 issue 执行状态命令（Shift+字母 触发）。
-    State { id: i64, action: Action },
+    /// `test_cmd`/`reason` 由输入态（close/drop）提交；无参数命令为 None。
+    State {
+        id: i64,
+        action: Action,
+        test_cmd: Option<String>,
+        reason: Option<String>,
+    },
+}
+
+/// TUI 参数输入态：状态命令需参数（close→test_cmd、drop→reason）时进入，
+/// 字符输入到 `value`，Enter 提交（产出 State 请求）/ Esc 取消。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InputState {
+    pub id: i64,
+    pub action: Action,
+    pub value: String,
 }
 
 /// 跳转目标视图。

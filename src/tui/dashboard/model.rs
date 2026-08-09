@@ -8,7 +8,7 @@ use crossterm::event::KeyCode;
 use crate::models::{Container, Issue};
 use crate::state::Action;
 use crate::tui::dashboard::diff::{DashboardSnapshot, diff_snapshots};
-use crate::tui::dashboard::types::{FlashItem, JumpRequest, MAX_FEED, RawJump};
+use crate::tui::dashboard::types::{FlashItem, InputState, JumpRequest, MAX_FEED, RawJump};
 
 pub use crate::tui::dashboard::types::{FeedItem, KeyAction, RefreshResult, View};
 
@@ -44,6 +44,8 @@ pub struct DashboardModel {
     pub flash: Vec<FlashItem>,
     /// 最近一次状态操作结果（"issue #N: from -> to" / "error: …"），渲染层标题栏显示。
     pub notice: Option<String>,
+    /// 参数输入态（close 的 test_cmd / drop 的 reason）；None = 普通导航。
+    pub input: Option<InputState>,
 }
 
 impl Default for DashboardModel {
@@ -72,6 +74,7 @@ impl DashboardModel {
             merge_delay: 0,
             flash: Vec::new(),
             notice: None,
+            input: None,
         }
     }
 
@@ -104,6 +107,7 @@ impl DashboardModel {
         self.merge_delay = 0;
         self.flash.clear();
         self.notice = None;
+        self.input = None;
     }
 
     /// 每 tick：diff 上一轮 → 事件前置 feed；面板自动切换。
@@ -151,9 +155,13 @@ impl DashboardModel {
     }
 
     /// 处理按键：返回 IO 请求（状态命令 / 退出）；视图内导航直接改状态后返回 None。
+    /// 输入态（close/drop 参数）优先：字符/Backspace 编辑，Enter 提交，Esc 取消。
     pub fn handle_key(&mut self, key: KeyCode) -> KeyAction {
         // 任何按键 → 用户活跃，重置空闲计时（自动切换前置失效）。
         self.user_idle = 0;
+        if let Some(inp) = self.input.take() {
+            return self.process_input(key, inp);
+        }
         match key {
             KeyCode::Char('q') => return KeyAction::Quit,
             // 状态推进快捷键：Shift+首字母（大写），操作对象 = 选中 issue / 详情当前 issue。
@@ -264,15 +272,73 @@ impl DashboardModel {
     }
 
     /// 状态键目标：Issues 选中行或 IssueDetail 当前 issue；非 issue 视图 / 无选中返回 None。
-    fn state_action(&self, action: Action) -> KeyAction {
+    /// close/drop 需参数，先进输入态；其余命令直接产出请求。
+    fn state_action(&mut self, action: Action) -> KeyAction {
         let id = match self.view {
             View::Issues => self.page_issues().get(self.selected).map(|i| i.id),
             View::IssueDetail { id } => Some(id),
             _ => None,
         };
         match id {
-            Some(id) => KeyAction::State { id, action },
+            Some(id) => match action {
+                Action::Close | Action::Drop => {
+                    self.input = Some(InputState {
+                        id,
+                        action,
+                        value: String::new(),
+                    });
+                    KeyAction::None
+                }
+                _ => KeyAction::State {
+                    id,
+                    action,
+                    test_cmd: None,
+                    reason: None,
+                },
+            },
             None => KeyAction::None,
+        }
+    }
+
+    /// 输入态按键处理：字符追加 / Backspace 删除 / Enter 提交（空值不放行）/ Esc 取消。
+    fn process_input(&mut self, key: KeyCode, mut inp: InputState) -> KeyAction {
+        match key {
+            KeyCode::Char(c) => {
+                inp.value.push(c);
+                self.input = Some(inp);
+                KeyAction::None
+            }
+            KeyCode::Backspace => {
+                inp.value.pop();
+                self.input = Some(inp);
+                KeyAction::None
+            }
+            KeyCode::Enter => {
+                let value = inp.value.trim().to_string();
+                if value.is_empty() {
+                    // close 必填 test_cmd：空值不放行，保持输入态。
+                    self.input = Some(inp);
+                    return KeyAction::None;
+                }
+                let (test_cmd, reason) = match inp.action {
+                    Action::Close => (Some(value.clone()), None),
+                    Action::Drop => (None, Some(value.clone())),
+                    _ => (None, None),
+                };
+                KeyAction::State {
+                    id: inp.id,
+                    action: inp.action,
+                    test_cmd,
+                    reason,
+                }
+            }
+            // Esc 取消输入（input 已被 take，不恢复）。
+            KeyCode::Esc => KeyAction::None,
+            // 其它键（导航等）仅保留输入态，不打断编辑。
+            _ => {
+                self.input = Some(inp);
+                KeyAction::None
+            }
         }
     }
 }
