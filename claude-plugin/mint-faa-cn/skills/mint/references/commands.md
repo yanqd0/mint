@@ -77,17 +77,17 @@ blocked_by ↔ blocks 互逆，库中归一化为 blocks 存储，查询时自�
 mint label list --all
 ```
 
-## plan / roadmap（sprint / milestone）
+## plan / milestone（sprint / milestone）
 
 ```bash
-mint roadmap create "v0.4 TUI" --version 0.4.0 --body "范围…"
-mint plan create "sprint-1" --body "目标…" --roadmap 4
-mint roadmap show 4
+mint milestone create "v0.4 TUI" --version 0.4.0 --body "范围…"
+mint plan create "sprint-1" --body "目标…" --milestone 4
+mint milestone show 4
 mint plan show 12
 mint plan attach 12 42                        # 挂 issue 到 plan
 mint plan detach 12 42                 # 解挂
-mint roadmap attach 4 42                      # 直接挂 issue 到 roadmap
-mint roadmap detach 4 42               # 解挂
+mint milestone attach 4 42                      # 直接挂 issue 到 milestone
+mint milestone detach 4 42               # 解挂
 ```
 
 ## delete
@@ -95,7 +95,7 @@ mint roadmap detach 4 42               # 解挂
 ```bash
 mint delete issue 99    # 危险：物理删除。优先用 state drop
 mint delete plan 12
-mint delete roadmap 4
+mint delete milestone 4
 ```
 
 ## JSON 输出字段

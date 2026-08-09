@@ -2,12 +2,12 @@
 
 Used by all flows when recording or advancing, to choose the right action per scenario.
 
-## Mount rules (issue is either-or: can't directly mount a roadmap after belonging to a plan)
+## Mount rules (issue is either-or: can't directly mount a milestone after belonging to a plan)
 
 | Scenario | Action |
 |---|---|
 | Has an associated plan (active plan) | `plan attach <PLAN> <ISSUE>` |
-| No plan but has target version | `roadmap attach <RM> <ISSUE>` (mount directly to roadmap/milestone) |
+| No plan but has target version | `milestone attach <RM> <ISSUE>` (mount directly to milestone/milestone) |
 | Uncertain / standalone | Don't mount (standalone issue, schedule later) |
 
 ## Test branch (close requires --test-cmd)

@@ -4,7 +4,7 @@ description: >-
   用 mint CLI 管理开发 issue 与流程。当用户描述 bug/问题/需求/遗留项/TODO/观察项/
   审查发现/计划/里程碑/milestone/sprint 等值得记录的内容时自动触发；无参数调用时
   接管 session，推测下一步开发计划。触发词：issue bug problem requirement todo
-  leftover review plan roadmap milestone sprint 登记 记录 排期 修复 需求 问题 遗留 审查 计划 里程碑 下一步。
+  leftover review plan milestone milestone sprint 登记 记录 排期 修复 需求 问题 遗留 审查 计划 里程碑 下一步。
 allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 ---
 
@@ -20,7 +20,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
    - **需求** → `references/flow-requirement.md`（issue → 排期 → 挂 plan）
    - **审查/复查报告** → `references/flow-review.md`（观察项/已修复 bugfix → 登记 + 挂活跃 plan）
    - **遗留 / TODO / 观察项** → `references/flow-todo.md`（登记，可选挂载）
-   - **版本 / 计划 / 里程碑** → `references/flow-planning.md`（roadmap/milestone create / plan/sprint create + 拆 issues）
+   - **版本 / 计划 / 里程碑** → `references/flow-planning.md`（milestone/milestone create / plan/sprint create + 拆 issues）
    - **条件分支**（挂载规则/无测试/非 git/二选一）→ `references/flow-conditions.md`
 
 2. **执行流程**：按 reference 步骤执行 mint 命令序列（issue 创建 / 挂载 / link / 状态机推进），
@@ -29,7 +29,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 3. **执行排序**：有 `blocks` 其它 issue 的先行（被依赖者先完成，类比 make）；
    同层按 priority 升序（P0→P3），同 priority 按 id 升序。
 
-4. **方案执行**（跨模块/多步骤方案）：按「方案执行登记」——第一步先建 mint plan（挂 roadmap/milestone）+ 拆相关 issue，
+4. **方案执行**（跨模块/多步骤方案）：按「方案执行登记」——第一步先建 mint plan（挂 milestone/milestone）+ 拆相关 issue，
    再执行方案；每个 issue 走状态机到 done（关联对应 commit）。
 
 ## 实现中（强制性——每次修改代码必须执行）
@@ -38,7 +38,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 
 0. **CC plan mode 审批通过后，判断该工作是否属于已有 mint plan**：
    - **属于**已有 plan → `mint plan attach <plan_id> <issue_id>` 挂入
-   - **不属于**任何已有 plan → 第一步必须是 `mint plan create` 新建 plan（挂 roadmap），再建 issue 并 attach
+   - **不属于**任何已有 plan → 第一步必须是 `mint plan create` 新建 plan（挂 milestone），再建 issue 并 attach
    - **绝不允许无 plan 直接写代码**：CC plan 必须有对应的 mint plan
 1. **CC plan mode 审批通过后，第一件事不是写代码**：
    - 将 CC plan 对应的 work 挂入 mint plan（step 0 已保证 plan 存在）
@@ -59,7 +59,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 无 `<description>` 参数时进入接管模式，代替用户初始化思考：
 
 1. **扫描 TODO/FIXME/XXX**：grep 项目代码标记，逐个转 issue（查重不重复，body 注明来源位置）。
-2. **roadmap/milestone 检查与建议**：对比现有 roadmap 与项目状态，发现新版本规划迹象 → **和用户确认后**创建（重复则不问）。
+2. **milestone/milestone 检查与建议**：对比现有 milestone 与项目状态，发现新版本规划迹象 → **和用户确认后**创建（重复则不问）。
 3. **下一步计划建议**：按 blocks 拓扑排序（被依赖者优先），同层按 priority 升序推荐下一个应开发项，附理由。
 4. **声明接管**：后续 session 直接描述意图即可，skill 自动走 mint 流程。
 
@@ -87,8 +87,8 @@ mint issue set 42 --title "新标题" --priority 1
 mint issue link create 42 solves 10
 mint issue link create 42 blocked_by 55
 
-# 计划（plan/sprint 挂 roadmap/milestone）
-mint plan create "sprint-1" --body "目标…" --roadmap 4
+# 计划（plan/sprint 挂 milestone/milestone）
+mint plan create "sprint-1" --body "目标…" --milestone 4
 mint plan attach 12 42
 ```
 
@@ -100,7 +100,7 @@ mint plan attach 12 42
 - **mint 管 issue（可执行待办），mem-lite 管记忆（事实/教训）**——不混；`issue#N` ↔ `memory#N` 关联见 `references/mem-lite.md`。
 - **开发完成必须 `state commit <id> --sha <SHA>`**（默认读 HEAD）；`close` 必填 `--test-cmd`（无测试填 `not-tested`）。
 - **方案 vs 单点区分**：跨模块/多步骤方案 → 建 plan/sprint + 拆 issues；单点小改动/审查发现/观察项 → 只记 issue。
-- **挂载规则**（`references/flow-conditions.md`）：关联 plan → 无 plan 挂 roadmap → 不挂（独立）；issue 二选一（属 plan 后不能直接挂 roadmap）。
+- **挂载规则**（`references/flow-conditions.md`）：关联 plan → 无 plan 挂 milestone → 不挂（独立）；issue 二选一（属 plan 后不能直接挂 milestone）。
 - **link**：被别的修改引入 → `link create <issue> solves <引入它的需求>`。
 - **delete 是危险/不可逆操作**：默认不使用，极窄场景 + 用户显式确认；issue 优先 `state drop`。
-- **验证产物清理**：验证性操作产生的临时 issue/plan/roadmap 验证后 `state drop` 清理（附 reason），不残留噪音。
+- **验证产物清理**：验证性操作产生的临时 issue/plan/milestone 验证后 `state drop` 清理（附 reason），不残留噪音。

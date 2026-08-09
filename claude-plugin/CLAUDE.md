@@ -67,7 +67,7 @@ claude-plugin/
 | **中文版** | 中文 + 英文触发词（覆盖中英混合开发场景） |
 | **英文版** | 仅英文触发词（不添加其它语言） |
 
-- roadmap ↔ milestone、plan ↔ sprint 为敏捷同义词，两套触发词均可命中 `flow-planning`
+- milestone、plan ↔ sprint 为敏捷同义词，两套触发词均可命中 `flow-planning`（roadmap 为 milestone 的上位概念，DDD 保留，暂不实现）
 
 ### mint 前置条件
 

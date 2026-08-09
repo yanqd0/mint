@@ -77,17 +77,17 @@ blocked_by ↔ blocks are reciprocal; stored as `blocks` internally, reverse-der
 mint label list --all
 ```
 
-## plan / roadmap (sprint / milestone)
+## plan / milestone (sprint / milestone)
 
 ```bash
-mint roadmap create "v0.4 TUI" --version 0.4.0 --body "scope…"
-mint plan create "sprint-1" --body "goal…" --roadmap 4
-mint roadmap show 4
+mint milestone create "v0.4 TUI" --version 0.4.0 --body "scope…"
+mint plan create "sprint-1" --body "goal…" --milestone 4
+mint milestone show 4
 mint plan show 12
 mint plan attach 12 42                        # attach issue to plan
 mint plan detach 12 42                 # detach
-mint roadmap attach 4 42                      # attach issue directly to roadmap
-mint roadmap detach 4 42               # detach
+mint milestone attach 4 42                      # attach issue directly to milestone
+mint milestone detach 4 42               # detach
 ```
 
 ## delete
@@ -95,7 +95,7 @@ mint roadmap detach 4 42               # detach
 ```bash
 mint delete issue 99    # DANGEROUS: permanent deletion. Prefer state drop
 mint delete plan 12
-mint delete roadmap 4
+mint delete milestone 4
 ```
 
 ## JSON Output Fields

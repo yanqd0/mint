@@ -8,7 +8,7 @@ Trigger: user describes finding a bug/problem ("found a bug: X causes Y"). kind=
    - If introduced by another change (regression) → find the introducing issue → `link create <bug_id> solves <introducing_issue_id>`.
 2. **Mount** (per flow-conditions decision table):
    - Has an associated plan (active development plan) → `plan attach <PLAN> <ISSUE>`.
-   - No plan but has target version → `roadmap attach <RM> <ISSUE>`.
+   - No plan but has target version → `milestone attach <RM> <ISSUE>`.
    - Uncertain → don't mount (standalone issue), schedule later.
 3. **Resolution**:
    - `state plan` → `state start` → fix code → `state commit --sha <SHA>` (dev→test, defaults to HEAD) →

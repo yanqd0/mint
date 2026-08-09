@@ -3,9 +3,9 @@ name: mint
 description: >-
   Manage development issues with the mint CLI. Auto-triggered when the user
   reports bugs, problems, requirements, TODOs, leftovers, review findings, or
-  plans (roadmap/milestone/sprint). When called without arguments, takes over
+  plans (milestone/milestone/sprint). When called without arguments, takes over
   the session and recommends next steps. Trigger words: issue bug problem
-  requirement todo leftover review plan roadmap milestone sprint.
+  requirement todo leftover review plan milestone milestone sprint.
 allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 ---
 
@@ -20,7 +20,7 @@ Accepts an optional positional `<description>` argument summarizing intent. When
    - **requirement** → `references/flow-requirement.md` (issue → schedule → mount plan)
    - **review / audit report** → `references/flow-review.md` (findings/fixed bugs → record + mount active plan)
    - **leftover / TODO / observation** → `references/flow-todo.md` (record, optionally mount)
-   - **version / plan / milestone** → `references/flow-planning.md` (roadmap/milestone create / plan/sprint create + split issues)
+   - **version / plan / milestone** → `references/flow-planning.md` (milestone/milestone create / plan/sprint create + split issues)
    - **conditional branches** (mount rules / no tests / non-git / either-or) → `references/flow-conditions.md`
 
 2. **Execute**: Follow the reference steps to run mint command sequences (issue creation / mount / link / state machine advancement),
@@ -29,7 +29,7 @@ Accepts an optional positional `<description>` argument summarizing intent. When
 3. **Execution order**: Issues that `blocks` others execute first (dependencies first, analogous to `make`);
    same level ordered by priority ascending (P0→P3), same priority by id ascending.
 
-4. **Multi-step plans**: For cross-module / multi-step work — first create a mint plan (under a roadmap/milestone) + split related issues,
+4. **Multi-step plans**: For cross-module / multi-step work — first create a mint plan (under a milestone/milestone) + split related issues,
    then execute; advance each issue through the state machine to done (associate the corresponding commit).
 
 ## During Implementation (MANDATORY — must execute for every code change)
@@ -38,7 +38,7 @@ Accepts an optional positional `<description>` argument summarizing intent. When
 
 0. **After CC plan mode approval, determine whether this work belongs to an existing mint plan**:
    - **Belongs** to an existing plan → `mint plan attach <plan_id> <issue_id>`
-   - **Does NOT belong** to any existing plan → first action MUST be `mint plan create` (under a roadmap), then create issues and attach
+   - **Does NOT belong** to any existing plan → first action MUST be `mint plan create` (under a milestone), then create issues and attach
    - **NEVER write code without a mint plan**: every CC plan must have a corresponding mint plan
 1. **After CC plan mode approval, the first action is NOT writing code**:
    - Attach the work to a mint plan (step 0 guarantees the plan exists)
@@ -59,7 +59,7 @@ Accepts an optional positional `<description>` argument summarizing intent. When
 When called without `<description>`, enters takeover mode to replace initial thinking:
 
 1. **Scan TODO/FIXME/XXX**: grep project code markers, convert each to an issue (dedup, no duplicates; body notes source location).
-2. **Roadmap/milestone check**: Compare existing roadmaps with project state; suggest creating new ones when version planning signs appear → **confirm with user** before creating (skip if duplicate).
+2. **Milestone/milestone check**: Compare existing milestones with project state; suggest creating new ones when version planning signs appear → **confirm with user** before creating (skip if duplicate).
 3. **Next step recommendation**: Topological sort by blocks (dependencies first), same level by priority ascending, with rationale.
 4. **Declare takeover**: Subsequent sessions can describe intent directly; the skill auto-follows the mint flow.
 
@@ -87,8 +87,8 @@ mint issue set 42 --title "new title" --priority 1
 mint issue link create 42 solves 10
 mint issue link create 42 blocked_by 55
 
-# Plans (plan/sprint under roadmap/milestone)
-mint plan create "sprint-1" --body "goal…" --roadmap 4
+# Plans (plan/sprint under milestone/milestone)
+mint plan create "sprint-1" --body "goal…" --milestone 4
 mint plan attach 12 42
 ```
 
@@ -100,7 +100,7 @@ See `references/commands.md` for the full command reference and `mint <sub> --he
 - **mint manages issues (actionable todos), mem-lite manages memories (facts/lessons)** — do not mix; `issue#N` ↔ `memory#N` linkage: see `references/mem-lite.md`.
 - **Completion requires `state commit <id> --sha <SHA>`** (defaults to HEAD); `close` requires `--test-cmd` (use `not-tested` if tests were skipped).
 - **Plan vs. single-item**: cross-module/multi-step → create a plan/sprint + split issues; single small fix/review finding → just record an issue.
-- **Mount rules** (`references/flow-conditions.md`): associate with plan → no plan? mount roadmap → neither (standalone); issue is either-or (can't directly mount a roadmap after belonging to a plan).
+- **Mount rules** (`references/flow-conditions.md`): associate with plan → no plan? mount milestone → neither (standalone); issue is either-or (can't directly mount a milestone after belonging to a plan).
 - **link**: introduced by another change → `link create <issue> solves <introducing-requirement>`.
 - **delete is dangerous/irreversible**: avoid by default, narrow scenarios only + explicit user confirmation; prefer `state drop` for issues.
-- **Clean up verification artifacts**: temporary issues/plans/roadmaps created during verification should be `state drop`ped (with reason) to avoid noise.
+- **Clean up verification artifacts**: temporary issues/plans/milestones created during verification should be `state drop`ped (with reason) to avoid noise.
