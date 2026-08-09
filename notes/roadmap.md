@@ -60,7 +60,7 @@
 - 去重：标题归一化 + 模糊匹配，`hit_count` bump，打印"已合并 #id"
 - FTS 全文搜索：`mint search <q>`（FTS5 + 触发器同步）
 - Claude Code 适配器：plugin 化交付（skill + hooks + 私有 marketplace，`claude-plugin/`）
-  - hooks：PostToolUseFailure（注入失败信号供 LLM 判断后 `mint add`）+ SessionStart（注入 `mint list` top8）
+  - hooks：PostToolUseFailure（注入失败信号供 LLM 判断后 `mint add`）+ SessionStart（注入 `mint list` TSV top8）
   - skill：`mint-faa`（en）/ `mint-faa-cn`（中文 = mint-dogfood 本体），主动 add / 开始前先 search
   - 状态机提示词写入 skill（跳过测试也走 stage、test_cmd 填 `not-tested`）
   - 安装：`claude plugin marketplace add <claude-plugin>` → `claude plugin install mint-faa@mint`（二选一）
@@ -83,7 +83,7 @@
 
 **已交付**（plan #16 第一步，2026-08-09）：
 - 4 个 list 命令（`mint list`/`issue list`、`plan list`、`roadmap list`、`label list`）加 `--tui`：TTY 下 ratatui 可翻页表格（j/k 或 ↑/↓ 选行、PgUp/PgDn 或 h/l 翻页、q/Esc 退出）；非 TTY 降级输出单页表格文本（不可交互）。
-- 同一批 list 命令加 `--tsv`：表头首行 + tab 分隔数据行，token 最优（喂 LLM 场景）。
+- 同一批 list 命令默认输出改 TSV（表头首行 + tab 分隔数据行，token 最优）；`--tsv` 参数移除（默认即 TSV）。
 - 公共代码：分页三件套提升至 `src/cli/list_common.rs`；TUI 渲染分层 `src/tui/`（model 纯状态机/draw/rows）。
 - 依赖：ratatui 0.30 + crossterm 0.29（默认包含）；列宽按 Unicode 显示宽度对齐（中英文混排）。
 
@@ -160,7 +160,7 @@
 ## 开放问题
 
 - 去重算法细节（相似度阈值、多候选选择）——0.3.0 前定案
-- SessionStart 注入预算（条数与格式上限，token 敏感）——0.3.0 前定案
+- SessionStart 注入预算（条数与格式上限，token 敏感；TSV 表头占 1 行预算）——0.3.0 前定案
 - 去内置 SQLite 的评估方法与替换候选——0.6.0 前定案
 - i18n 的实现方式（gettext / 内建表 / 编译期）——1.0 前定案
 - S3 桶配置形态（bucket 名/region/鉴权来源，`MINT_` 前缀环境变量）——0.5.0 前定案

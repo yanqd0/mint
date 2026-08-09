@@ -8,7 +8,7 @@
   - TTY：ratatui 可翻页表格（j/k 或 ↑/↓ 选行，PgUp/PgDn 或 h/l 翻页，q/Esc 退出）。
   - 非 TTY：降级输出单页表格文本（不可交互，脚本/CI 安全）。
   - `--tui` 与 `--json` 互斥；列宽按 Unicode 显示宽度对齐（中英文混排）。
-- list 类命令 `--tsv` 输出：表头首行 + tab 分隔数据行（token 最优，喂 LLM 场景），与 `--json`/`--tui` 互斥。
+- list 类默认输出改 TSV：表头首行 + tab 分隔数据行（token 最优，喂 LLM 场景）；`--tsv` 参数移除（默认即 TSV），`--json`/`--tui` 保留。
 
 ### Others
 

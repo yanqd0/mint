@@ -280,6 +280,22 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D26. list 默认输出改 TSV
+
+**背景**：`--tsv` 实测 token 最优（242 vs 默认文本 286 vs `--json` 1076，全量 11 条），且表头 + tab 显式分隔让 LLM 解析更可靠（默认空格对齐的字段边界靠列宽约定，标题含空格时易歧义）。mint 定位"AI 记录、人工 CLI/TUI 查看"，默认纯文本主要消费方是 LLM/agent/脚本。
+
+**决策**：
+- **list 类默认输出改 TSV**（表头首行 + tab 分隔），`cmd_list`/`cmd_search`/`cmd_container_list`/`cmd_label_list` 默认分支统一。
+- **`--tsv` 参数删除**（默认即 TSV，冗余）；`--json`/`--tui` 保留。
+- `rows.rs`（数据→列矩阵）提升至 `src/cli/list_common.rs`（原 `tui::rows`），供默认 TSV 与 `--tui` 共用。
+- 删除旧空格对齐格式器 `format_list`/`format_container_list`。
+- `inject_context.sh`（SessionStart hook）`head -8` → `head -9`（TSV 表头占首行）。
+- skill 内查重仍走 `--json`（机器查重需结构化精确匹配）。
+
+**理由**：token 最优 + 解析确定性；人类终端浏览由 `--tui`（ratatui 表格）承担；单一默认格式少维护。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前

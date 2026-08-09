@@ -149,7 +149,7 @@ hook 事件的统一入口：接收 agent 传来的信号并登记。**0.3.0 定
 
 ### context（上下文注入）
 
-会话启动时注入当前待办，让 agent 开箱即知。**0.3.0 定案（D24）**：不新增 context 命令——SessionStart hook 直接 `mint list` 输出注入（head 截断 top 8，当前项目活跃 issue）。
+会话启动时注入当前待办，让 agent 开箱即知。**0.3.0 定案（D24）**：不新增 context 命令——SessionStart hook 直接 `mint list` 输出注入（TSV 表头 + top 8，当前项目活跃 issue）。
 
 ### adapter（适配器）
 
