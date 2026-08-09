@@ -83,6 +83,7 @@
 
 **已交付**（plan #16 第一步，2026-08-09）：
 - 4 个 list 命令（`mint list`/`issue list`、`plan list`、`roadmap list`、`label list`）加 `--tui`：TTY 下 ratatui 可翻页表格（j/k 或 ↑/↓ 选行、PgUp/PgDn 或 h/l 翻页、q/Esc 退出）；非 TTY 降级输出单页表格文本（不可交互）。
+- 同一批 list 命令加 `--tsv`：表头首行 + tab 分隔数据行，token 最优（喂 LLM 场景）。
 - 公共代码：分页三件套提升至 `src/cli/list_common.rs`；TUI 渲染分层 `src/tui/`（model 纯状态机/draw/rows）。
 - 依赖：ratatui 0.30 + crossterm 0.29（默认包含）；列宽按 Unicode 显示宽度对齐（中英文混排）。
 
