@@ -295,6 +295,14 @@ impl DashboardModel {
                         self.selected = 0;
                     }
                 }
+                View::MilestoneDetail { .. } => {
+                    // milestone 详情：进入选中的 plan 详情。
+                    if let Some((c, _)) = self.page_plans().get(self.selected) {
+                        self.view = View::PlanDetail { plan_id: c.id };
+                        self.page = 0;
+                        self.selected = 0;
+                    }
+                }
                 _ => {}
             },
             KeyCode::Esc => match self.view {
@@ -883,6 +891,31 @@ mod tests {
         assert_eq!(m.view, View::MilestoneDetail { milestone_id: 4 });
         m.handle_key(KeyCode::Esc);
         assert_eq!(m.view, View::Milestones);
+    }
+
+    #[test]
+    fn milestone_detail_enter_opens_plan_detail() {
+        let mut m = DashboardModel::new();
+        m.init(snap_full(
+            vec![mk_issue(1, Status::Dev, Some(7), "1")],
+            vec![(mk_plan(7, Some(4), "1"), 0)],
+            vec![(mk_container(4), 0)],
+        ));
+        m.view = View::MilestoneDetail { milestone_id: 4 };
+        m.handle_key(KeyCode::Enter);
+        assert_eq!(m.view, View::PlanDetail { plan_id: 7 });
+        m.handle_key(KeyCode::Esc);
+        assert_eq!(m.view, View::Plans);
+    }
+
+    #[test]
+    fn number_keys_from_detail_switch_tab() {
+        let mut m = DashboardModel::new();
+        m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
+        m.handle_key(KeyCode::Enter); // IssueDetail
+        assert_eq!(m.view, View::IssueDetail { id: 1 });
+        m.handle_key(KeyCode::Char('2'));
+        assert_eq!(m.view, View::Plans);
     }
 
     #[test]
