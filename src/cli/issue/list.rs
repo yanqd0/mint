@@ -33,6 +33,9 @@ pub struct ListArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
+    /// Table view (interactive on TTY, single page otherwise)
+    #[arg(long, conflicts_with = "json")]
+    pub tui: bool,
 }
 
 #[derive(clap::Args)]
