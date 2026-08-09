@@ -46,7 +46,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         let bar = mini_bar(pdone, ptotal, 20);
         plan_lines.push(Line::from(vec![
             Span::raw(format!("#{:<3}", plan.id)),
-            Span::raw(format!("[{bar}]")),
+            Span::raw(format!("{bar}")),
             Span::raw(format!(" {pdone}/{ptotal}  {}", plan.title)),
         ]));
     }

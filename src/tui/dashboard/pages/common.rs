@@ -50,31 +50,36 @@ pub fn status_text_style(status: Status) -> Style {
     Style::new().fg(status_color(status))
 }
 
-/// 进度条段样式：亮=未完成、亮闪=在做、暗=完成、红=drop。
+/// 进度条段样式：高亮=完成、低亮=未完成（符合直觉）。
 fn progress_style(status: Status) -> Style {
     if status == Status::Done {
-        Style::new().fg(Color::DarkGray)
+        Style::new().fg(Color::White)
     } else {
-        status_style(status)
+        Style::new().fg(Color::DarkGray)
     }
 }
 
-/// 进度条：每段 = 一个 issue（open 率可视化）。
+/// 进度条：每段 = 一个 issue（open 率可视化），前后各 1 空格 padding。
 pub fn progress_bar(issues: &[&Issue]) -> Line<'static> {
-    let spans: Vec<Span> = issues
-        .iter()
-        .map(|i| Span::styled("█", progress_style(i.status)))
-        .collect();
+    let mut spans: Vec<Span> = vec![Span::raw(" ")];
+    spans.extend(
+        issues
+            .iter()
+            .map(|i| Span::styled("█", progress_style(i.status))),
+    );
+    spans.push(Span::raw(" "));
     Line::from(spans)
 }
 
-/// 迷你进度条：固定宽度，█ 填充完成比例（milestone 面板每行 plan 用）。
+/// 迷你进度条：固定宽度，█ 填充完成比例（milestone/plan 面板每行用），前后 padding。
 pub fn mini_bar(done: usize, total: usize, width: usize) -> String {
-    if total == 0 {
-        return "░".repeat(width);
-    }
-    let filled = done.saturating_mul(width).checked_div(total).unwrap_or(0);
-    "█".repeat(filled) + &"░".repeat(width - filled)
+    let body = if total == 0 {
+        "░".repeat(width)
+    } else {
+        let filled = done.saturating_mul(width).checked_div(total).unwrap_or(0);
+        "█".repeat(filled) + &"░".repeat(width - filled)
+    };
+    format!(" {body} ")
 }
 
 /// 按显示宽度截断字符串（超出加 …，总宽 ≤ max；kanban 列标题等用）。
@@ -126,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn progress_bar_one_segment_per_issue() {
+    fn progress_bar_one_segment_per_issue_with_padding() {
         let issues = [
             mk_issue(1, Status::Open),
             mk_issue(2, Status::Dev),
@@ -134,8 +139,10 @@ mod tests {
         ];
         let refs: Vec<&Issue> = issues.iter().collect();
         let line = progress_bar(&refs);
-        assert_eq!(line.spans.len(), 3);
-        assert_eq!(line.spans[0].content, "█");
+        assert_eq!(line.spans.len(), 5); // 空格 + 3 段 + 空格
+        assert_eq!(line.spans[0].content, " ");
+        assert_eq!(line.spans[1].content, "█");
+        assert_eq!(line.spans[4].content, " ");
     }
 
     #[test]
@@ -179,10 +186,10 @@ mod tests {
     }
 
     #[test]
-    fn mini_bar_fills_by_ratio() {
-        assert_eq!(mini_bar(0, 0, 4), "░".repeat(4));
-        assert_eq!(mini_bar(1, 2, 4), "██░░");
-        assert_eq!(mini_bar(2, 2, 4), "████");
-        assert_eq!(mini_bar(0, 2, 4), "░░░░");
+    fn mini_bar_fills_by_ratio_with_padding() {
+        assert_eq!(mini_bar(0, 0, 4), " ░░░░ ");
+        assert_eq!(mini_bar(1, 2, 4), " ██░░ ");
+        assert_eq!(mini_bar(2, 2, 4), " ████ ");
+        assert_eq!(mini_bar(0, 2, 4), " ░░░░ ");
     }
 }
