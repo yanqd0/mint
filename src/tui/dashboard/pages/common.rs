@@ -61,24 +61,37 @@ pub fn status_text_style(status: Status) -> Style {
     Style::new().fg(status_color(status))
 }
 
-/// 进度条段样式：高亮=完成、低亮=未完成（符合直觉）。
+/// 进度条段样式：open 暗黄 / planned 亮黄 / dev 暗绿 / test 亮绿 / done 白 / dropped 亮红（计入完成）。
 fn progress_style(status: Status) -> Style {
-    if status == Status::Done {
-        Style::new().fg(Color::White)
-    } else {
-        Style::new().fg(Color::DarkGray)
+    match status {
+        Status::Open => Style::new().fg(Color::Yellow).add_modifier(Modifier::DIM),
+        Status::Planned => Style::new().fg(Color::Yellow),
+        Status::Dev => Style::new().fg(Color::Green).add_modifier(Modifier::DIM),
+        Status::Test => Style::new().fg(Color::Green),
+        Status::Done => Style::new().fg(Color::White),
+        Status::Dropped => Style::new().fg(Color::Red),
     }
 }
 
-/// 进度条：每段 = 一个 issue（open 率可视化），前后各 1 空格 padding。
-pub fn progress_bar(issues: &[&Issue]) -> Line<'static> {
-    let mut spans: Vec<Span> = vec![Span::raw(" ")];
-    spans.extend(
-        issues
-            .iter()
-            .map(|i| Span::styled("█", progress_style(i.status))),
-    );
-    spans.push(Span::raw(" "));
+/// 进度条：定长按占比分段的彩色条——每 issue 一段（颜色按状态），
+/// 段宽 = `width / N`（末段取余补足），issue 数变化占比自动调整。
+pub fn progress_bar(issues: &[&Issue], width: usize) -> Line<'static> {
+    let n = issues.len();
+    if n == 0 || width == 0 {
+        return Line::from(String::new());
+    }
+    let seg = width / n;
+    let mut spans: Vec<Span> = Vec::with_capacity(n);
+    for (i, issue) in issues.iter().enumerate() {
+        let w = if i == n - 1 {
+            width - seg * (n - 1)
+        } else {
+            seg
+        };
+        if w > 0 {
+            spans.push(Span::styled("█".repeat(w), progress_style(issue.status)));
+        }
+    }
     Line::from(spans)
 }
 
@@ -196,18 +209,23 @@ mod tests {
     }
 
     #[test]
-    fn progress_bar_one_segment_per_issue_with_padding() {
+    fn progress_bar_shares_width_and_colors_by_status() {
+        use ratatui::style::Color as C;
         let issues = [
             mk_issue(1, Status::Open),
-            mk_issue(2, Status::Dev),
-            mk_issue(3, Status::Done),
+            mk_issue(2, Status::Done),
+            mk_issue(3, Status::Dropped),
         ];
         let refs: Vec<&Issue> = issues.iter().collect();
-        let line = progress_bar(&refs);
-        assert_eq!(line.spans.len(), 5); // 空格 + 3 段 + 空格
-        assert_eq!(line.spans[0].content, " ");
-        assert_eq!(line.spans[1].content, "█");
-        assert_eq!(line.spans[4].content, " ");
+        let line = progress_bar(&refs, 9);
+        // 3 issue / 宽 9 → 每段 3 格，总宽 9（末段取余）。
+        let total: usize = line.spans.iter().map(|s| s.content.chars().count()).sum();
+        assert_eq!(total, 9);
+        assert_eq!(line.spans.len(), 3);
+        // open 暗黄（DIM）、dropped 亮红。
+        assert_eq!(line.spans[0].style.fg, Some(C::Yellow));
+        assert!(line.spans[0].style.add_modifier.contains(Modifier::DIM));
+        assert_eq!(line.spans[2].style.fg, Some(C::Red));
     }
 
     #[test]

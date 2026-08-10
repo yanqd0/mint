@@ -27,22 +27,29 @@ fn panel_title(m: &DashboardModel) -> String {
 pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let all = m.visible_issues();
     let page = m.page_issues();
-    let total = all
-        .iter()
-        .filter(|i| !matches!(i.status, Status::Dropped))
-        .count();
+    // dropped 计入完成（需求 10）；total 含 dropped。
+    let total = all.len();
     let done = all
         .iter()
-        .filter(|i| matches!(i.status, Status::Done))
+        .filter(|i| matches!(i.status, Status::Done | Status::Dropped))
         .count();
     let progress_rate = done
         .checked_mul(100)
-        .and_then(|d| d.checked_div(total))
+        .and_then(|d| d.checked_div(total.max(1)))
         .unwrap_or(0);
 
-    // 进度 panel：open 率进度条 + 百分比。
-    let mut prog_lines = vec![progress_bar(&all)];
-    prog_lines.push(Line::from(format!("  progress: {progress_rate}%")));
+    // 布局先定：progress panel 宽度给进度条（按占比分色分段）。
+    let chunks = stack(
+        area,
+        &[
+            Constraint::Length(4),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ],
+    );
+    let bar_width = chunks[0].width.saturating_sub(2) as usize; // panel 内容宽（border 2）
+    let mut prog_lines = vec![progress_bar(&all, bar_width)];
+    prog_lines.push(Line::from(format!("progress: {progress_rate}%")));
 
     // 列表 panel：表头 + 状态点/状态文本（着色）+ ID + 标签 + 标题。
     let mut list_lines: Vec<Line> = Vec::new();
@@ -82,14 +89,6 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
         "j/k row · ←/→ page · 1/2/3 tab · Enter detail · p plan · m milestone · q quit · Page {}/{} ({total} issues)",
         m.page + 1,
         m.pages()
-    );
-    let chunks = stack(
-        area,
-        &[
-            Constraint::Length(4),
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ],
     );
     render_panel(frame, chunks[0], "progress", prog_lines);
     render_panel(frame, chunks[1], &panel_title(m), list_lines);
