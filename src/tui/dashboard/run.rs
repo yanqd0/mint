@@ -1,7 +1,6 @@
 //! dashboard 运行：TTY 自动刷新循环 / 非 TTY 快照文本。
 
 use std::io;
-use std::path::Path;
 use std::time::Duration;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
@@ -10,20 +9,17 @@ use ratatui::backend::Backend;
 use rusqlite::Connection;
 
 use crate::error::Error;
-use crate::git;
-use crate::state::{self, Action};
 use crate::tui::dashboard::DashboardModel;
 use crate::tui::dashboard::data::load_snapshot;
-use crate::tui::dashboard::types::{IssueFilter, KeyAction, Notice, View};
+use crate::tui::dashboard::types::{IssueFilter, KeyAction, View};
 use crate::tui::{CrosstermEvents, EventSource, is_interactive, to_keycode};
 
 /// 自动刷新间隔：每 tick 全量重查重渲。
 const REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
 
 /// 启动 dashboard（初始视图 = Issues 主屏）。
-/// `cwd` 供状态命令 commit 取 HEAD（git 仓库路径）。
-pub fn run_dashboard(conn: &Connection, project: &str, cwd: &Path) -> Result<(), Error> {
-    run_dashboard_view(conn, project, cwd, View::Issues, None)
+pub fn run_dashboard(conn: &Connection, project: &str) -> Result<(), Error> {
+    run_dashboard_view(conn, project, View::Issues, None)
 }
 
 /// 以指定初始视图启动 dashboard：show --tui 传详情视图，list --tui 传列表视图 + 筛选。
@@ -31,7 +27,6 @@ pub fn run_dashboard(conn: &Connection, project: &str, cwd: &Path) -> Result<(),
 pub fn run_dashboard_view(
     conn: &Connection,
     project: &str,
-    cwd: &Path,
     initial: View,
     filter: Option<IssueFilter>,
 ) -> Result<(), Error> {
@@ -43,7 +38,7 @@ pub fn run_dashboard_view(
     if is_interactive() {
         let mut terminal = ratatui::init();
         let mut events = CrosstermEvents;
-        let result = run_loop(&mut terminal, &mut events, conn, project, cwd, &mut model);
+        let result = run_loop(&mut terminal, &mut events, conn, project, &mut model);
         ratatui::restore();
         result
     } else {
@@ -51,7 +46,7 @@ pub fn run_dashboard_view(
     }
 }
 
-/// TTY 主循环：poll 1s 超时触发 refresh，按键走 handle_key；状态键执行写库后立即刷新。
+/// TTY 主循环：poll 1s 超时触发 refresh，按键走 handle_key。TUI 纯只读，仅退出/导航。
 /// `terminal`/`events` 可注入：生产传 `ratatui::init()` + `CrosstermEvents`，
 /// 测试传 `Terminal<TestBackend>` + `ScriptEvents`（交互循环集成测试）。
 fn run_loop<B: Backend>(
@@ -59,7 +54,6 @@ fn run_loop<B: Backend>(
     events: &mut dyn EventSource,
     conn: &Connection,
     project: &str,
-    cwd: &Path,
     model: &mut DashboardModel,
 ) -> Result<(), Error> {
     loop {
@@ -68,22 +62,10 @@ fn run_loop<B: Backend>(
             .map_err(|e| Error::Other(format!("tui draw: {e:?}")))?;
         match events.poll_event(REFRESH_INTERVAL)? {
             Some(ev) => {
-                if let Some(code) = to_keycode(ev) {
-                    match model.handle_key(code) {
-                        KeyAction::Quit => return Ok(()),
-                        KeyAction::State {
-                            id,
-                            action,
-                            test_cmd,
-                            reason,
-                        } => {
-                            apply_state_action(conn, cwd, id, action, test_cmd, reason, model);
-                            // 操作后立即重载并刷新，面板反映最新 db 状态。
-                            let snap = load_snapshot(conn, project)?;
-                            model.refresh(&snap);
-                        }
-                        KeyAction::None => {}
-                    }
+                if let Some(code) = to_keycode(ev)
+                    && model.handle_key(code) == KeyAction::Quit
+                {
+                    return Ok(());
                 }
             }
             None => {
@@ -92,39 +74,6 @@ fn run_loop<B: Backend>(
             }
         }
     }
-}
-
-/// 执行 TUI 内触发的状态命令（复用 CLI 同一转换核心 `state::apply_transition`）；
-/// `test_cmd`/`reason` 来自输入态（close/drop）；结果写入 `model.notice` 供渲染层标题栏显示。
-fn apply_state_action(
-    conn: &Connection,
-    cwd: &Path,
-    id: i64,
-    action: Action,
-    test_cmd: Option<String>,
-    reason: Option<String>,
-    model: &mut DashboardModel,
-) {
-    let commit_sha = if action == Action::Commit {
-        git::head_sha(cwd)
-    } else {
-        None
-    };
-    // 无 sha 时的 git 错误由 apply_transition 在状态校验之后报（状态合法性优先）。
-    let result = state::apply_transition(
-        conn,
-        id,
-        action,
-        test_cmd.as_deref(),
-        reason.as_deref(),
-        commit_sha.as_deref(),
-    );
-    let ok = result.is_ok();
-    let text = match result {
-        Ok((from, to)) => format!("issue #{id}: {from} -> {to}"),
-        Err(e) => format!("error: {e}"),
-    };
-    model.notice = Some(Notice { text, ok, ticks: 0 });
 }
 
 /// 非 TTY：TestBackend 渲染初始 Issue 面板 → 逐行文本。
@@ -213,13 +162,6 @@ mod tests {
         (dir, conn, id)
     }
 
-    /// 推进 issue 到 test 态（open→planned→dev→test，commit 取固定 sha）。
-    fn advance_to_test(conn: &Connection, id: i64) {
-        state::apply_transition(conn, id, Action::Plan, None, None, None).unwrap();
-        state::apply_transition(conn, id, Action::Start, None, None, None).unwrap();
-        state::apply_transition(conn, id, Action::Commit, None, None, Some("abc")).unwrap();
-    }
-
     /// 读 issue 单个 TEXT 字段（status/test_cmd/dropped_reason…）。
     fn field_of(conn: &Connection, id: i64, col: &str) -> Option<String> {
         let sql = format!("SELECT {col} FROM issues WHERE id=?1");
@@ -229,92 +171,18 @@ mod tests {
     /// 用 ScriptEvents 驱动完整交互循环（TestBackend 渲染 + 真实 run_loop），返回渲染后的 terminal。
     fn run_interaction(
         conn: &Connection,
-        cwd: &Path,
         model: &mut DashboardModel,
         keys: Vec<Script>,
     ) -> Terminal<TestBackend> {
         let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
         let mut events = ScriptEvents::new(keys);
-        run_loop(&mut terminal, &mut events, conn, "mint", cwd, model).unwrap();
+        run_loop(&mut terminal, &mut events, conn, "mint", model).unwrap();
         terminal
     }
 
     /// 渲染帧逐行文本（标题栏/面板各行）。
     fn frame_lines(terminal: &Terminal<TestBackend>) -> Vec<String> {
         buffer_text(terminal.backend().buffer())
-    }
-
-    #[test]
-    fn apply_state_plans_issue_and_sets_notice() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd_dir = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        apply_state_action(&conn, cwd_dir.path(), id, Action::Plan, None, None, &mut m);
-        let n = m.notice.as_ref().unwrap();
-        assert_eq!(n.text, format!("issue #{id}: open -> planned"));
-        assert!(n.ok);
-    }
-
-    #[test]
-    fn apply_state_commit_outside_git_sets_error_notice() {
-        use crate::state;
-        let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd_dir = TempDir::new().unwrap();
-        // 推进到 dev：非 git 目录 commit 无 HEAD → git 错误（状态校验之后）。
-        state::apply_transition(&conn, id, Action::Plan, None, None, None).unwrap();
-        state::apply_transition(&conn, id, Action::Start, None, None, None).unwrap();
-        let mut m = DashboardModel::new();
-        apply_state_action(
-            &conn,
-            cwd_dir.path(),
-            id,
-            Action::Commit,
-            None,
-            None,
-            &mut m,
-        );
-        let n = m.notice.as_ref().unwrap();
-        assert!(n.text.contains("commit requires a git repository"));
-        assert!(!n.ok);
-    }
-
-    #[test]
-    fn apply_state_commit_illegal_from_open_reports_transition() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd_dir = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        // open 直接 commit：状态合法性优先于 git 错误。
-        apply_state_action(
-            &conn,
-            cwd_dir.path(),
-            id,
-            Action::Commit,
-            None,
-            None,
-            &mut m,
-        );
-        let n = m.notice.as_ref().unwrap();
-        assert!(n.text.contains("invalid transition"));
-        assert!(!n.ok);
-    }
-
-    #[test]
-    fn apply_state_drop_with_reason_notice() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd_dir = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        apply_state_action(
-            &conn,
-            cwd_dir.path(),
-            id,
-            Action::Drop,
-            None,
-            Some("no longer needed".into()),
-            &mut m,
-        );
-        let n = m.notice.as_ref().unwrap();
-        assert_eq!(n.text, format!("issue #{id}: open -> dropped"));
-        assert!(n.ok);
     }
 
     #[test]
@@ -337,295 +205,25 @@ mod tests {
     }
 
     #[test]
-    fn apply_state_close_with_test_cmd_advances_to_done() {
-        use crate::state;
+    fn interaction_initial_detail_view_navigation() {
+        // show --tui 的初始视图 = 详情：从 IssueDetail 启动，导航/退出不崩、无写操作。
         let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd_dir = TempDir::new().unwrap();
-        // 走完 open→planned→dev→test，close 才能通过。
-        state::apply_transition(&conn, id, Action::Plan, None, None, None).unwrap();
-        state::apply_transition(&conn, id, Action::Start, None, None, None).unwrap();
-        state::apply_transition(&conn, id, Action::Commit, None, None, Some("abc")).unwrap();
-        let mut m = DashboardModel::new();
-        apply_state_action(
-            &conn,
-            cwd_dir.path(),
-            id,
-            Action::Close,
-            Some("not-tested".into()),
-            None,
-            &mut m,
-        );
-        assert!(
-            m.notice
-                .as_ref()
-                .is_some_and(|n| n.text == format!("issue #{id}: test -> done"))
-        );
-    }
-
-    // ── 交互循环集成测试：ScriptEvents 驱动完整 run_loop（键→写库→重渲→帧断言）──
-
-    #[test]
-    fn interaction_plan_and_show_notice() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        m.init(load_snapshot(&conn, "mint").unwrap());
-        let terminal = run_interaction(
-            &conn,
-            cwd.path(),
-            &mut m,
-            vec![
-                Script::Key(KeyCode::Char('P')),
-                Script::Key(KeyCode::Char('q')),
-            ],
-        );
-        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("planned"));
-        let lines = frame_lines(&terminal);
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.contains(&format!("issue #{id}: open -> planned"))),
-            "notice 应渲染到标题栏"
-        );
-    }
-
-    #[test]
-    fn interaction_close_input_commits() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        advance_to_test(&conn, id);
-        let cwd = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        m.init(load_snapshot(&conn, "mint").unwrap());
-        let mut keys = vec![Script::Key(KeyCode::Char('X'))];
-        keys.extend("not-tested".chars().map(|c| Script::Key(KeyCode::Char(c))));
-        keys.push(Script::Key(KeyCode::Enter));
-        keys.push(Script::Key(KeyCode::Char('q')));
-        let terminal = run_interaction(&conn, cwd.path(), &mut m, keys);
-        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("done"));
-        assert_eq!(
-            field_of(&conn, id, "test_cmd").as_deref(),
-            Some("not-tested")
-        );
-        assert!(
-            frame_lines(&terminal)
-                .iter()
-                .any(|l| l.contains(&format!("issue #{id}: test -> done")))
-        );
-    }
-
-    #[test]
-    fn interaction_drop_empty_reason() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        m.init(load_snapshot(&conn, "mint").unwrap());
-        let terminal = run_interaction(
-            &conn,
-            cwd.path(),
-            &mut m,
-            vec![
-                Script::Key(KeyCode::Char('D')),
-                Script::Key(KeyCode::Enter), // 空 reason 直接提交（对齐 CLI drop --reason 可选）
-                Script::Key(KeyCode::Char('q')),
-            ],
-        );
-        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("dropped"));
-        assert_eq!(field_of(&conn, id, "dropped_reason"), None);
-        assert!(
-            frame_lines(&terminal)
-                .iter()
-                .any(|l| l.contains(&format!("issue #{id}: open -> dropped")))
-        );
-    }
-
-    #[test]
-    fn interaction_esc_cancels_input() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        advance_to_test(&conn, id);
-        let cwd = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        m.init(load_snapshot(&conn, "mint").unwrap());
-        let terminal = run_interaction(
-            &conn,
-            cwd.path(),
-            &mut m,
-            vec![
-                Script::Key(KeyCode::Char('X')),
-                Script::Key(KeyCode::Char('a')),
-                Script::Key(KeyCode::Esc), // 取消输入，不写库
-                Script::Key(KeyCode::Char('q')),
-            ],
-        );
-        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("test")); // 不变
-        // Esc 取消后无残留 notice（进输入态时已清空）。
-        assert!(
-            !frame_lines(&terminal).iter().any(|l| l.contains("->")),
-            "不应有残留操作结果提示"
-        );
-    }
-
-    #[test]
-    fn interaction_input_keeps_editing_on_nav() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        advance_to_test(&conn, id);
-        let cwd = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        m.init(load_snapshot(&conn, "mint").unwrap());
-        let terminal = run_interaction(
-            &conn,
-            cwd.path(),
-            &mut m,
-            vec![
-                Script::Key(KeyCode::Char('X')),
-                Script::Key(KeyCode::Char('a')),
-                Script::Key(KeyCode::Down), // 输入态下导航键不打断编辑
-                Script::Key(KeyCode::Char('a')),
-                Script::Key(KeyCode::Enter),
-                Script::Key(KeyCode::Char('q')),
-            ],
-        );
-        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("done"));
-        assert_eq!(field_of(&conn, id, "test_cmd").as_deref(), Some("aa"));
-        assert!(
-            frame_lines(&terminal)
-                .iter()
-                .any(|l| l.contains(&format!("issue #{id}: test -> done")))
-        );
-    }
-
-    #[test]
-    fn interaction_illegal_commit_reports_transition() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        m.init(load_snapshot(&conn, "mint").unwrap());
-        let terminal = run_interaction(
-            &conn,
-            cwd.path(),
-            &mut m,
-            vec![
-                Script::Key(KeyCode::Char('C')), // open 直接 commit → 状态合法性优先
-                Script::Key(KeyCode::Char('q')),
-            ],
-        );
-        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("open")); // 不写库
-        assert!(
-            frame_lines(&terminal)
-                .iter()
-                .any(|l| l.contains("invalid transition")),
-            "应报 invalid transition 而非 git 错误"
-        );
-    }
-
-    #[test]
-    fn interaction_commit_outside_git_error() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        // 推进到 dev：非 git 目录 commit 无 HEAD → git 错误（状态校验之后）。
-        state::apply_transition(&conn, id, Action::Plan, None, None, None).unwrap();
-        state::apply_transition(&conn, id, Action::Start, None, None, None).unwrap();
-        let cwd = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        m.init(load_snapshot(&conn, "mint").unwrap());
-        let terminal = run_interaction(
-            &conn,
-            cwd.path(),
-            &mut m,
-            vec![
-                Script::Key(KeyCode::Char('C')),
-                Script::Key(KeyCode::Char('q')),
-            ],
-        );
-        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("dev")); // 不写库
-        assert!(
-            frame_lines(&terminal)
-                .iter()
-                .any(|l| l.contains("commit requires a git repository"))
-        );
-    }
-
-    #[test]
-    fn interaction_state_key_noop_in_non_issue_view() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        m.init(load_snapshot(&conn, "mint").unwrap());
-        let terminal = run_interaction(
-            &conn,
-            cwd.path(),
-            &mut m,
-            vec![
-                Script::Key(KeyCode::Char('2')), // 切到 Plans tab
-                Script::Key(KeyCode::Char('P')), // 非 issue 视图：状态键无效果
-                Script::Key(KeyCode::Char('q')),
-            ],
-        );
-        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("open"));
-        // 帧不出现状态操作提示。
-        assert!(!frame_lines(&terminal).iter().any(|l| l.contains("->")));
-    }
-
-    #[test]
-    fn interaction_lowercase_p_is_nav_not_command() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        m.init(load_snapshot(&conn, "mint").unwrap());
-        let terminal = run_interaction(
-            &conn,
-            cwd.path(),
-            &mut m,
-            vec![
-                Script::Key(KeyCode::Char('p')), // 小写 p = plan detail 导航，非状态命令
-                Script::Key(KeyCode::Char('q')),
-            ],
-        );
-        // issue 无 plan：小写 p 无跳转也无写库。
-        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("open"));
-        assert!(!frame_lines(&terminal).iter().any(|l| l.contains("->")));
-    }
-
-    #[test]
-    fn interaction_notice_expires() {
-        let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd = TempDir::new().unwrap();
-        let mut m = DashboardModel::new();
-        m.init(load_snapshot(&conn, "mint").unwrap());
-        let mut keys = vec![Script::Key(KeyCode::Char('P'))];
-        keys.extend(std::iter::repeat_n(Script::Tick, 7)); // 远超 NOTICE_TICKS(5)
-        keys.push(Script::Key(KeyCode::Char('q')));
-        let terminal = run_interaction(&conn, cwd.path(), &mut m, keys);
-        // 操作本身成功（db 已 planned），只是 notice 过期清除。
-        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("planned"));
-        assert!(
-            !frame_lines(&terminal)
-                .iter()
-                .any(|l| l.contains("open -> planned")),
-            "notice 应在 NOTICE_TICKS 后消失"
-        );
-    }
-
-    #[test]
-    fn interaction_initial_detail_view_state_keys_apply() {
-        // show --tui 的初始视图 = 详情：从 IssueDetail 启动，Shift+状态键作用于当前 issue。
-        let (_db_dir, conn, id) = db_with_open_issue();
-        let cwd = TempDir::new().unwrap();
         let mut m = DashboardModel::new();
         m.init(load_snapshot(&conn, "mint").unwrap());
         m.view = View::IssueDetail { id };
         let terminal = run_interaction(
             &conn,
-            cwd.path(),
             &mut m,
             vec![
-                Script::Key(KeyCode::Char('P')),
+                Script::Key(KeyCode::Char('j')),
                 Script::Key(KeyCode::Char('q')),
             ],
         );
-        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("planned"));
+        assert_eq!(field_of(&conn, id, "status").as_deref(), Some("open")); // 无写操作
         assert!(
             frame_lines(&terminal)
                 .iter()
-                .any(|l| l.contains(&format!("issue #{id}: open -> planned")))
+                .any(|l| l.contains("status: open"))
         );
     }
 
@@ -649,12 +247,10 @@ mod tests {
             label: None,
             priority: None,
         });
-        // 筛选生效：只显示 open issue。
         let v = m.visible_issues();
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].status, Status::Open);
         let open_id = v[0].id;
-        // Enter 进详情（等价 show --tui 页面），Esc 返回列表。
         m.handle_key(KeyCode::Enter);
         assert_eq!(m.view, View::IssueDetail { id: open_id });
         m.handle_key(KeyCode::Esc);

@@ -384,17 +384,17 @@ impl Cli {
 
         match &self.command {
             Commands::Issue(i) => issue::dispatch(&mut conn, &cwd, &project, &i.command),
-            Commands::List(l) => issue::list::cmd_list(&conn, &cwd, &project, l),
-            Commands::Show(s) => issue::list::cmd_show(&conn, &cwd, &project, s),
+            Commands::List(l) => issue::list::cmd_list(&conn, &project, l),
+            Commands::Show(s) => issue::list::cmd_show(&conn, &project, s),
             Commands::Search(s) => issue::list::cmd_search(&conn, &project, s),
             Commands::Label(t) => match &t.command {
                 LabelCmd::List(l) => cmd_label_list(&conn, l),
             },
             Commands::Project(p) => project::dispatch(&conn, &p.command),
-            Commands::Milestone(r) => milestone::dispatch(&conn, &cwd, &project, &r.command),
-            Commands::Plan(p) => plan::dispatch(&conn, &cwd, &project, &p.command),
+            Commands::Milestone(r) => milestone::dispatch(&conn, &project, &r.command),
+            Commands::Plan(p) => plan::dispatch(&conn, &project, &p.command),
             Commands::Delete(d) => delete::dispatch(&conn, &d.command),
-            Commands::Tui => crate::tui::run_dashboard(&conn, &project, &cwd),
+            Commands::Tui => crate::tui::run_dashboard(&conn, &project),
         }
     }
 
@@ -433,7 +433,6 @@ impl Cli {
 /// 容器 list：默认只显非 done，--all/-a 全列。
 pub(crate) fn cmd_container_list(
     conn: &Connection,
-    cwd: &std::path::Path,
     project: &str,
     kind: ContainerKind,
     a: &ListContainersArgs,
@@ -451,7 +450,7 @@ pub(crate) fn cmd_container_list(
             ContainerKind::Milestone => crate::tui::dashboard::types::View::Milestones,
             ContainerKind::Plan => crate::tui::dashboard::types::View::Plans,
         };
-        return crate::tui::run_dashboard_view(conn, project, cwd, view, Some(filter));
+        return crate::tui::run_dashboard_view(conn, project, view, Some(filter));
     }
     let (items, total, page) = paginate(items, a.page, a.page_size);
     if a.json {
@@ -478,7 +477,6 @@ pub(crate) fn cmd_container_list(
 /// 容器 show：详情 + 其下 issue。
 pub(crate) fn cmd_container_show(
     conn: &Connection,
-    cwd: &std::path::Path,
     project: &str,
     kind: ContainerKind,
     a: &ContainerIdArgs,
@@ -490,7 +488,7 @@ pub(crate) fn cmd_container_show(
                 crate::tui::dashboard::types::View::MilestoneDetail { milestone_id: a.id }
             }
         };
-        return crate::tui::run_dashboard_view(conn, project, cwd, view, None);
+        return crate::tui::run_dashboard_view(conn, project, view, None);
     }
     let c = container::get(conn, kind, a.id)?
         .ok_or_else(|| Error::Other(format!("{} #{} not found", kind_noun(kind), a.id)))?;

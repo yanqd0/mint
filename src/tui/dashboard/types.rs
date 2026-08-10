@@ -1,7 +1,6 @@
 //! dashboard 公共类型：视图、变更流条目、刷新结果、执行中 plan 判定。
 
 use crate::models::{Issue, Status};
-use crate::state::Action;
 use crate::tui::dashboard::diff::{ChangeEvent, DashboardSnapshot};
 
 /// 变更流最大条目数（超出裁剪尾部）。
@@ -22,22 +21,13 @@ pub enum View {
     MilestoneDetail { milestone_id: i64 },
 }
 
-/// 键盘处理结果：run_loop 据此执行 IO（状态命令写库）或退出 dashboard。
-/// model 保持纯状态机：识别按键产出请求，不直接接触 db。
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// 键盘处理结果：run_loop 据此退出或继续。TUI 纯只读，无状态写操作。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyAction {
-    /// 仅视图内处理，无需 IO。
+    /// 已处理，继续循环。
     None,
     /// 退出 dashboard。
     Quit,
-    /// 请求对指定 issue 执行状态命令（Shift+字母 触发）。
-    /// `test_cmd`/`reason` 由输入态（close/drop）提交；无参数命令为 None。
-    State {
-        id: i64,
-        action: Action,
-        test_cmd: Option<String>,
-        reason: Option<String>,
-    },
 }
 
 /// dashboard 初始筛选（list --tui 传入；TUI 内固定不变）。
@@ -48,23 +38,6 @@ pub struct IssueFilter {
     pub status: Option<Status>,
     pub label: Option<String>,
     pub priority: Option<i64>,
-}
-
-/// TUI 参数输入态：状态命令需参数（close→test_cmd、drop→reason）时进入，
-/// 字符输入到 `value`，Enter 提交（产出 State 请求）/ Esc 取消。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InputState {
-    pub id: i64,
-    pub action: Action,
-    pub value: String,
-}
-
-/// 操作结果提示（标题栏显示）：成功/失败着色，`ticks` 递增超过 `NOTICE_TICKS` 自动清除。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Notice {
-    pub text: String,
-    pub ok: bool,
-    pub ticks: u32,
 }
 
 /// 跳转目标视图。
@@ -114,9 +87,8 @@ pub const JUMP_MERGE_DELAY: u32 = 1;
 /// 变化内容闪烁时长（tick）。
 pub const FLASH_TICKS: u32 = 2;
 /// 操作结果提示显示时长（tick；1 tick = 1s 刷新间隔）。
-pub const NOTICE_TICKS: u32 = 5;
-/// 空闲回首页阈值（tick）：无操作、无跳转 60s。
-pub const HOME_TIMEOUT: u32 = 60;
+/// 空闲回首页阈值（tick）：无操作、无跳转 300s（2026-08-10 从 60s 调整）。
+pub const HOME_TIMEOUT: u32 = 300;
 
 /// 变更流条目：初始基线（当前全量按 updated_at 倒序）或会话内变化事件。
 #[derive(Debug, Clone)]

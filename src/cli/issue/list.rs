@@ -1,7 +1,5 @@
 //! Issue 列表/搜索/详情（list/search/show）。
 
-use std::path::Path;
-
 use rusqlite::Connection;
 
 use crate::cli::list_common::{paged_json, paginate, print_page_footer};
@@ -75,7 +73,7 @@ pub struct ShowArgs {
     pub tui: bool,
 }
 
-pub fn cmd_list(conn: &Connection, cwd: &Path, project: &str, l: &ListArgs) -> Result<(), Error> {
+pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Error> {
     let all: i64 = if l.all { 1 } else { 0 };
     let status = l.status;
     let label: Option<&str> = l.label.as_deref();
@@ -101,7 +99,6 @@ pub fn cmd_list(conn: &Connection, cwd: &Path, project: &str, l: &ListArgs) -> R
         return crate::tui::run_dashboard_view(
             conn,
             project,
-            cwd,
             crate::tui::dashboard::types::View::Issues,
             Some(filter),
         );
@@ -217,13 +214,12 @@ fn issue_to_json(i: &Issue) -> serde_json::Value {
     })
 }
 
-pub fn cmd_show(conn: &Connection, cwd: &Path, project: &str, s: &ShowArgs) -> Result<(), Error> {
+pub fn cmd_show(conn: &Connection, project: &str, s: &ShowArgs) -> Result<(), Error> {
     let id = s.id;
     if s.tui {
         return crate::tui::run_dashboard_view(
             conn,
             project,
-            cwd,
             crate::tui::dashboard::types::View::IssueDetail { id },
             None,
         );

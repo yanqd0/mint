@@ -54,8 +54,8 @@ pub fn dispatch(
 ) -> Result<(), Error> {
     match cmd {
         IssueCmd::Add(a) => add::cmd_add(conn, cwd, project, a),
-        IssueCmd::List(l) => list::cmd_list(conn, cwd, project, l),
-        IssueCmd::Show(s) => list::cmd_show(conn, cwd, project, s),
+        IssueCmd::List(l) => list::cmd_list(conn, project, l),
+        IssueCmd::Show(s) => list::cmd_show(conn, project, s),
         IssueCmd::Get(g) => set_get::cmd_get(conn, g),
         IssueCmd::Set(s) => set_get::cmd_set(conn, s),
         IssueCmd::State(st) => state::dispatch(conn, cwd, &st.command),

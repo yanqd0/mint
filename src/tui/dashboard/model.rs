@@ -6,11 +6,8 @@ use std::collections::VecDeque;
 use crossterm::event::KeyCode;
 
 use crate::models::{Container, Issue};
-use crate::state::Action;
 use crate::tui::dashboard::diff::{DashboardSnapshot, diff_snapshots};
-use crate::tui::dashboard::types::{
-    FlashItem, InputState, IssueFilter, JumpRequest, MAX_FEED, NOTICE_TICKS, Notice, RawJump,
-};
+use crate::tui::dashboard::types::{FlashItem, IssueFilter, JumpRequest, MAX_FEED, RawJump};
 
 pub use crate::tui::dashboard::types::{FeedItem, KeyAction, RefreshResult, View};
 
@@ -48,10 +45,6 @@ pub struct DashboardModel {
     pub(crate) merge_delay: u32,
     /// 进行中的闪烁项（渲染层读取）。
     pub flash: Vec<FlashItem>,
-    /// 最近一次状态操作结果（成功/失败着色，`Notice` tick 过期自动清除），标题栏显示。
-    pub notice: Option<Notice>,
-    /// 参数输入态（close 的 test_cmd / drop 的 reason）；None = 普通导航。
-    pub input: Option<InputState>,
 }
 
 impl Default for DashboardModel {
@@ -81,8 +74,6 @@ impl DashboardModel {
             ready: VecDeque::new(),
             merge_delay: 0,
             flash: Vec::new(),
-            notice: None,
-            input: None,
         }
     }
 
@@ -116,8 +107,6 @@ impl DashboardModel {
         self.ready.clear();
         self.merge_delay = 0;
         self.flash.clear();
-        self.notice = None;
-        self.input = None;
     }
 
     /// 每 tick：diff 上一轮 → 事件前置 feed；面板自动切换。
@@ -139,8 +128,6 @@ impl DashboardModel {
         self.auto_last = self.auto_last.saturating_add(1);
         // 闪烁递减（过期清除）。
         self.tick_flash();
-        // 操作结果提示递减（过期清除）。
-        self.tick_notice();
         // 事件 → queue1（原始跳转请求）。
         for r in crate::tui::dashboard::jump::parse::raw_jumps_from_events(&events) {
             self.pending.push_back(r);
@@ -167,35 +154,12 @@ impl DashboardModel {
         }
     }
 
-    /// notice 过期：tick 递增，超过 NOTICE_TICKS 自动清除（避免操作结果永久残留）。
-    fn tick_notice(&mut self) {
-        if let Some(n) = &mut self.notice {
-            n.ticks += 1;
-            if n.ticks > NOTICE_TICKS {
-                self.notice = None;
-            }
-        }
-    }
-
-    /// 处理按键：返回 IO 请求（状态命令 / 退出）；视图内导航直接改状态后返回 None。
-    /// 输入态（close/drop 参数）优先：字符/Backspace 编辑，Enter 提交，Esc 取消。
+    /// 处理按键：退出 dashboard 返回 Quit；视图内导航返回 None。TUI 纯只读，无写操作。
     pub fn handle_key(&mut self, key: KeyCode) -> KeyAction {
         // 任何按键 → 用户活跃，重置空闲计时（自动切换前置失效）。
         self.user_idle = 0;
-        if let Some(inp) = self.input.take() {
-            return self.process_input(key, inp);
-        }
-        match key {
-            KeyCode::Char('q') => return KeyAction::Quit,
-            // 状态推进快捷键：Shift+首字母（大写），操作对象 = 选中 issue / 详情当前 issue。
-            KeyCode::Char('P') => return self.state_action(Action::Plan),
-            KeyCode::Char('S') => return self.state_action(Action::Start),
-            KeyCode::Char('C') => return self.state_action(Action::Commit),
-            KeyCode::Char('X') => return self.state_action(Action::Close),
-            KeyCode::Char('R') => return self.state_action(Action::Reset),
-            KeyCode::Char('D') => return self.state_action(Action::Drop),
-            KeyCode::Char('O') => return self.state_action(Action::Reopen),
-            _ => {}
+        if key == KeyCode::Char('q') {
+            return KeyAction::Quit;
         }
         self.handle_nav(key);
         KeyAction::None
@@ -291,79 +255,6 @@ impl DashboardModel {
                 _ => {}
             },
             _ => {}
-        }
-    }
-
-    /// 状态键目标：Issues 选中行或 IssueDetail 当前 issue；非 issue 视图 / 无选中返回 None。
-    /// close/drop 需参数，先进输入态；其余命令直接产出请求。
-    fn state_action(&mut self, action: Action) -> KeyAction {
-        let id = match self.view {
-            View::Issues => self.page_issues().get(self.selected).map(|i| i.id),
-            View::IssueDetail { id } => Some(id),
-            _ => None,
-        };
-        match id {
-            Some(id) => match action {
-                Action::Close | Action::Drop => {
-                    // 进输入态清掉旧操作结果，避免 Esc 取消输入后旧 notice 重现。
-                    self.notice = None;
-                    self.input = Some(InputState {
-                        id,
-                        action,
-                        value: String::new(),
-                    });
-                    KeyAction::None
-                }
-                _ => KeyAction::State {
-                    id,
-                    action,
-                    test_cmd: None,
-                    reason: None,
-                },
-            },
-            None => KeyAction::None,
-        }
-    }
-
-    /// 输入态按键处理：字符追加 / Backspace 删除 / Enter 提交（空值不放行）/ Esc 取消。
-    fn process_input(&mut self, key: KeyCode, mut inp: InputState) -> KeyAction {
-        match key {
-            KeyCode::Char(c) => {
-                inp.value.push(c);
-                self.input = Some(inp);
-                KeyAction::None
-            }
-            KeyCode::Backspace => {
-                inp.value.pop();
-                self.input = Some(inp);
-                KeyAction::None
-            }
-            KeyCode::Enter => {
-                let value = inp.value.trim().to_string();
-                // close 必填 test_cmd：空值不放行；drop 的 reason 可选（对齐 CLI drop --reason）。
-                if inp.action == Action::Close && value.is_empty() {
-                    self.input = Some(inp);
-                    return KeyAction::None;
-                }
-                let (test_cmd, reason) = match inp.action {
-                    Action::Close => (Some(value.clone()), None),
-                    Action::Drop => (None, (!value.is_empty()).then_some(value)),
-                    _ => (None, None),
-                };
-                KeyAction::State {
-                    id: inp.id,
-                    action: inp.action,
-                    test_cmd,
-                    reason,
-                }
-            }
-            // Esc 取消输入（input 已被 take，不恢复）。
-            KeyCode::Esc => KeyAction::None,
-            // 其它键（导航等）仅保留输入态，不打断编辑。
-            _ => {
-                self.input = Some(inp);
-                KeyAction::None
-            }
         }
     }
 }
