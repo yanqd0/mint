@@ -6,7 +6,7 @@ This is a global, single-machine, SQLite-backed issue system CLI for AI agents.
 
 ```sh
 cargo install --git https://github.com/yanqd0/mint.git   # binary: `mint`
-# It may publish to crates.io one day.
+# It may be published on crates.io one day.
 
 # Or build from source:
 cargo install --path .
@@ -41,7 +41,7 @@ Data lives in a single global SQLite database at `$XDG_DATA_HOME/mint/mint.db` (
 /mint <Something>
 ```
 
-In most time, it works automatically.
+Most of the time, it works by itself.
 
 ### In Shell (Optional)
 
@@ -49,4 +49,4 @@ In most time, it works automatically.
 mint tui
 ```
 
-In most time, it changes automatically.
+Most of the time, it changes by itself.
