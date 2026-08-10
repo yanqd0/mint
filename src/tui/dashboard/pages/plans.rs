@@ -3,13 +3,13 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::text::Line;
+use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{flash_style, mini_bar};
 use crate::tui::dashboard::types::JumpKind;
-use crate::tui::panel::{render_panel, stack};
+use crate::tui::panel::stack;
 
 /// Plans tab：按 milestone 分组渲染（每组一 panel 标题），行选中按展平行号映射。
 pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
@@ -17,24 +17,19 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let start = m.page * m.page_size;
     let end = start + m.page_size;
 
-    let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(format!(
-        "#{:<3} {:<22} {:<12} TITLE",
-        "", "PROGRESS", "DONE/TOTAL"
-    )));
+    let header = Row::new(vec!["#", "PROGRESS", "DONE/TOTAL", "TITLE"])
+        .style(Style::new().add_modifier(Modifier::BOLD));
+    let mut rows: Vec<Row> = Vec::new();
     let mut n = 0; // 展平行号（全局，仅计 plan 行）
     for g in &groups {
         let g_start = n;
         let g_end = n + g.plans.len();
         n = g_end;
-        // 组标题仅在页内有该组行时显示。
+        // 组标题仅在页内有该组行时显示（跨列，其余列空）。
         if g_end <= start || g_start >= end {
             continue;
         }
-        lines.push(Line::from(Span::styled(
-            g.title.as_str(),
-            Style::new().add_modifier(Modifier::BOLD),
-        )));
+        rows.push(Row::new(vec![g.title.clone()]).style(Style::new().add_modifier(Modifier::BOLD)));
         for (i, (plan, _)) in g.plans.iter().enumerate() {
             let global = g_start + i;
             if global < start || global >= end {
@@ -42,25 +37,32 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
             }
             let selected = m.selected_idx() == Some(global - start);
             let (done, total) = m.plan_progress(plan.id);
-            let mut style = if selected {
-                Style::new().add_modifier(Modifier::REVERSED)
-            } else {
-                Style::new()
-            };
-            if let Some(fs) = flash_style(m, plan.id, JumpKind::Plan) {
-                style = style.patch(fs);
-            }
             let bar = mini_bar(done, total, 20);
-            lines.push(Line::from(vec![
-                Span::styled(format!("#{:<3}", plan.id), style),
-                Span::styled(bar, style),
-                Span::styled(format!(" {done}/{total}  {}", plan.title), style),
-            ]));
+            let mut row = Row::new(vec![
+                Cell::from(format!("#{}", plan.id)),
+                Cell::from(bar),
+                Cell::from(format!("{done}/{total}")),
+                Cell::from(plan.title.clone()),
+            ]);
+            if selected {
+                row = row.style(Style::new().add_modifier(Modifier::REVERSED));
+            }
+            if let Some(fs) = flash_style(m, plan.id, JumpKind::Plan) {
+                row = row.style(fs);
+            }
+            rows.push(row);
         }
     }
-    if lines.is_empty() {
-        lines.push(Line::from("(no plans)"));
+    if rows.is_empty() {
+        rows.push(Row::new(vec![Cell::from("(no plans)")]));
     }
+    // 第 1 列宽容纳组标题（组名跨列显示于该列）。
+    let widths = [
+        Constraint::Length(18),
+        Constraint::Length(22),
+        Constraint::Length(11),
+        Constraint::Min(0),
+    ];
 
     let footer = format!(
         "j/k ↑↓ plan · ←/→ page · 1/2/3 tab · Enter detail · q quit · Page {}/{}",
@@ -68,8 +70,13 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
         m.pages()
     );
     let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
-    let title = format!("plans · page {}/{}", m.page + 1, m.pages());
-    render_panel(frame, chunks[0], &title, lines);
+    let title = format!("─plans · page {}/{}", m.page + 1, m.pages());
+    let table = Table::new(rows, widths).header(header).block(
+        Block::bordered()
+            .title(title)
+            .padding(Padding::horizontal(1)),
+    );
+    frame.render_widget(table, chunks[0]);
     frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
 }
 
