@@ -140,8 +140,8 @@ mod tests {
         );
         let text = render(&m, 7).join("\n");
         assert!(text.contains("#7 hello"), "标题: {text}");
-        assert!(text.contains("status: dev"), "status 键值: {text}");
-        assert!(text.contains("plan: #3"), "plan 显 ID: {text}");
+        assert!(text.contains("status  : dev"), "status 键值: {text}");
+        assert!(text.contains("plan    : #3"), "plan 显 ID: {text}");
         // 不存在的 issue → deleted 提示
         let text2 = render(&m, 99).join("\n");
         assert!(text2.contains("#99 (deleted)"));
