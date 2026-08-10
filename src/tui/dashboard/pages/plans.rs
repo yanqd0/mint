@@ -33,12 +33,12 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
     let header = Row::new(vec!["#", "PROGRESS", "DONE/TOTAL", "TITLE"])
         .style(Style::new().add_modifier(Modifier::BOLD));
     let mut rows: Vec<Row> = Vec::new();
-    let mut n = 0; // 展平行号（全局，仅计 plan 行）
+    let mut v = 0; // 展平可见行位置（组标题 + plan 行，跨页组标题重显）
     for g in &groups {
-        let g_start = n;
-        let g_end = n + g.plans.len();
-        n = g_end;
-        // 组标题仅在页内有该组行时显示（跨列，其余列空）。
+        let g_start = v;
+        let g_end = v + 1 + g.plans.len(); // +1 = 组标题行
+        v = g_end;
+        // 组标题仅在页内有该组行时显示（跨页组重显，避免尾部 plan 孤行）。
         if g_end <= start || g_start >= end {
             continue;
         }
@@ -47,11 +47,11 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
             Row::new(vec![truncate(&g.title, 18)]).style(Style::new().add_modifier(Modifier::BOLD)),
         );
         for (i, (plan, _)) in g.plans.iter().enumerate() {
-            let global = g_start + i;
-            if global < start || global >= end {
+            let pos = g_start + 1 + i; // 该 plan 的可见行位置
+            if pos < start || pos >= end {
                 continue;
             }
-            let selected = m.selected_idx() == Some(global - start);
+            let selected = m.selected_idx() == Some(pos - start);
             let (done, total) = m.plan_progress(plan.id);
             let bar = mini_bar(done, total, 20);
             let mut row = Row::new(vec![

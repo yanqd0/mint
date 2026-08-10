@@ -368,6 +368,38 @@ fn plan_groups_skip_empty_milestones() {
 }
 
 #[test]
+fn plans_paging_covers_all_plans_across_groups() {
+    // free plan + ms4 组 2 plans + ms3 组 2 plans（组标题计入可见行）。
+    let mut m = DashboardModel::new();
+    m.init(snap_full(
+        vec![],
+        vec![
+            (mk_plan(1, Some(4), "1"), 0),
+            (mk_plan(2, Some(4), "2"), 0),
+            (mk_plan(3, Some(3), "1"), 0),
+            (mk_plan(4, Some(3), "2"), 0),
+            (mk_plan(5, None, "1"), 0),
+        ],
+        vec![(mk_container(4), 0), (mk_container(3), 0)],
+    ));
+    m.view = View::Plans;
+    m.page_size = 3;
+    // 可见行 8（3 组标题 + 5 plans）→ ceil(8/3)=3 页。
+    assert_eq!(m.pages(), 3);
+    let mut seen: Vec<i64> = Vec::new();
+    for page in 0..3 {
+        m.page = page;
+        seen.extend(m.page_plans().iter().map(|(c, _)| c.id));
+    }
+    seen.sort();
+    assert_eq!(
+        seen,
+        vec![1, 2, 3, 4, 5],
+        "跨页应覆盖全部 plan 无丢失: {seen:?}"
+    );
+}
+
+#[test]
 fn visible_issues_filters_by_plan() {
     let mut m = DashboardModel::new();
     m.init(snap(
