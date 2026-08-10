@@ -23,6 +23,10 @@ fn milestone_issue_count(m: &DashboardModel, mid: i64) -> usize {
 /// Milestones tab：全部 milestone 列表（每行状态点 + id + version + 标题 + plan/issue 数）。
 pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(format!(
+        "● #{:<3} {:<8}  TITLE  PLANS · ISSUES",
+        "ID", "VERSION"
+    )));
     for (idx, (ms, _)) in m.page_milestones().iter().enumerate() {
         let selected = idx == m.selected;
         let mut style = if selected {

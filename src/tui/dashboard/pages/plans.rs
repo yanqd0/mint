@@ -18,6 +18,10 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let end = start + m.page_size;
 
     let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(format!(
+        "#{:<3} {:<22} {:<12} TITLE",
+        "", "PROGRESS", "DONE/TOTAL"
+    )));
     let mut n = 0; // 展平行号（全局，仅计 plan 行）
     for g in &groups {
         let g_start = n;

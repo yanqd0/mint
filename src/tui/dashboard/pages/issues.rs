@@ -51,9 +51,14 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let mut prog_lines = vec![progress_bar(&all, bar_width)];
     prog_lines.push(Line::from(format!("progress: {progress_rate}%")));
 
-    // 列表 panel：表头 + 状态点/状态文本（着色）+ ID + 标签 + 标题。
+    // 列表 panel：表头（与行对齐）+ 状态点 # + STATUS + ID + LABEL + 标题（顶格省略）。
+    let list_inner_w = chunks[1].width.saturating_sub(4) as usize; // border 2 + padding 2
+    let title_w = list_inner_w.saturating_sub(25).max(1); // 其他列：点2+status6+id5+label11+空格1
     let mut list_lines: Vec<Line> = Vec::new();
-    list_lines.push(Line::from(" #  STATUS  LABEL      TITLE"));
+    list_lines.push(Line::from(format!(
+        "# {:<6} #{:<3} {:<10} TITLE",
+        "STATUS", "ID", "LABEL"
+    )));
     for (idx, i) in page.iter().enumerate() {
         let (dot, dot_style) = status_dot(i.status);
         let selected = idx == m.selected;
@@ -70,16 +75,17 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
             .first()
             .map(|l| truncate(l, 10))
             .unwrap_or_default();
+        let title = truncate(&i.title, title_w);
         list_lines.push(
             Line::from(vec![
-                Span::styled(format!("{dot} "), dot_style),
+                Span::styled(format!("{dot} "), dot_style), // 状态点 ●（状态色/闪烁）
                 Span::styled(
                     format!("{:<6}", i.status.as_str()),
                     status_text_style(i.status),
                 ),
                 Span::styled(format!("#{:<3}", i.id), Style::new()),
                 Span::styled(format!(" {label:<10}"), Style::new()),
-                Span::styled(format!(" {}", truncate(&i.title, 24)), Style::new()),
+                Span::styled(format!(" {title}"), Style::new()),
             ])
             .patch_style(row_style),
         );
