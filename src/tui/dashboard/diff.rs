@@ -66,6 +66,9 @@ pub enum ChangeEvent {
         milestone: Container,
         count: i64,
     },
+    MilestoneUpdated {
+        milestone: Container,
+    },
 }
 
 impl ChangeEvent {
@@ -165,18 +168,26 @@ pub fn diff_snapshots(prev: &DashboardSnapshot, next: &DashboardSnapshot) -> Vec
         }
     }
 
-    // milestone 新增（规则 8：跳转请求）。
-    let prev_milestones: HashMap<i64, i64> = prev
-        .milestones
-        .iter()
-        .map(|(c, count)| (c.id, *count))
-        .collect();
+    // milestone 新增（规则 8）与内容更新（#137：字段编辑/状态改变 → 跳详情）。
+    let prev_ms: HashMap<i64, &Container> =
+        prev.milestones.iter().map(|(c, _)| (c.id, c)).collect();
     for (ms, count) in &next.milestones {
-        if !prev_milestones.contains_key(&ms.id) {
-            events.push(ChangeEvent::MilestoneAdded {
+        match prev_ms.get(&ms.id) {
+            None => events.push(ChangeEvent::MilestoneAdded {
                 milestone: ms.clone(),
                 count: *count,
-            });
+            }),
+            Some(p) => {
+                if p.title != ms.title
+                    || p.version != ms.version
+                    || p.body != ms.body
+                    || p.status != ms.status
+                {
+                    events.push(ChangeEvent::MilestoneUpdated {
+                        milestone: ms.clone(),
+                    });
+                }
+            }
         }
     }
 
@@ -329,5 +340,29 @@ mod tests {
         let ev2 = diff_snapshots(&prev2, &next2);
         assert_eq!(ev2.len(), 1);
         assert!(matches!(ev2[0], ChangeEvent::PlanAdded { .. }));
+    }
+
+    #[test]
+    fn milestone_updated_on_field_change() {
+        let snap = |title: &str, status: ContainerStatus| DashboardSnapshot {
+            issues: vec![],
+            plans: vec![],
+            milestones: vec![(mk_container(4, title, status), 0)],
+            project: "mint".into(),
+            milestone_directs: vec![],
+        };
+        let ev = diff_snapshots(
+            &snap("m", ContainerStatus::Open),
+            &snap("m2", ContainerStatus::Open),
+        );
+        assert!(matches!(ev[0], ChangeEvent::MilestoneUpdated { .. }));
+        // 无变化不产生事件。
+        assert!(
+            diff_snapshots(
+                &snap("m", ContainerStatus::Open),
+                &snap("m", ContainerStatus::Open)
+            )
+            .is_empty()
+        );
     }
 }

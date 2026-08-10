@@ -24,10 +24,21 @@ pub(crate) fn raw_jumps_from_events(events: &[ChangeEvent]) -> Vec<RawJump> {
                 Some(pid) => out.push(RawJump {
                     target: JumpTarget::PlanDetail(pid),
                 }),
+                // 无 plan：直属 milestone 跳转需 Issue 带 direct_milestone 数据（TODO），兜底跳 issues 列表。
                 None => out.push(RawJump {
-                    target: JumpTarget::IssueDetail(issue.id),
+                    target: JumpTarget::Issues,
                 }),
             },
+            ChangeEvent::IssueUpdated { issue } => {
+                out.push(RawJump {
+                    target: JumpTarget::IssueDetail(issue.id),
+                });
+            }
+            ChangeEvent::PlanUpdated { plan } => {
+                out.push(RawJump {
+                    target: JumpTarget::PlanDetail(plan.id),
+                });
+            }
             ChangeEvent::PlanAdded { plan, .. } => {
                 out.push(RawJump {
                     target: JumpTarget::Plans,
@@ -49,6 +60,11 @@ pub(crate) fn raw_jumps_from_events(events: &[ChangeEvent]) -> Vec<RawJump> {
                 out.push(RawJump {
                     target: JumpTarget::Milestones,
                 });
+                out.push(RawJump {
+                    target: JumpTarget::MilestoneDetail(milestone.id),
+                });
+            }
+            ChangeEvent::MilestoneUpdated { milestone } => {
                 out.push(RawJump {
                     target: JumpTarget::MilestoneDetail(milestone.id),
                 });
@@ -140,7 +156,29 @@ mod tests {
         }];
         assert_eq!(
             raw_jumps_from_events(&no_plan)[0].target,
-            JumpTarget::IssueDetail(1)
+            JumpTarget::Issues
+        );
+    }
+
+    #[test]
+    fn issue_updated_jumps_detail() {
+        let ev = [ChangeEvent::IssueUpdated {
+            issue: mk_issue(5, Status::Open, None),
+        }];
+        assert_eq!(
+            raw_jumps_from_events(&ev)[0].target,
+            JumpTarget::IssueDetail(5)
+        );
+    }
+
+    #[test]
+    fn plan_updated_jumps_plan_detail() {
+        let ev = [ChangeEvent::PlanUpdated {
+            plan: mk_plan(7, Some(4)),
+        }];
+        assert_eq!(
+            raw_jumps_from_events(&ev)[0].target,
+            JumpTarget::PlanDetail(7)
         );
     }
 
@@ -174,5 +212,16 @@ mod tests {
         let raw = raw_jumps_from_events(&ev);
         assert_eq!(raw[0].target, JumpTarget::Milestones);
         assert_eq!(raw[1].target, JumpTarget::MilestoneDetail(9));
+    }
+
+    #[test]
+    fn milestone_updated_jumps_detail() {
+        let ev = [ChangeEvent::MilestoneUpdated {
+            milestone: mk_milestone(9),
+        }];
+        assert_eq!(
+            raw_jumps_from_events(&ev)[0].target,
+            JumpTarget::MilestoneDetail(9)
+        );
     }
 }
