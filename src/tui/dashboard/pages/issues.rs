@@ -85,13 +85,11 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
         );
     }
 
-    let footer = format!(
-        "j/k row · ←/→ page · 1/2/3 tab · Enter detail · p plan · m milestone · q quit · Page {}/{} ({total} issues)",
-        m.page + 1,
-        m.pages()
-    );
+    let footer = "j/k row · ←/→ page · 1/2/3 tab · Enter detail · p plan · m milestone · q quit";
+    // 翻页信息移入列表 panel 标题（需求：不放 help 栏）。
+    let list_title = format!("{} · page {}/{}", panel_title(m), m.page + 1, m.pages());
     render_panel(frame, chunks[0], "progress", prog_lines);
-    render_panel(frame, chunks[1], &panel_title(m), list_lines);
+    render_panel(frame, chunks[1], &list_title, list_lines);
     frame.render_widget(Paragraph::new(Line::from(footer)), chunks[2]);
 }
 

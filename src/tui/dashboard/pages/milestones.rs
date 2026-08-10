@@ -56,7 +56,8 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
         m.pages()
     );
     let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
-    render_panel(frame, chunks[0], "milestones", lines);
+    let title = format!("milestones · page {}/{}", m.page + 1, m.pages());
+    render_panel(frame, chunks[0], &title, lines);
     frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
 }
 
