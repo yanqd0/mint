@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/inject_commit_reminder.sh",
-            "timeout": 5
+            "timeout": 50
           }
         ]
       }
@@ -19,7 +19,7 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/inject_signal.py",
-            "timeout": 10
+            "timeout": 100
           }
         ]
       }
@@ -31,7 +31,7 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/inject_context.sh",
-            "timeout": 10
+            "timeout": 100
           }
         ]
       }

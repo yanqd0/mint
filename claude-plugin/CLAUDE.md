@@ -42,7 +42,7 @@ claude-plugin/
 ### Hook 规范
 
 - 配置：`hooks/hooks.json`，标准 Claude Code hooks 格式；**顶层需 `hooks` 包裹**（`{ "hooks": { <事件>: [...] } }`），事件名不直接放顶层（否则 `claude plugin validate` 报 `expected record, received undefined under hooks`，插件加载失败）
-- `timeout` 单位：官方文档为毫秒（ms），但运行时按秒生效（实测 10 未触发秒杀）；脚本应 ≤10s 完成，超时会被 kill
+- `timeout` 单位：官方文档为毫秒（ms），但运行时按秒生效（实测低值未触发秒杀）；当前 PostToolUse=50、其余=100，兼容两种单位；脚本应在此限内完成，超时会被 kill
 - 脚本输出：纯文本 stdout（退出码 0 直接注入上下文），或 `hookSpecificOutput.additionalContext` JSON
 - 超时：≤10s（避免阻塞主流程）
 - `${CLAUDE_PLUGIN_ROOT}` 引用 plugin 根目录（适配任意安装路径）
