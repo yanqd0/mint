@@ -322,6 +322,38 @@ fn milestone_detail_enter_uses_current_page_plan() {
 }
 
 #[test]
+fn plan_detail_enter_opens_issue_detail() {
+    let mut m = DashboardModel::new();
+    m.init(snap(
+        vec![
+            mk_issue(1, Status::Dev, Some(7), "1"),
+            mk_issue(2, Status::Open, None, "2"),
+        ],
+        vec![],
+    ));
+    m.view = View::PlanDetail { plan_id: 7 };
+    m.selected = 1; // 选中 plan 7 的第一个 issue
+    m.handle_key(k(KeyCode::Enter));
+    assert_eq!(m.view, View::IssueDetail { id: 1 });
+}
+
+#[test]
+fn issue_detail_p_and_m_navigate() {
+    let mut m = DashboardModel::new();
+    m.init(snap_full(
+        vec![mk_issue(1, Status::Dev, Some(7), "1")],
+        vec![(mk_plan(7, Some(4), "1"), 0)],
+        vec![(mk_container(4), 0)],
+    ));
+    m.view = View::IssueDetail { id: 1 };
+    m.handle_key(k(KeyCode::Char('p')));
+    assert_eq!(m.view, View::PlanDetail { plan_id: 7 });
+    m.view = View::IssueDetail { id: 1 };
+    m.handle_key(k(KeyCode::Char('m')));
+    assert_eq!(m.view, View::MilestoneDetail { milestone_id: 4 });
+}
+
+#[test]
 fn visible_issues_filters_by_plan() {
     let mut m = DashboardModel::new();
     m.init(snap(

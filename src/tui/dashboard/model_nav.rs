@@ -42,8 +42,11 @@ impl DashboardModel {
         }
     }
 
-    /// 选中行的 plan id（Issues 行的 plan_id 或 Plans 行的 plan id）。
+    /// 选中行的 plan id（Issues 行的 plan_id / Plans 行的 plan id / IssueDetail 当前 issue 的 plan）。
     pub(crate) fn selected_plan_id(&self) -> Option<i64> {
+        if let View::IssueDetail { id } = self.view {
+            return self.issue(id).and_then(|i| i.plan_id);
+        }
         let idx = self.selected_idx()?;
         match self.view {
             View::Issues => self.page_issues().get(idx).and_then(|i| i.plan_id),
@@ -54,6 +57,13 @@ impl DashboardModel {
 
     /// 选中行的 milestone id（issue 所属 plan 的 milestone / plan 的 milestone / milestone 行）。
     pub(crate) fn selected_milestone_id(&self) -> Option<i64> {
+        if let View::IssueDetail { id } = self.view {
+            return self
+                .issue(id)
+                .and_then(|i| i.plan_id)
+                .and_then(|pid| self.plans.iter().find(|(c, _)| c.id == pid))
+                .and_then(|(c, _)| c.milestone_id);
+        }
         let idx = self.selected_idx()?;
         match self.view {
             View::Issues => self

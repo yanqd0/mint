@@ -269,6 +269,14 @@ impl DashboardModel {
                         self.navigate(View::MilestoneDetail { milestone_id: mid });
                     }
                 }
+                View::PlanDetail { .. } => {
+                    if let Some(id) = self
+                        .selected_idx()
+                        .and_then(|idx| self.page_issues().get(idx).map(|i| i.id))
+                    {
+                        self.navigate(View::IssueDetail { id });
+                    }
+                }
                 View::MilestoneDetail { milestone_id } => {
                     // 跨 panel 导航（selected 1-indexed，按当前页切片）：plans 段 1..=n；issues 段 n+1..。
                     let plans = self.page_milestone_plans(milestone_id);
