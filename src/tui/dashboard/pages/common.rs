@@ -19,13 +19,14 @@ pub fn flash_style(m: &DashboardModel, id: i64, kind: JumpKind) -> Option<Style>
 }
 
 /// 容器状态基色（milestone/plan 状态点用）。
+/// 容器状态基色（对齐 #164 issue 色：open 白 / running 黄 / partial 青 / done 绿 / dropped 红）。
 pub fn container_status_color(status: ContainerStatus) -> Color {
     match status {
-        ContainerStatus::Open => Color::Yellow,
-        ContainerStatus::Running => Color::Green,
+        ContainerStatus::Open => Color::White,
+        ContainerStatus::Running => Color::Yellow,
         ContainerStatus::Partial => Color::Cyan,
         ContainerStatus::Dropped => Color::Red,
-        ContainerStatus::Done => Color::White,
+        ContainerStatus::Done => Color::Green,
     }
 }
 

@@ -291,9 +291,12 @@ fn milestone_detail_paging_routes_by_cursor() {
 
 #[test]
 fn milestone_detail_paging_routes_issues_segment() {
+    let issues: Vec<Issue> = (1..=12)
+        .map(|i| mk_issue(i, Status::Open, None, "1"))
+        .collect();
     let mut m = DashboardModel::new();
     m.init(snap_full(
-        vec![],
+        issues,
         vec![(mk_plan(7, Some(4), "1"), 0)],
         vec![(mk_container(4), 0)],
     ));
@@ -397,6 +400,26 @@ fn plans_paging_covers_all_plans_across_groups() {
         vec![1, 2, 3, 4, 5],
         "跨页应覆盖全部 plan 无丢失: {seen:?}"
     );
+}
+
+#[test]
+fn milestone_scope_direct_issues_first() {
+    // ms4：直属 issue 2 + plan 7 的间接 issue 1。
+    let mut m = DashboardModel::new();
+    m.init(snap_full(
+        vec![
+            mk_issue(1, Status::Open, Some(7), "1"),
+            mk_issue(2, Status::Done, None, "1"),
+        ],
+        vec![(mk_plan(7, Some(4), "1"), 0)],
+        vec![(mk_container(4), 0)],
+    ));
+    m.milestone_directs = vec![(4, 2)];
+    m.view = View::MilestoneDetail { milestone_id: 4 };
+    let v = m.scope_issues();
+    assert_eq!(v.len(), 2);
+    assert_eq!(v[0].id, 2, "直属 issue 应在最前");
+    assert_eq!(v[1].id, 1, "间接 issue 随后");
 }
 
 #[test]

@@ -291,9 +291,9 @@ impl DashboardModel {
                         let plan = &plans[self.selected - 1].0;
                         self.navigate(View::PlanDetail { plan_id: plan.id });
                     } else if self.selected > n {
-                        let direct = self.page_milestone_direct_ids(milestone_id);
-                        if let Some(&iid) = direct.get(self.selected - n - 1) {
-                            self.navigate(View::IssueDetail { id: iid });
+                        let issues = self.page_milestone_issues(milestone_id);
+                        if let Some(issue) = issues.get(self.selected - n - 1) {
+                            self.navigate(View::IssueDetail { id: issue.id });
                         }
                     }
                 }

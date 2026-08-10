@@ -8,7 +8,9 @@ use ratatui::widgets::Paragraph;
 
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, mini_bar, panel_wrap};
+use crate::tui::dashboard::pages::common::{
+    body_paragraph, container_status_color, kv_lines, mini_bar, panel_wrap, status_dot,
+};
 use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
 use crate::tui::panel::{render_panel, stack};
 use crate::tui::text::truncate;
@@ -68,11 +70,13 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, milestone_id: i64,
         } else {
             Style::new()
         };
-        // 前缀（id+bar+进度）宽度固定，title 按面板内容宽 − 前缀宽截断（右侧省略），避免溢出。
+        // 前缀（状态点+id+bar+进度）宽度固定，title 按面板内容宽 − 前缀宽截断（右侧省略），避免溢出。
+        let dot = container_status_color(plan.status);
         let prefix = format!("#{:<3}{bar} {pdone}/{ptotal}  ", plan.id);
         let avail = area.width.saturating_sub(4) as usize; // render_panel 内容宽（border 2 + padding 2）
-        let pw = unicode_width::UnicodeWidthStr::width(prefix.as_str());
+        let pw = unicode_width::UnicodeWidthStr::width(prefix.as_str()) + 2; // + ● 空格
         plan_lines.push(Line::from(vec![
+            Span::styled("● ", Style::new().fg(dot)),
             Span::styled(prefix, style),
             Span::styled(truncate(&plan.title, avail.saturating_sub(pw)), style),
         ]));
@@ -83,33 +87,29 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, milestone_id: i64,
         .saturating_sub(plans_panel_h as usize)
         .saturating_sub(2)
         .max(1);
-    let direct_ids = m.page_milestone_direct_ids(milestone_id);
-    // 进度条数据（直接+间接全部 issue；mutation 完成后再取，避免借用冲突）。
+    let page_issues = m.page_milestone_issues(milestone_id);
+    // 进度条数据（直属+间接全部 issue；mutation 完成后再取，避免借用冲突）。
     let all: Vec<&Issue> = m.scope_issues();
     let mut issue_lines: Vec<Line> = Vec::new();
-    if direct_ids.is_empty() {
-        issue_lines.push(Line::from("(no direct issues)"));
+    if page_issues.is_empty() {
+        issue_lines.push(Line::from("(no issues in this milestone)"));
     }
-    for (j, iid) in direct_ids.iter().enumerate() {
+    for (j, issue) in page_issues.iter().enumerate() {
         let sel = m.selected_idx() == Some(n + j); // issues 段：selected n+1..
         let style = if sel {
             Style::new().add_modifier(Modifier::REVERSED)
         } else {
             Style::new()
         };
-        let t = m
-            .issues
-            .iter()
-            .find(|i| i.id == *iid)
-            .map(|i| i.title.clone())
-            .unwrap_or_default();
-        // 前缀（id+缩进）固定，title 按剩余宽截断，避免溢出。
-        let prefix = format!("#{:<3}  ", iid);
+        // 前缀（状态点+id）固定，title 按剩余宽截断，避免溢出。
+        let (dot, dot_style) = status_dot(issue.status);
+        let id_part = format!("#{} ", issue.id);
         let avail = area.width.saturating_sub(4) as usize;
-        let pw = unicode_width::UnicodeWidthStr::width(prefix.as_str());
+        let pw = 2 + unicode_width::UnicodeWidthStr::width(id_part.as_str());
         issue_lines.push(Line::from(vec![
-            Span::styled(prefix, style),
-            Span::styled(truncate(&t, avail.saturating_sub(pw)), style),
+            Span::styled(format!("{dot} "), dot_style),
+            Span::styled(id_part, style),
+            Span::styled(truncate(&issue.title, avail.saturating_sub(pw)), style),
         ]));
     }
 
@@ -279,9 +279,9 @@ mod tests {
     }
 
     #[test]
-    fn milestone_detail_omits_issues_panel_without_direct_issues() {
+    fn milestone_detail_omits_issues_panel_without_any_issue() {
         let mut m = model_full(
-            vec![mk_issue(1, "open one", Status::Open, Some(7))],
+            vec![],
             vec![(mk_container(7, "tui plan", None, Some(4)), 0)],
             vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
         );
@@ -291,8 +291,8 @@ mod tests {
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(
-            text.contains("no direct issues"),
-            "无直属 issue 时 issues panel 显示空提示: {text}"
+            text.contains("no issues in this milestone"),
+            "无任何 issue 时 issues panel 显示空提示: {text}"
         );
     }
 }

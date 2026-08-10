@@ -22,18 +22,27 @@ impl DashboardModel {
                 .iter()
                 .filter(|i| i.plan_id == Some(plan_id))
                 .collect(),
-            View::MilestoneDetail { milestone_id } => self
-                .issues
-                .iter()
-                .filter(|i| {
-                    let indirect = i
-                        .plan_id
-                        .and_then(|pid| self.plans.iter().find(|(c, _)| c.id == pid))
-                        .map(|(c, _)| c.milestone_id == Some(milestone_id))
-                        .unwrap_or(false);
-                    indirect || self.milestone_direct_ids(milestone_id).contains(&i.id)
-                })
-                .collect(),
+            View::MilestoneDetail { milestone_id } => {
+                let direct_ids = self.milestone_direct_ids(milestone_id);
+                // 直属在前，再 plan 间接；各按 self.issues 序（updated_at 逆序）。
+                let direct: Vec<&Issue> = self
+                    .issues
+                    .iter()
+                    .filter(|i| direct_ids.contains(&i.id))
+                    .collect();
+                let indirect: Vec<&Issue> = self
+                    .issues
+                    .iter()
+                    .filter(|i| {
+                        !direct_ids.contains(&i.id)
+                            && i.plan_id
+                                .and_then(|pid| self.plans.iter().find(|(c, _)| c.id == pid))
+                                .map(|(c, _)| c.milestone_id == Some(milestone_id))
+                                .unwrap_or(false)
+                    })
+                    .collect();
+                direct.into_iter().chain(indirect).collect()
+            }
             _ => Vec::new(),
         }
     }
@@ -252,9 +261,10 @@ impl DashboardModel {
         all[start..end].to_vec()
     }
 
-    /// MilestoneDetail 直属 issues 面板当前页 id（按 issues_page + issues_page_size 切片）。
-    pub(crate) fn page_milestone_direct_ids(&self, milestone_id: i64) -> Vec<i64> {
-        let all = self.milestone_direct_ids(milestone_id);
+    /// MilestoneDetail issues 面板当前页 issue（全部 issue：直属在前 + 间接；按 issues_page + issues_page_size 切片）。
+    /// 数据源 `scope_issues()` 按 `self.view` 取 milestone，参数仅作签名一致性。
+    pub(crate) fn page_milestone_issues(&self, _milestone_id: i64) -> Vec<&Issue> {
+        let all = self.scope_issues();
         let start = self.issues_page * self.issues_page_size;
         if start >= all.len() {
             return Vec::new();
@@ -271,9 +281,9 @@ impl DashboardModel {
             .max(1)
     }
 
-    /// MilestoneDetail issues 面板页数（至少 1）。
-    pub(crate) fn milestone_issues_pages(&self, milestone_id: i64) -> usize {
-        self.milestone_direct_ids(milestone_id)
+    /// MilestoneDetail issues 面板页数（至少 1，按全部 issue 计数）。
+    pub(crate) fn milestone_issues_pages(&self, _milestone_id: i64) -> usize {
+        self.scope_issues()
             .len()
             .div_ceil(self.issues_page_size)
             .max(1)
@@ -283,7 +293,7 @@ impl DashboardModel {
     pub(crate) fn milestone_segments(&self, milestone_id: i64) -> (usize, usize) {
         (
             self.page_milestone_plans(milestone_id).len(),
-            self.page_milestone_direct_ids(milestone_id).len(),
+            self.page_milestone_issues(milestone_id).len(),
         )
     }
 
@@ -301,7 +311,7 @@ impl DashboardModel {
             View::Issues | View::PlanDetail { .. } => self.page_issues().len(),
             View::MilestoneDetail { milestone_id } => {
                 self.page_milestone_plans(milestone_id).len()
-                    + self.page_milestone_direct_ids(milestone_id).len()
+                    + self.page_milestone_issues(milestone_id).len()
             }
             View::Plans => self.page_plans().len(),
             View::Milestones => self.page_milestones().len(),
