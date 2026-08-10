@@ -6,6 +6,7 @@ use std::collections::VecDeque;
 use crossterm::event::KeyCode;
 
 use crate::models::{Container, Issue};
+use crate::tui::TuiKey;
 use crate::tui::dashboard::diff::{DashboardSnapshot, diff_snapshots};
 use crate::tui::dashboard::types::{FlashItem, IssueFilter, JumpRequest, MAX_FEED, RawJump};
 
@@ -154,14 +155,14 @@ impl DashboardModel {
         }
     }
 
-    /// 处理按键：退出 dashboard 返回 Quit；视图内导航返回 None。TUI 纯只读，无写操作。
-    pub fn handle_key(&mut self, key: KeyCode) -> KeyAction {
+    /// 处理按键：退出 dashboard 返回 Quit（q 或 Ctrl+C）；视图内导航返回 None。TUI 纯只读，无写操作。
+    pub fn handle_key(&mut self, key: TuiKey) -> KeyAction {
         // 任何按键 → 用户活跃，重置空闲计时（自动切换前置失效）。
         self.user_idle = 0;
-        if key == KeyCode::Char('q') {
+        if key.code == KeyCode::Char('q') || (key.code == KeyCode::Char('c') && key.ctrl) {
             return KeyAction::Quit;
         }
-        self.handle_nav(key);
+        self.handle_nav(key.code);
         KeyAction::None
     }
 

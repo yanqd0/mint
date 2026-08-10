@@ -6,7 +6,7 @@
 use std::io::{self, IsTerminal};
 use std::time::Duration;
 
-use crossterm::event::{Event, KeyCode, KeyEventKind};
+use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::layout::Constraint;
@@ -45,10 +45,34 @@ impl EventSource for CrosstermEvents {
     }
 }
 
-/// 只认 `KeyEventKind::Press`（忽略 Repeat/Release 与鼠标/Resize 等）。
-pub(crate) fn to_keycode(e: Event) -> Option<KeyCode> {
+/// 按键抽象：code + ctrl/shift 修饰符（Ctrl+C 退出、Shift+Backspace 前进用）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TuiKey {
+    pub code: KeyCode,
+    pub ctrl: bool,
+    pub shift: bool,
+}
+
+impl TuiKey {
+    /// 无修饰符按键（测试/脚本构造）。
+    #[cfg(test)]
+    pub(crate) fn from_code(code: KeyCode) -> Self {
+        Self {
+            code,
+            ctrl: false,
+            shift: false,
+        }
+    }
+}
+
+/// 只认 `KeyEventKind::Press` 的按键（忽略 Repeat/Release 与鼠标/Resize 等），保留 ctrl/shift。
+pub(crate) fn to_key(e: Event) -> Option<TuiKey> {
     match e {
-        Event::Key(k) if k.kind == KeyEventKind::Press => Some(k.code),
+        Event::Key(k) if k.kind == KeyEventKind::Press => Some(TuiKey {
+            code: k.code,
+            ctrl: k.modifiers.contains(KeyModifiers::CONTROL),
+            shift: k.modifiers.contains(KeyModifiers::SHIFT),
+        }),
         _ => None,
     }
 }
@@ -84,10 +108,14 @@ fn run_interactive(model: &mut ListModel) -> Result<(), Error> {
         loop {
             terminal.draw(|f| draw::draw(f, model))?;
             let ev = CrosstermEvents.read_event()?;
-            if let Some(code) = to_keycode(ev)
-                && model.handle_key(code)
-            {
-                return Ok(());
+            if let Some(key) = to_key(ev) {
+                // q / Ctrl+C 均退出列表浏览。
+                let quit = key.code == KeyCode::Char('q')
+                    || (key.code == KeyCode::Char('c') && key.ctrl)
+                    || model.handle_key(key.code);
+                if quit {
+                    return Ok(());
+                }
             }
         }
     })();
@@ -133,28 +161,55 @@ fn constraint_value(c: &Constraint) -> u16 {
 mod tests {
     use crossterm::event::{KeyEvent, KeyEventKind};
 
-    use super::to_keycode;
+    use super::{TuiKey, to_key};
 
     #[test]
-    fn to_keycode_only_press() {
+    fn to_key_press_modifiers() {
         use crossterm::event::{Event, KeyCode, KeyEventState, KeyModifiers};
-        let press = Event::Key(KeyEvent {
-            code: KeyCode::Char('q'),
-            modifiers: KeyModifiers::NONE,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        });
-        assert_eq!(to_keycode(press), Some(KeyCode::Char('q')));
-        let repeat = Event::Key(KeyEvent {
-            code: KeyCode::Char('q'),
-            modifiers: KeyModifiers::NONE,
-            kind: KeyEventKind::Repeat,
-            state: KeyEventState::NONE,
-        });
-        assert_eq!(to_keycode(repeat), None);
-        let paste = Event::Paste("x".into());
-        assert_eq!(to_keycode(paste), None);
-        let resize = Event::Resize(10, 10);
-        assert_eq!(to_keycode(resize), None);
+        let mk = |code: KeyCode, mods: KeyModifiers, kind: KeyEventKind| {
+            Event::Key(KeyEvent {
+                code,
+                modifiers: mods,
+                kind,
+                state: KeyEventState::NONE,
+            })
+        };
+        // Press 保留 ctrl/shift 修饰符。
+        assert_eq!(
+            to_key(mk(
+                KeyCode::Char('c'),
+                KeyModifiers::CONTROL,
+                KeyEventKind::Press
+            )),
+            Some(TuiKey {
+                code: KeyCode::Char('c'),
+                ctrl: true,
+                shift: false
+            })
+        );
+        assert_eq!(
+            to_key(mk(
+                KeyCode::Backspace,
+                KeyModifiers::SHIFT,
+                KeyEventKind::Press
+            )),
+            Some(TuiKey {
+                code: KeyCode::Backspace,
+                ctrl: false,
+                shift: true
+            })
+        );
+        // 非 Press 忽略。
+        assert_eq!(
+            to_key(mk(
+                KeyCode::Char('q'),
+                KeyModifiers::NONE,
+                KeyEventKind::Repeat
+            )),
+            None
+        );
+        // 非按键事件忽略。
+        assert_eq!(to_key(Event::Paste("x".into())), None);
+        assert_eq!(to_key(Event::Resize(10, 10)), None);
     }
 }

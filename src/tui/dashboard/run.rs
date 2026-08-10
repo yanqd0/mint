@@ -12,7 +12,7 @@ use crate::error::Error;
 use crate::tui::dashboard::DashboardModel;
 use crate::tui::dashboard::data::load_snapshot;
 use crate::tui::dashboard::types::{IssueFilter, KeyAction, View};
-use crate::tui::{CrosstermEvents, EventSource, is_interactive, to_keycode};
+use crate::tui::{CrosstermEvents, EventSource, is_interactive, to_key};
 
 /// 自动刷新间隔：每 tick 全量重查重渲。
 const REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
@@ -62,8 +62,8 @@ fn run_loop<B: Backend>(
             .map_err(|e| Error::Other(format!("tui draw: {e:?}")))?;
         match events.poll_event(REFRESH_INTERVAL)? {
             Some(ev) => {
-                if let Some(code) = to_keycode(ev)
-                    && model.handle_key(code) == KeyAction::Quit
+                if let Some(key) = to_key(ev)
+                    && model.handle_key(key) == KeyAction::Quit
                 {
                     return Ok(());
                 }
@@ -142,6 +142,7 @@ impl EventSource for ScriptEvents {
 mod tests {
     use super::*;
     use crate::db;
+    use crate::tui::TuiKey;
     use crate::tui::dashboard::pages::tests_common::buffer_text;
     use ratatui::backend::TestBackend;
     use tempfile::TempDir;
@@ -252,9 +253,9 @@ mod tests {
         assert_eq!(v[0].status, Status::Open);
         let open_id = v[0].id;
         m.selected = 1; // 选中第一个 issue（0=无选中）
-        m.handle_key(KeyCode::Enter);
+        m.handle_key(TuiKey::from_code(KeyCode::Enter));
         assert_eq!(m.view, View::IssueDetail { id: open_id });
-        m.handle_key(KeyCode::Esc);
+        m.handle_key(TuiKey::from_code(KeyCode::Esc));
         assert_eq!(m.view, View::Issues);
     }
 }

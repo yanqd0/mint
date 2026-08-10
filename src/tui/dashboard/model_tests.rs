@@ -5,6 +5,11 @@ use crate::models::{ContainerStatus, Kind, Status};
 use crate::tui::dashboard::diff::DashboardSnapshot;
 use rstest::rstest;
 
+/// 无修饰符按键快捷构造（handle_key 改收 TuiKey 后测试用）。
+fn k(code: KeyCode) -> TuiKey {
+    TuiKey::from_code(code)
+}
+
 fn mk_issue(id: i64, status: Status, plan_id: Option<i64>, updated: &str) -> Issue {
     Issue {
         id,
@@ -125,7 +130,7 @@ fn navigation_keys(#[case] key: KeyCode, #[case] sel: usize) {
         ],
         vec![],
     ));
-    m.handle_key(key);
+    m.handle_key(k(key));
     assert_eq!(m.selected, sel);
 }
 
@@ -134,11 +139,31 @@ fn enter_detail_and_esc_back() {
     let mut m = DashboardModel::new();
     m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
     m.selected = 1; // 选中第一个 issue
-    m.handle_key(KeyCode::Enter);
+    m.handle_key(k(KeyCode::Enter));
     assert_eq!(m.view, View::IssueDetail { id: 1 });
-    m.handle_key(KeyCode::Esc);
+    m.handle_key(k(KeyCode::Esc));
     assert_eq!(m.view, View::Issues);
-    assert_eq!(m.handle_key(KeyCode::Char('q')), KeyAction::Quit);
+    assert_eq!(m.handle_key(k(KeyCode::Char('q'))), KeyAction::Quit);
+}
+
+#[test]
+fn ctrl_c_and_q_quit() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![], vec![]));
+    assert_eq!(m.handle_key(k(KeyCode::Char('q'))), KeyAction::Quit);
+    // Ctrl+C 与 q 等价退出。
+    let mut m2 = DashboardModel::new();
+    m2.init(snap(vec![], vec![]));
+    assert_eq!(
+        m2.handle_key(TuiKey {
+            code: KeyCode::Char('c'),
+            ctrl: true,
+            shift: false
+        }),
+        KeyAction::Quit
+    );
+    // 纯 'c'（无 ctrl）不退出。
+    assert_eq!(m2.handle_key(k(KeyCode::Char('c'))), KeyAction::None);
 }
 
 #[test]
@@ -162,17 +187,17 @@ fn visible_issues_filters_by_plan() {
 fn number_keys_and_tab_switch_tabs() {
     let mut m = DashboardModel::new();
     m.init(snap(vec![], vec![]));
-    m.handle_key(KeyCode::Char('2'));
+    m.handle_key(k(KeyCode::Char('2')));
     assert_eq!(m.view, View::Plans);
-    m.handle_key(KeyCode::Char('3'));
+    m.handle_key(k(KeyCode::Char('3')));
     assert_eq!(m.view, View::Milestones);
-    m.handle_key(KeyCode::Char('1'));
+    m.handle_key(k(KeyCode::Char('1')));
     assert_eq!(m.view, View::Issues);
-    m.handle_key(KeyCode::Tab);
+    m.handle_key(k(KeyCode::Tab));
     assert_eq!(m.view, View::Plans);
-    m.handle_key(KeyCode::Tab);
+    m.handle_key(k(KeyCode::Tab));
     assert_eq!(m.view, View::Milestones);
-    m.handle_key(KeyCode::Tab);
+    m.handle_key(k(KeyCode::Tab));
     assert_eq!(m.view, View::Issues);
 }
 
@@ -180,11 +205,11 @@ fn number_keys_and_tab_switch_tabs() {
 fn plans_tab_enter_opens_plan_detail() {
     let mut m = DashboardModel::new();
     m.init(snap(vec![], vec![(mk_plan(7, Some(4), "1"), 0)]));
-    m.handle_key(KeyCode::Char('2'));
+    m.handle_key(k(KeyCode::Char('2')));
     m.selected = 1; // 选中第一个 plan（selected 1-indexed，0=无选中）
-    m.handle_key(KeyCode::Enter);
+    m.handle_key(k(KeyCode::Enter));
     assert_eq!(m.view, View::PlanDetail { plan_id: 7 });
-    m.handle_key(KeyCode::Esc);
+    m.handle_key(k(KeyCode::Esc));
     assert_eq!(m.view, View::Plans);
 }
 
@@ -196,7 +221,7 @@ fn p_key_jumps_to_plan_detail_from_issue() {
         vec![(mk_plan(7, Some(4), "1"), 0)],
     ));
     m.selected = 1; // 选中 issue（0=无选中）
-    m.handle_key(KeyCode::Char('p'));
+    m.handle_key(k(KeyCode::Char('p')));
     assert_eq!(m.view, View::PlanDetail { plan_id: 7 });
 }
 
@@ -238,11 +263,11 @@ fn milestones_tab_enter_opens_milestone_detail() {
     let mut m = DashboardModel::new();
     m.init(snap(vec![], vec![]));
     m.milestones = vec![(mk_container(4), 0)];
-    m.handle_key(KeyCode::Char('3'));
+    m.handle_key(k(KeyCode::Char('3')));
     m.selected = 1; // 选中第一个 milestone
-    m.handle_key(KeyCode::Enter);
+    m.handle_key(k(KeyCode::Enter));
     assert_eq!(m.view, View::MilestoneDetail { milestone_id: 4 });
-    m.handle_key(KeyCode::Esc);
+    m.handle_key(k(KeyCode::Esc));
     assert_eq!(m.view, View::Milestones);
 }
 
@@ -256,9 +281,9 @@ fn milestone_detail_enter_opens_plan_detail() {
     ));
     m.view = View::MilestoneDetail { milestone_id: 4 };
     m.selected = 1; // plans 段第一个 plan
-    m.handle_key(KeyCode::Enter);
+    m.handle_key(k(KeyCode::Enter));
     assert_eq!(m.view, View::PlanDetail { plan_id: 7 });
-    m.handle_key(KeyCode::Esc);
+    m.handle_key(k(KeyCode::Esc));
     assert_eq!(m.view, View::Plans);
 }
 
@@ -267,9 +292,9 @@ fn number_keys_from_detail_switch_tab() {
     let mut m = DashboardModel::new();
     m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
     m.selected = 1; // 选中第一个 issue
-    m.handle_key(KeyCode::Enter); // IssueDetail
+    m.handle_key(k(KeyCode::Enter)); // IssueDetail
     assert_eq!(m.view, View::IssueDetail { id: 1 });
-    m.handle_key(KeyCode::Char('2'));
+    m.handle_key(k(KeyCode::Char('2')));
     assert_eq!(m.view, View::Plans);
 }
 
@@ -291,18 +316,18 @@ fn pagination_with_page_size() {
     assert_eq!(m.pages(), 3);
     assert_eq!(m.page_issues().len(), 2);
     assert_eq!(m.page_issues()[0].id, 5);
-    m.handle_key(KeyCode::Char('l'));
+    m.handle_key(k(KeyCode::Char('l')));
     assert_eq!(m.page, 1);
     assert_eq!(m.page_issues()[0].id, 3);
-    m.handle_key(KeyCode::PageDown);
+    m.handle_key(k(KeyCode::PageDown));
     assert_eq!(m.page, 2);
     assert_eq!(m.page_issues().len(), 1);
-    m.handle_key(KeyCode::Char('l')); // 末页无操作
+    m.handle_key(k(KeyCode::Char('l'))); // 末页无操作
     assert_eq!(m.page, 2);
-    m.handle_key(KeyCode::PageUp);
+    m.handle_key(k(KeyCode::PageUp));
     assert_eq!(m.page, 1);
-    m.handle_key(KeyCode::Char('h'));
+    m.handle_key(k(KeyCode::Char('h')));
     assert_eq!(m.page, 0);
-    m.handle_key(KeyCode::Char('h')); // 首页无操作
+    m.handle_key(k(KeyCode::Char('h'))); // 首页无操作
     assert_eq!(m.page, 0);
 }
