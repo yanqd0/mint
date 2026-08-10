@@ -1,5 +1,6 @@
 //! 共享渲染辅助：状态色 / 状态点 / 进度条（各页面复用）。
 
+use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Padding, Paragraph, Wrap};
@@ -123,6 +124,23 @@ pub fn mini_bar(done: usize, total: usize, width: usize) -> String {
         "█".repeat(filled) + &"░".repeat(width - filled)
     };
     format!(" {body} ")
+}
+
+/// 计算 Table 弹性列（如 TITLE 的 Min/Fill）实际宽：区内宽 − 边框/内边距(4) − 列间距 − 定宽列合计。
+/// 页面对该列内容预截断（右侧省略），避免长文本溢出/换行。
+pub fn flex_col_width(area: Rect, widths: &[Constraint]) -> u16 {
+    let fixed: u16 = widths
+        .iter()
+        .filter_map(|c| match c {
+            Constraint::Length(n) => Some(*n),
+            _ => None,
+        })
+        .sum();
+    let spacing = widths.len().saturating_sub(1) as u16;
+    area.width
+        .saturating_sub(4) // border 2 + padding 2
+        .saturating_sub(spacing)
+        .saturating_sub(fixed)
 }
 
 /// 带标题的 wrap 段落：行超宽自动换行（不截断），basic panel 用。
@@ -318,6 +336,21 @@ mod tests {
         }];
         assert!(flash_style(&m, 7, JumpKind::Plan).is_some());
         assert!(flash_style(&m, 8, JumpKind::Plan).is_none());
+    }
+
+    #[test]
+    fn flex_col_width_returns_remaining_after_fixed_and_spacing() {
+        let widths = [
+            Constraint::Length(18),
+            Constraint::Length(22),
+            Constraint::Length(11),
+            Constraint::Min(0),
+        ];
+        // 区内宽 − 边框/内边距(4) − 列间距(3) − 定宽列(51)。
+        assert_eq!(flex_col_width(Rect::new(0, 0, 100, 10), &widths), 42);
+        assert_eq!(flex_col_width(Rect::new(0, 0, 70, 10), &widths), 12);
+        // 窄到放不下 → 0（saturating）。
+        assert_eq!(flex_col_width(Rect::new(0, 0, 10, 10), &widths), 0);
     }
 
     #[test]

@@ -7,15 +7,24 @@ use ratatui::text::Line;
 use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{flash_style, mini_bar};
+use crate::tui::dashboard::pages::common::{flash_style, flex_col_width, mini_bar};
 use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::stack;
+use crate::tui::text::truncate;
 
 /// Plans tab：按 milestone 分组渲染（每组一 panel 标题），行选中按展平行号映射。
 pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let groups = m.plan_groups();
     let start = m.page * m.page_size;
     let end = start + m.page_size;
+    // 列宽 + TITLE 弹性列实际宽（title 按此预截断、右侧省略，避免长文本溢出/换行）。
+    let widths = [
+        Constraint::Length(18),
+        Constraint::Length(22),
+        Constraint::Length(11),
+        Constraint::Min(0),
+    ];
+    let title_w = flex_col_width(area, &widths);
 
     let header = Row::new(vec!["#", "PROGRESS", "DONE/TOTAL", "TITLE"])
         .style(Style::new().add_modifier(Modifier::BOLD));
@@ -29,7 +38,10 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
         if g_end <= start || g_start >= end {
             continue;
         }
-        rows.push(Row::new(vec![g.title.clone()]).style(Style::new().add_modifier(Modifier::BOLD)));
+        // 组标题按首列宽（18）截断，避免溢出。
+        rows.push(
+            Row::new(vec![truncate(&g.title, 18)]).style(Style::new().add_modifier(Modifier::BOLD)),
+        );
         for (i, (plan, _)) in g.plans.iter().enumerate() {
             let global = g_start + i;
             if global < start || global >= end {
@@ -42,7 +54,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
                 Cell::from(format!("#{}", plan.id)),
                 Cell::from(bar),
                 Cell::from(format!("{done}/{total}")),
-                Cell::from(plan.title.clone()),
+                Cell::from(truncate(&plan.title, title_w.max(1) as usize)),
             ]);
             if selected {
                 row = row.style(Style::new().add_modifier(Modifier::REVERSED));
@@ -56,13 +68,6 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     if rows.is_empty() {
         rows.push(Row::new(vec![Cell::from("(no plans)")]));
     }
-    // 第 1 列宽容纳组标题（组名跨列显示于该列）。
-    let widths = [
-        Constraint::Length(18),
-        Constraint::Length(22),
-        Constraint::Length(11),
-        Constraint::Min(0),
-    ];
 
     let footer = format!(
         "j/k ↑↓ plan · ←/→ page · 1/2/3 tab · Enter detail · q quit · Page {}/{}",
@@ -106,6 +111,31 @@ mod tests {
         assert!(text.contains("TUI (0.4.0)"), "组标题: {text}");
         assert!(text.contains("tui plan"), "plan 标题: {text}");
         assert!(text.contains("1/1"), "进度: {text}");
+    }
+
+    #[test]
+    fn plan_title_truncates_with_ellipsis_when_long() {
+        let mut m = model_full(
+            vec![mk_issue(1, "a", Status::Done, Some(7))],
+            vec![(
+                mk_container(
+                    7,
+                    "一个非常非常非常非常非常长的 plan 标题用于验证截断省略行为",
+                    None,
+                    Some(4),
+                ),
+                0,
+            )],
+            vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
+        );
+        m.view = View::Plans;
+        let mut terminal = test_backend(100, 12);
+        terminal
+            .draw(|f| draw_plans_panel(f, &m, f.area()))
+            .unwrap();
+        let lines = buffer_text(terminal.backend().buffer());
+        let row = lines.iter().find(|l| l.contains("#7")).expect("plan 行");
+        assert!(row.contains('…'), "长 plan 标题应右侧省略: {row}");
     }
 
     #[test]

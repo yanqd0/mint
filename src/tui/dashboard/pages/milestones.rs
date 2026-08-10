@@ -7,9 +7,12 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{container_status_color, flash_style, mini_bar};
+use crate::tui::dashboard::pages::common::{
+    container_status_color, flash_style, flex_col_width, mini_bar,
+};
 use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::{render_panel, stack};
+use crate::tui::text::truncate;
 
 /// 某 milestone 下 issue 数：返回 (总数, 直属数)。总数 = plan 聚合 issue + 直属 issue。
 fn milestone_counts(m: &DashboardModel, mid: i64) -> (usize, usize) {
@@ -25,6 +28,17 @@ fn milestone_counts(m: &DashboardModel, mid: i64) -> (usize, usize) {
 
 /// Milestones tab：全部 milestone 列表（ratatui Table：状态点 + id + version + PLANS/ISSUES 数字列 + TITLE 右置）。
 pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
+    // 列宽 + TITLE 弹性列实际宽（title 按此预截断、右侧省略，避免长文本溢出/换行）。
+    let widths = [
+        Constraint::Length(2),
+        Constraint::Length(5),
+        Constraint::Length(9),
+        Constraint::Length(6),
+        Constraint::Length(10),
+        Constraint::Min(0),
+    ];
+    let title_w = flex_col_width(area, &widths);
+
     let header = Row::new(vec!["", "#", "VERSION", "PLANS", "ISSUES", "TITLE"])
         .style(Style::new().add_modifier(Modifier::BOLD));
     let rows: Vec<Row> = m
@@ -45,7 +59,7 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
                 Cell::from(ver),
                 Cell::from(plan_count.to_string()),
                 Cell::from(format!("{total}({direct})")), // 总数(直属)
-                Cell::from(ms.title.clone()),
+                Cell::from(truncate(&ms.title, title_w.max(1) as usize)),
             ]);
             if selected {
                 row = row.style(Style::new().add_modifier(Modifier::REVERSED));
@@ -56,14 +70,6 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
             row
         })
         .collect();
-    let widths = [
-        Constraint::Length(2),
-        Constraint::Length(5),
-        Constraint::Length(9),
-        Constraint::Length(6),
-        Constraint::Length(10),
-        Constraint::Min(0),
-    ];
     let footer = format!(
         "j/k ↑↓ row · ←/→ page · 1/2/3 tab · Enter detail · q quit · Page {}/{}",
         m.page + 1,
@@ -153,6 +159,34 @@ mod tests {
         assert!(text.contains("TUI"), "标题: {text}");
         assert!(text.contains("PLANS"), "PLANS 表头: {text}");
         assert!(text.contains("0(0)"), "ISSUES 总数(直属): {text}");
+    }
+
+    #[test]
+    fn milestone_title_truncates_with_ellipsis_when_long() {
+        let mut m = model_full(
+            vec![],
+            vec![],
+            vec![(
+                mk_container(
+                    4,
+                    "一个非常非常非常非常非常长的 milestone 标题用于验证截断省略行为",
+                    Some("0.4.0"),
+                    None,
+                ),
+                0,
+            )],
+        );
+        m.view = View::Milestones;
+        let mut terminal = test_backend(100, 10);
+        terminal
+            .draw(|f| draw_milestones_panel(f, &m, f.area()))
+            .unwrap();
+        let lines = buffer_text(terminal.backend().buffer());
+        let row = lines
+            .iter()
+            .find(|l| l.contains("#4"))
+            .expect("milestone 行");
+        assert!(row.contains('…'), "长 milestone 标题应右侧省略: {row}");
     }
 
     #[test]
