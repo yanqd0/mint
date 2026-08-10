@@ -79,14 +79,15 @@ pub fn kind_abbrev(kind: crate::models::Kind) -> &'static str {
 }
 
 /// 进度条段样式：open 暗黄 / planned 亮黄 / dev 暗绿 / test 亮绿 / done 白 / dropped 亮红（计入完成）。
+/// 暗色用 Rgb（避免 DIM modifier 在部分终端不可见导致「无色彩」）。
 fn progress_style(status: Status) -> Style {
     match status {
-        Status::Open => Style::new().fg(Color::Yellow).add_modifier(Modifier::DIM),
-        Status::Planned => Style::new().fg(Color::Yellow),
-        Status::Dev => Style::new().fg(Color::Green).add_modifier(Modifier::DIM),
-        Status::Test => Style::new().fg(Color::Green),
+        Status::Open => Style::new().fg(Color::Rgb(178, 148, 0)), // 暗黄
+        Status::Planned => Style::new().fg(Color::Yellow),        // 亮黄
+        Status::Dev => Style::new().fg(Color::Rgb(0, 128, 0)),    // 暗绿
+        Status::Test => Style::new().fg(Color::Green),            // 亮绿
         Status::Done => Style::new().fg(Color::White),
-        Status::Dropped => Style::new().fg(Color::Red),
+        Status::Dropped => Style::new().fg(Color::Red),           // 亮红
     }
 }
 
@@ -274,9 +275,8 @@ mod tests {
         let total: usize = line.spans.iter().map(|s| s.content.chars().count()).sum();
         assert_eq!(total, 9);
         assert_eq!(line.spans.len(), 3);
-        // open 暗黄（DIM）、dropped 亮红。
-        assert_eq!(line.spans[0].style.fg, Some(C::Yellow));
-        assert!(line.spans[0].style.add_modifier.contains(Modifier::DIM));
+        // open 暗黄（Rgb）、dropped 亮红。
+        assert_eq!(line.spans[0].style.fg, Some(C::Rgb(178, 148, 0)));
         assert_eq!(line.spans[2].style.fg, Some(C::Red));
     }
 
