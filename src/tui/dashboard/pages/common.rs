@@ -87,7 +87,7 @@ fn progress_style(status: Status) -> Style {
         Status::Dev => Style::new().fg(Color::Rgb(0, 128, 0)),    // 暗绿
         Status::Test => Style::new().fg(Color::Green),            // 亮绿
         Status::Done => Style::new().fg(Color::White),
-        Status::Dropped => Style::new().fg(Color::Red),           // 亮红
+        Status::Dropped => Style::new().fg(Color::Red), // 亮红
     }
 }
 

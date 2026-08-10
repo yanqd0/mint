@@ -85,10 +85,11 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
                 .copied()
                 .filter(|i| i.status == *s)
                 .collect();
+            // title 存完整，渲染时按列宽顶格（右侧）省略。
             let mut rows: Vec<String> = items
                 .iter()
                 .take(10)
-                .map(|i| format!("#{} {}", i.id, truncate(&i.title, 8)))
+                .map(|i| format!("#{} {}", i.id, i.title))
                 .collect();
             if items.len() > 10 {
                 rows.push("…".into());
@@ -100,7 +101,12 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
     let n = kanban_cols.len().max(1);
     let k_cols = columns(chunks[ci], &vec![Constraint::Percentage(100 / n as u16); n]);
     for (i, (title, rows)) in kanban_cols.iter().enumerate() {
-        let mut lines: Vec<Line> = rows.iter().map(|r| Line::from(r.clone())).collect();
+        // title 顶格（右侧）省略：按列内容宽（border 2）动态截断。
+        let title_w = k_cols[i].width.saturating_sub(2) as usize;
+        let mut lines: Vec<Line> = rows
+            .iter()
+            .map(|r| Line::from(truncate(r, title_w.max(1))))
+            .collect();
         if lines.is_empty() {
             lines.push(Line::from("(empty)"));
         }

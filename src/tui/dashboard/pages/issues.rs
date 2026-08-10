@@ -4,7 +4,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
 use crate::models::Status;
 use crate::tui::dashboard::model::DashboardModel;
@@ -51,53 +51,62 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let mut prog_lines = vec![progress_bar(&all, bar_width)];
     prog_lines.push(Line::from(format!("progress: {progress_rate}%")));
 
-    // 列表 panel：表头（与行对齐）+ 状态点 ● + STATUS 简写 + ID + P + kind 简写 + LABEL + 标题。
-    let list_inner_w = chunks[1].width.saturating_sub(4) as usize; // border 2 + padding 2
-    let title_w = list_inner_w.saturating_sub(42).max(1); // 点2+status5+id4+P3+kind5+label21+空格1
-    let mut list_lines: Vec<Line> = Vec::new();
-    list_lines.push(Line::from(format!(
-        "# {:<5} #{:<3} {:<2} {:<4} {:<20} TITLE",
-        "STATUS", "ID", "P", "KIND", "LABEL"
-    )));
-    for (idx, i) in page.iter().enumerate() {
-        let (dot, dot_style) = status_dot(i.status);
-        let selected = m.selected_idx() == Some(idx);
-        let mut row_style = if selected {
-            Style::new().add_modifier(Modifier::REVERSED)
-        } else {
-            Style::new()
-        };
-        if let Some(fs) = flash_style(m, i.id, JumpKind::Issue) {
-            row_style = row_style.patch(fs);
-        }
-        let label = i
-            .labels
-            .first()
-            .map(|l| truncate(l, 20))
-            .unwrap_or_default();
-        let title = truncate(&i.title, title_w);
-        list_lines.push(
-            Line::from(vec![
-                Span::styled(format!("{dot} "), dot_style), // 状态点 ●（状态色/闪烁）
-                Span::styled(
-                    format!("{:<5}", status_abbrev(i.status)),
+    // 列表 panel：ratatui Table（表头 + 行；列宽按内容，对齐由 Table 按显示宽处理，解决中文/标签歪）。
+    let header = Row::new(vec!["#", "STATUS", "ID", "P", "KIND", "LABEL", "TITLE"])
+        .style(Style::new().add_modifier(Modifier::BOLD));
+    let rows: Vec<Row> = page
+        .iter()
+        .enumerate()
+        .map(|(idx, i)| {
+            let (dot, dot_style) = status_dot(i.status);
+            let label = i
+                .labels
+                .first()
+                .map(|l| truncate(l, 20))
+                .unwrap_or_default();
+            let mut row = Row::new(vec![
+                Cell::from(Line::from(vec![
+                    Span::styled(format!("{dot}"), dot_style), // 状态点 ●（状态色/闪烁）
+                ])),
+                Cell::from(Line::from(vec![Span::styled(
+                    status_abbrev(i.status),
                     status_text_style(i.status),
-                ),
-                Span::styled(format!("#{:<3}", i.id), Style::new()),
-                Span::styled(format!(" {:<2}", i.priority), Style::new()), // P 列
-                Span::styled(format!(" {:<4}", kind_abbrev(i.kind)), Style::new()), // kind 简写
-                Span::styled(format!(" {label:<20}"), Style::new()),
-                Span::styled(format!(" {title}"), Style::new()),
-            ])
-            .patch_style(row_style),
-        );
-    }
+                )])),
+                Cell::from(format!("#{}", i.id)),
+                Cell::from(i.priority.to_string()),
+                Cell::from(kind_abbrev(i.kind).to_string()),
+                Cell::from(label),
+                Cell::from(i.title.clone()),
+            ]);
+            if m.selected_idx() == Some(idx) {
+                row = row.style(Style::new().add_modifier(Modifier::REVERSED));
+            }
+            if let Some(fs) = flash_style(m, i.id, JumpKind::Issue) {
+                row = row.style(fs);
+            }
+            row
+        })
+        .collect();
+    let widths = [
+        Constraint::Length(2),
+        Constraint::Length(6),
+        Constraint::Length(5),
+        Constraint::Length(2),
+        Constraint::Length(5),
+        Constraint::Length(20),
+        Constraint::Min(0),
+    ];
 
     let footer = "j/k row · ←/→ page · 1/2/3 tab · Enter detail · p plan · m milestone · q quit";
     // 翻页信息移入列表 panel 标题（需求：不放 help 栏）。
-    let list_title = format!("{} · page {}/{}", panel_title(m), m.page + 1, m.pages());
+    let list_title = format!("─{} · page {}/{}", panel_title(m), m.page + 1, m.pages());
     render_panel(frame, chunks[0], "progress", prog_lines);
-    render_panel(frame, chunks[1], &list_title, list_lines);
+    let table = Table::new(rows, widths).header(header).block(
+        Block::bordered()
+            .title(list_title)
+            .padding(Padding::horizontal(1)),
+    );
+    frame.render_widget(table, chunks[1]);
     frame.render_widget(Paragraph::new(Line::from(footer)), chunks[2]);
 }
 
