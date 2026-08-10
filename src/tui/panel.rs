@@ -7,6 +7,8 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, BorderType, Padding, Paragraph};
 
+use crate::tui::dashboard::pages::common::truncate;
+
 /// 渲染圆角 panel：紧贴 area、带标题、内容多行。内容左右 1 格 padding（全局 margin 配置）。
 pub fn render_panel(frame: &mut Frame, area: Rect, title: &str, lines: Vec<Line>) {
     render_panel_with(frame, area, title, lines, Padding::horizontal(1));
@@ -17,8 +19,23 @@ pub fn render_panel_tight(frame: &mut Frame, area: Rect, title: &str, lines: Vec
     render_panel_with(frame, area, title, lines, Padding::ZERO);
 }
 
+/// panel 标题串：`title 宽 + 1 ≤ avail` 时带 `─` 前缀（标题右移一格），
+/// 否则去前缀仅顶格右侧省略。避免 Block title 超宽硬切角（窄列/长标题，宽可随 resize 改变）。
+pub fn panel_title(title: &str, avail: usize) -> String {
+    use unicode_width::UnicodeWidthStr;
+    if title.is_empty() || avail == 0 {
+        return String::new();
+    }
+    // `─{title}` 宽 = 1 + title 宽；有空间才加前缀（avail≥1 已由上文保证）。
+    if title.width() < avail {
+        format!("─{title}")
+    } else {
+        truncate(title, avail)
+    }
+}
+
 /// panel 渲染核心：统一圆角 border + 标题，padding 由调用方定。
-/// 标题右移一格（ratatui Block 无 title 偏移，title 前加 `─` 模拟边框线延伸）。
+/// 标题按面板宽自适应（见 `panel_title`），content 不截断（wrap 由调用方控制）。
 fn render_panel_with(
     frame: &mut Frame,
     area: Rect,
@@ -26,11 +43,7 @@ fn render_panel_with(
     lines: Vec<Line>,
     padding: Padding,
 ) {
-    let titled = if title.is_empty() {
-        String::new()
-    } else {
-        format!("─{title}")
-    };
+    let titled = panel_title(title, area.width.saturating_sub(2) as usize);
     frame.render_widget(
         Paragraph::new(lines).block(
             Block::bordered()
@@ -70,6 +83,19 @@ mod tests {
                     .to_string()
             })
             .collect()
+    }
+
+    #[test]
+    fn panel_title_fits_with_prefix_else_right_ellipsis() {
+        // 有空间放 ─ 前缀：带前缀完整显示。
+        assert_eq!(panel_title("open (1)", 10), "─open (1)");
+        // 无空间放前缀但标题本身放得下：去前缀完整显示（不硬切角）。
+        assert_eq!(panel_title("open (1)", 8), "open (1)");
+        // 超宽：顶格右侧省略。
+        assert_eq!(panel_title("planned (0)", 8), "planned…");
+        // 空 / 0 宽。
+        assert_eq!(panel_title("", 10), "");
+        assert_eq!(panel_title("open (1)", 0), "");
     }
 
     #[test]

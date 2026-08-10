@@ -159,6 +159,30 @@ mod tests {
     }
 
     #[test]
+    fn kanban_column_titles_fit_or_ellipsis_at_narrow_width() {
+        // 5 态各 1 issue（无 dropped 列），窄宽下列宽不足以容纳全部列标题。
+        let mut m = model_full(
+            vec![
+                mk_issue(1, "a", Status::Open, Some(7)),
+                mk_issue(2, "b", Status::Planned, Some(7)),
+                mk_issue(3, "c", Status::Dev, Some(7)),
+                mk_issue(4, "d", Status::Test, Some(7)),
+                mk_issue(5, "e", Status::Done, Some(7)),
+            ],
+            vec![(mk_container(7, "tui plan", None, None), 0)],
+            vec![],
+        );
+        m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
+        let mut terminal = test_backend(60, 20);
+        terminal.draw(|f| draw_detail(f, &m, 7, f.area())).unwrap();
+        let lines = buffer_text(terminal.backend().buffer());
+        let header = &lines[3]; // kanban 各列顶边框行
+        // 标题完整或右侧省略，不硬切缺字符/右角（如 "open (1" 缺 ")"）。
+        assert!(header.contains("open (1)"), "open 标题应完整: {header}");
+        assert!(header.contains('…'), "窄宽下列标题应右侧省略: {header}");
+    }
+
+    #[test]
     fn plan_detail_shows_body_panel_when_present() {
         let mut m = model_full(
             vec![mk_issue(1, "task", Status::Open, Some(7))],
