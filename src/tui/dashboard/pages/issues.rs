@@ -11,17 +11,13 @@ use crate::tui::dashboard::pages::common::{
     flash_style, flex_col_width, kind_abbrev, status_abbrev, status_dot, status_text_style,
 };
 use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
-use crate::tui::dashboard::types::{JumpKind, View};
+use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::{render_panel, stack};
 use crate::tui::text::truncate;
 
-/// 面板标题（Issues tab 或 PlanDetail）。
-fn panel_title(m: &DashboardModel) -> String {
-    match m.view {
-        View::Issues => "issues".to_string(),
-        View::PlanDetail { plan_id } => format!("plan #{plan_id}"),
-        _ => "mint".to_string(),
-    }
+/// 列表面板标题（Issues tab 与 PlanDetail 共用，恒为 issues；页码在调用处拼接）。
+fn panel_title() -> String {
+    "issues".to_string()
 }
 
 /// 渲染 issues 页面：进度 panel（上）+ 列表 panel（下）+ footer（Issues tab / PlanDetail 共用）。
@@ -96,7 +92,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
 
     let footer = "j/k row · ←/→ page · 1/2/3 tab · Enter detail · p plan · m milestone · q quit";
     // 翻页信息移入列表 panel 标题（需求：不放 help 栏）。
-    let list_title = format!("─{} · page {}/{}", panel_title(m), m.page + 1, m.pages());
+    let list_title = format!("─{} · page {}/{}", panel_title(), m.page + 1, m.pages());
     render_panel(frame, chunks[0], "progress", prog_lines);
     let table = Table::new(rows, widths).header(header).block(
         Block::bordered()
@@ -114,6 +110,7 @@ mod tests {
     use crate::tui::dashboard::pages::tests_common::{
         buffer_text, mk_issue, model_with, test_backend,
     };
+    use crate::tui::dashboard::types::View;
 
     #[test]
     fn progress_counts_dropped_even_with_all_filter() {
@@ -210,7 +207,7 @@ mod tests {
             .draw(|f| draw_issues_panel(f, &mut m, f.area()))
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
-        assert!(text.contains("plan #7"), "标题: {text}");
+        assert!(text.contains("issues · page"), "列表标题: {text}");
         assert!(text.contains("in plan"), "应含 plan issue: {text}");
         assert!(!text.contains("outside"), "不应含外部 issue: {text}");
     }

@@ -151,7 +151,14 @@ mod tests {
             .draw(|f| draw_detail(f, &mut m, 7, f.area()))
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
-        assert!(text.contains("plan #7"), "标题: {text}");
+        assert!(
+            text.contains("issues · page"),
+            "列表标题应为 issues: {text}"
+        );
+        assert!(
+            !text.contains("plan #7 · page"),
+            "列表标题不应是 plan #X: {text}"
+        );
         assert!(text.contains("tui plan"), "info: {text}");
         assert!(text.contains("open (1)"), "kanban open 列: {text}");
         assert!(text.contains("done (1)"), "kanban done 列: {text}");

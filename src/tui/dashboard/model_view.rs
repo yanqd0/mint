@@ -119,7 +119,7 @@ impl DashboardModel {
             });
         }
 
-        // 3. 剩余 milestone（非活跃）按 updated_at 逆序。
+        // 3. 剩余 milestone（非活跃）按 updated_at 逆序；空组（无 plan）跳过，避免孤行组标题。
         let mut rest: Vec<&(Container, i64)> = self
             .milestones
             .iter()
@@ -127,8 +127,11 @@ impl DashboardModel {
             .collect();
         rest.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at));
         for (ms, _) in rest {
-            let title = self.milestone_title(ms.id);
             let plans = self.milestone_plans(ms.id);
+            if plans.is_empty() {
+                continue;
+            }
+            let title = self.milestone_title(ms.id);
             groups.push(PlanGroup { title, plans });
         }
         groups

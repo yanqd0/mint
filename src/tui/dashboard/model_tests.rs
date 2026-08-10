@@ -354,6 +354,20 @@ fn issue_detail_p_and_m_navigate() {
 }
 
 #[test]
+fn plan_groups_skip_empty_milestones() {
+    let mut m = DashboardModel::new();
+    m.init(snap_full(
+        vec![],
+        vec![(mk_plan(7, Some(4), "1"), 0)],
+        vec![(mk_container(4), 0), (mk_container(5), 0)],
+    ));
+    let groups = m.plan_groups();
+    // 有 plan 的 ms4 产生组；空 ms5（无 plan）被跳过 → 仅 1 组，避免孤行标题。
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].plans.len(), 1);
+}
+
+#[test]
 fn visible_issues_filters_by_plan() {
     let mut m = DashboardModel::new();
     m.init(snap(
