@@ -16,7 +16,7 @@ impl DashboardModel {
         }
         let req = self.ready.pop_front()?;
         let target = req.target;
-        self.view = view_from_target(target);
+        self.navigate(view_from_target(target));
         self.flash = req
             .flash
             .into_iter()
@@ -27,8 +27,6 @@ impl DashboardModel {
             })
             .collect();
         self.auto_last = 0;
-        self.page = 0;
-        self.selected = 0;
         Some(target)
     }
 

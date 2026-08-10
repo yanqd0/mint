@@ -33,7 +33,7 @@ pub fn run_dashboard_view(
     let snapshot = load_snapshot(conn, project)?;
     let mut model = DashboardModel::new();
     model.init(snapshot);
-    model.view = initial;
+    model.reset_history(initial);
     model.filter = filter;
     if is_interactive() {
         let mut terminal = ratatui::init();

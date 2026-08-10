@@ -15,9 +15,8 @@ impl DashboardModel {
         if self.view == View::Issues {
             return;
         }
-        self.view = View::Issues;
-        self.page = 0;
-        self.selected = 0;
+        // 系统纠正（空闲重置），不入历史。
+        self.switch_tab(View::Issues);
         self.user_idle = 0;
     }
 }

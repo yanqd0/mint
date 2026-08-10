@@ -22,17 +22,15 @@ impl DashboardModel {
             _ => None,
         };
         if let Some(v) = back {
-            self.view = v;
-            self.page = 0;
+            // 系统纠正（数据驱动），不入历史。
+            self.switch_tab(v);
             self.clamp_selected();
         }
     }
 
-    /// 切到 tab 页（清空行状态）。
+    /// 切到 tab 页（清空行状态）。系统纠正用（Esc 回 tab / prune / home_timeout），不入历史。
     pub(crate) fn switch_tab(&mut self, tab: View) {
-        self.view = tab;
-        self.page = 0;
-        self.selected = 0;
+        self.apply_view_state(tab);
     }
 
     /// 当前所属 tab（详情页归其 tab）。

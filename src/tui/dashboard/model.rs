@@ -46,6 +46,10 @@ pub struct DashboardModel {
     pub(crate) merge_delay: u32,
     /// 进行中的闪烁项（渲染层读取）。
     pub flash: Vec<FlashItem>,
+    /// 路由历史链（视图级）。history_pos 指向当前视图；Backspace 后退 / Shift+Backspace 前进；
+    /// 中间节点产生新导航 → 永久截断前进段（链非树）。
+    pub(crate) history: Vec<View>,
+    pub(crate) history_pos: usize,
 }
 
 impl Default for DashboardModel {
@@ -75,6 +79,8 @@ impl DashboardModel {
             ready: VecDeque::new(),
             merge_delay: 0,
             flash: Vec::new(),
+            history: vec![View::Issues],
+            history_pos: 0,
         }
     }
 
@@ -102,6 +108,8 @@ impl DashboardModel {
         self.prev = Some(snapshot);
         self.view = View::Issues;
         self.selected = 0;
+        self.history = vec![View::Issues];
+        self.history_pos = 0;
         self.user_idle = 0;
         self.auto_last = 0;
         self.pending.clear();
@@ -162,7 +170,11 @@ impl DashboardModel {
         if key.code == KeyCode::Char('q') || (key.code == KeyCode::Char('c') && key.ctrl) {
             return KeyAction::Quit;
         }
-        self.handle_nav(key.code);
+        match key.code {
+            KeyCode::Backspace if !key.shift => self.history_back(),
+            KeyCode::Backspace if key.shift => self.history_forward(),
+            _ => self.handle_nav(key.code),
+        }
         KeyAction::None
     }
 
@@ -174,16 +186,16 @@ impl DashboardModel {
     /// 视图内导航（tab / 上下行 / 翻页 / 详情跳转 / Esc 返回），仅改状态。
     fn handle_nav(&mut self, key: KeyCode) {
         match key {
-            KeyCode::Char('1') => self.switch_tab(View::Issues),
-            KeyCode::Char('2') => self.switch_tab(View::Plans),
-            KeyCode::Char('3') => self.switch_tab(View::Milestones),
+            KeyCode::Char('1') => self.navigate(View::Issues),
+            KeyCode::Char('2') => self.navigate(View::Plans),
+            KeyCode::Char('3') => self.navigate(View::Milestones),
             KeyCode::Tab => {
                 let next = match self.active_tab() {
                     View::Issues => View::Plans,
                     View::Plans => View::Milestones,
                     _ => View::Issues,
                 };
-                self.switch_tab(next);
+                self.navigate(next);
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 let len = self.current_page_len();
@@ -211,16 +223,12 @@ impl DashboardModel {
             }
             KeyCode::Char('p') => {
                 if let Some(pid) = self.selected_plan_id() {
-                    self.view = View::PlanDetail { plan_id: pid };
-                    self.page = 0;
-                    self.selected = 0;
+                    self.navigate(View::PlanDetail { plan_id: pid });
                 }
             }
             KeyCode::Char('m') => {
                 if let Some(mid) = self.selected_milestone_id() {
-                    self.view = View::MilestoneDetail { milestone_id: mid };
-                    self.page = 0;
-                    self.selected = 0;
+                    self.navigate(View::MilestoneDetail { milestone_id: mid });
                 }
             }
             KeyCode::Enter => match self.view {
@@ -229,9 +237,7 @@ impl DashboardModel {
                         .selected_idx()
                         .and_then(|idx| self.page_issues().get(idx).map(|i| i.id))
                     {
-                        self.view = View::IssueDetail { id };
-                        self.page = 0;
-                        self.selected = 0;
+                        self.navigate(View::IssueDetail { id });
                     }
                 }
                 View::Plans => {
@@ -239,9 +245,7 @@ impl DashboardModel {
                         .selected_idx()
                         .and_then(|idx| self.page_plans().get(idx).map(|(c, _)| c.id))
                     {
-                        self.view = View::PlanDetail { plan_id: pid };
-                        self.page = 0;
-                        self.selected = 0;
+                        self.navigate(View::PlanDetail { plan_id: pid });
                     }
                 }
                 View::Milestones => {
@@ -249,9 +253,7 @@ impl DashboardModel {
                         .selected_idx()
                         .and_then(|idx| self.page_milestones().get(idx).map(|(c, _)| c.id))
                     {
-                        self.view = View::MilestoneDetail { milestone_id: mid };
-                        self.page = 0;
-                        self.selected = 0;
+                        self.navigate(View::MilestoneDetail { milestone_id: mid });
                     }
                 }
                 View::MilestoneDetail { milestone_id } => {
@@ -260,15 +262,13 @@ impl DashboardModel {
                     let n = plans.len();
                     if self.selected >= 1 && self.selected <= n {
                         let plan = &plans[self.selected - 1].0;
-                        self.view = View::PlanDetail { plan_id: plan.id };
+                        self.navigate(View::PlanDetail { plan_id: plan.id });
                     } else if self.selected > n {
                         let direct = self.milestone_direct_ids(milestone_id);
                         if let Some(&iid) = direct.get(self.selected - n - 1) {
-                            self.view = View::IssueDetail { id: iid };
+                            self.navigate(View::IssueDetail { id: iid });
                         }
                     }
-                    self.page = 0;
-                    self.selected = 0;
                 }
                 _ => {}
             },
@@ -279,6 +279,46 @@ impl DashboardModel {
                 _ => {}
             },
             _ => {}
+        }
+    }
+
+    /// 统一切视图 + 清空行状态（page/selected）。不记历史。
+    pub(crate) fn apply_view_state(&mut self, v: View) {
+        self.view = v;
+        self.page = 0;
+        self.selected = 0;
+    }
+
+    /// 用户/自动导航：记录历史（链式截断前进段）；与当前相同则仅重置状态（去重）。
+    pub(crate) fn navigate(&mut self, v: View) {
+        if self.history.get(self.history_pos) != Some(&v) {
+            self.history.truncate(self.history_pos + 1);
+            self.history.push(v);
+            self.history_pos = self.history.len() - 1;
+        }
+        self.apply_view_state(v);
+    }
+
+    /// 重置历史链（show --tui 从详情启动时，历史从该视图开始）。
+    pub(crate) fn reset_history(&mut self, v: View) {
+        self.history = vec![v];
+        self.history_pos = 0;
+        self.apply_view_state(v);
+    }
+
+    /// Backspace：回退到上一个视图（历史链首则 no-op）。
+    fn history_back(&mut self) {
+        if self.history_pos > 0 {
+            self.history_pos -= 1;
+            self.apply_view_state(self.history[self.history_pos]);
+        }
+    }
+
+    /// Shift+Backspace：前进到下一个视图（链尾则 no-op）。
+    fn history_forward(&mut self) {
+        if self.history_pos + 1 < self.history.len() {
+            self.history_pos += 1;
+            self.apply_view_state(self.history[self.history_pos]);
         }
     }
 }
