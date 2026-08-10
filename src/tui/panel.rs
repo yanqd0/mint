@@ -7,7 +7,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, BorderType, Padding, Paragraph};
 
-use crate::tui::dashboard::pages::common::truncate;
+use crate::tui::text::truncate;
 
 /// 渲染圆角 panel：紧贴 area、带标题、内容多行。内容左右 1 格 padding（全局 margin 配置）。
 pub fn render_panel(frame: &mut Frame, area: Rect, title: &str, lines: Vec<Line>) {

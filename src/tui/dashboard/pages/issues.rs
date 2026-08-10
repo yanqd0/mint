@@ -9,10 +9,11 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use crate::models::Status;
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    flash_style, kind_abbrev, progress_bar, status_abbrev, status_dot, status_text_style, truncate,
+    flash_style, kind_abbrev, progress_bar, status_abbrev, status_dot, status_text_style,
 };
 use crate::tui::dashboard::types::{JumpKind, View};
 use crate::tui::panel::{render_panel, stack};
+use crate::tui::text::truncate;
 
 /// 面板标题（Issues tab 或 PlanDetail）。
 fn panel_title(m: &DashboardModel) -> String {

@@ -7,9 +7,10 @@ use ratatui::widgets::Paragraph;
 
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, panel_wrap, truncate};
+use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, panel_wrap};
 use crate::tui::dashboard::pages::issues;
 use crate::tui::panel::{columns, render_panel, render_panel_tight, stack};
+use crate::tui::text::truncate;
 
 /// kanban 全列状态（6 态顺序）。
 const STATUSES: [Status; 6] = [
@@ -126,16 +127,9 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tui::dashboard::pages::common::truncate;
     use crate::tui::dashboard::pages::tests_common::{
         buffer_text, mk_container, mk_issue, model_full, test_backend,
     };
-
-    #[test]
-    fn truncate_keeps_width_budget() {
-        assert_eq!(truncate("short", 10), "short");
-        assert_eq!(truncate("hello world", 5), "hell…");
-    }
 
     #[test]
     fn plan_detail_shows_info_and_kanban_columns() {
@@ -176,7 +170,11 @@ mod tests {
         let mut terminal = test_backend(60, 20);
         terminal.draw(|f| draw_detail(f, &m, 7, f.area())).unwrap();
         let lines = buffer_text(terminal.backend().buffer());
-        let header = &lines[3]; // kanban 各列顶边框行
+        // 按内容定位 kanban 头行（不硬编码行号——布局变动不致断言失效）。
+        let header = lines
+            .iter()
+            .find(|l| l.contains("open (1)"))
+            .expect("kanban 头行应含 open 列标题");
         // 标题完整或右侧省略，不硬切缺字符/右角（如 "open (1" 缺 ")"）。
         assert!(header.contains("open (1)"), "open 标题应完整: {header}");
         assert!(header.contains('…'), "窄宽下列标题应右侧省略: {header}");
