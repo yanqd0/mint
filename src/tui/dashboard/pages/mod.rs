@@ -32,7 +32,9 @@ fn tab_index(m: &DashboardModel) -> usize {
 
 /// 渲染 dashboard：最外框（项目名标题）+ 顶部 Tabs（立体高亮）+ 内容（左右 padding）。
 pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
-    let outer = Block::bordered().title(m.project.as_str());
+    let outer = Block::bordered().title(
+        ratatui::text::Line::from(m.project.as_str()).alignment(ratatui::layout::Alignment::Center),
+    );
     let inner = outer.inner(frame.area());
     // 左右各 1 格 padding（panel 与外框边界留白）。
     let h = Layout::horizontal([

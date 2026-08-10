@@ -73,10 +73,14 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
         ci += 1;
     }
 
-    // kanban panel（6 态分列，ID+截断标题）。
+    // kanban panel（6 态分列，ID+截断标题；dropped 空列隐藏省宽）。
     let plan_issues: Vec<&Issue> = m.visible_issues();
     let kanban_cols: Vec<(String, Vec<String>)> = STATUSES
         .iter()
+        .filter(|s| {
+            // dropped 无 issue 时不显示该列（把宽度省出来）。
+            **s != Status::Dropped || plan_issues.iter().any(|i| i.status == **s)
+        })
         .map(|s| {
             let items: Vec<&Issue> = plan_issues
                 .iter()
@@ -95,7 +99,8 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
         })
         .collect();
 
-    let k_cols = columns(chunks[ci], &[Constraint::Percentage(17); 6]);
+    let n = kanban_cols.len().max(1);
+    let k_cols = columns(chunks[ci], &vec![Constraint::Percentage(100 / n as u16); n]);
     for (i, (title, rows)) in kanban_cols.iter().enumerate() {
         let mut lines: Vec<Line> = rows.iter().map(|r| Line::from(r.clone())).collect();
         if lines.is_empty() {
