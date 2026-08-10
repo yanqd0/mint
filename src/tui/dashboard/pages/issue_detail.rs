@@ -9,7 +9,7 @@ use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, panel_wrap}
 use crate::tui::panel::{render_panel, stack};
 
 /// 渲染 issue 详情：basic（键值对动态多列）→ tags → test → body（弹性）→ links。
-pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64, area: Rect) {
+pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, id: i64, area: Rect) {
     let Some(issue) = m.issue(id) else {
         render_panel(
             frame,
@@ -129,7 +129,7 @@ mod tests {
     }
 
     /// 渲染 issue 详情，返回逐行文本。
-    fn render(m: &DashboardModel, id: i64) -> Vec<String> {
+    fn render(m: &mut DashboardModel, id: i64) -> Vec<String> {
         let mut terminal = test_backend(80, 24);
         terminal.draw(|f| draw_detail(f, m, id, f.area())).unwrap();
         buffer_text(terminal.backend().buffer())
@@ -137,17 +137,17 @@ mod tests {
 
     #[test]
     fn basic_panel_shows_kv_and_deleted_fallback() {
-        let m = model_full(
+        let mut m = model_full(
             vec![mk_issue(7, "hello", Status::Dev, Some(3))],
             vec![],
             vec![],
         );
-        let text = render(&m, 7).join("\n");
+        let text = render(&mut m, 7).join("\n");
         assert!(text.contains("#7 hello"), "标题: {text}");
         assert!(text.contains("status  : dev"), "status 键值: {text}");
         assert!(text.contains("plan    : #3"), "plan 显 ID: {text}");
         // 不存在的 issue → deleted 提示
-        let text2 = render(&m, 99).join("\n");
+        let text2 = render(&mut m, 99).join("\n");
         assert!(text2.contains("#99 (deleted)"));
     }
 
@@ -158,8 +158,8 @@ mod tests {
         issue.test_cmd = Some("cargo test".into());
         issue.body = Some("line1\nline2".into());
         issue.links = vec![mk_link(9, "related")];
-        let m = model_full(vec![issue], vec![], vec![]);
-        let text = render(&m, 1).join("\n");
+        let mut m = model_full(vec![issue], vec![], vec![]);
+        let text = render(&mut m, 1).join("\n");
         assert!(text.contains("tags"), "tags panel: {text}");
         assert!(text.contains("dev urgent"), "tags 横排: {text}");
         assert!(text.contains("test"), "test panel: {text}");
@@ -175,8 +175,8 @@ mod tests {
         let mut issue = mk_issue(1, "long", Status::Open, None);
         issue.body =
             Some("this is a very long body line that should wrap across the terminal width".into());
-        let m = model_full(vec![issue], vec![], vec![]);
-        let text = render(&m, 1).join("\n");
+        let mut m = model_full(vec![issue], vec![], vec![]);
+        let text = render(&mut m, 1).join("\n");
         // body 内容换行后仍含开头与结尾片段（长行被 wrap 成多行）。
         assert!(
             text.contains("this is a very long body"),

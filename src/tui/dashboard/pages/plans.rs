@@ -13,7 +13,11 @@ use crate::tui::panel::stack;
 use crate::tui::text::truncate;
 
 /// Plans tab：按 milestone 分组渲染（每组一 panel 标题），行选中按展平行号映射。
-pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
+pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
+    // 布局先定：表格面板高度（按可见高度分页；set_page_size 先于 plan_groups 借用）。
+    let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
+    let rows_avail = chunks[0].height.saturating_sub(3); // 边框 2 + 表头 1
+    m.set_page_size(rows_avail as usize);
     let groups = m.plan_groups();
     let start = m.page * m.page_size;
     let end = start + m.page_size;
@@ -74,7 +78,6 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
         m.page + 1,
         m.pages()
     );
-    let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
     let title = format!("─plans · page {}/{}", m.page + 1, m.pages());
     let table = Table::new(rows, widths).header(header).block(
         Block::bordered()
@@ -104,7 +107,7 @@ mod tests {
         m.view = View::Plans;
         let mut terminal = test_backend(70, 12);
         terminal
-            .draw(|f| draw_plans_panel(f, &m, f.area()))
+            .draw(|f| draw_plans_panel(f, &mut m, f.area()))
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("plans"), "标题: {text}");
@@ -131,7 +134,7 @@ mod tests {
         m.view = View::Plans;
         let mut terminal = test_backend(100, 12);
         terminal
-            .draw(|f| draw_plans_panel(f, &m, f.area()))
+            .draw(|f| draw_plans_panel(f, &mut m, f.area()))
             .unwrap();
         let lines = buffer_text(terminal.backend().buffer());
         let row = lines.iter().find(|l| l.contains("#7")).expect("plan 行");
@@ -148,7 +151,7 @@ mod tests {
         m.view = View::Plans;
         let mut terminal = test_backend(70, 12);
         terminal
-            .draw(|f| draw_plans_panel(f, &m, f.area()))
+            .draw(|f| draw_plans_panel(f, &mut m, f.area()))
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("no milestone"), "组标题: {text}");

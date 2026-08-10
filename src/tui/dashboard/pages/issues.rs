@@ -25,12 +25,8 @@ fn panel_title(m: &DashboardModel) -> String {
 }
 
 /// 渲染 issues 页面：进度 panel（上）+ 列表 panel（下）+ footer（Issues tab / PlanDetail 共用）。
-pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
-    // 进度用视图作用域全集（含 done/dropped，不受列表筛选影响）；列表行仍走 page_issues 筛选。
-    let all = m.scope_issues();
-    let page = m.page_issues();
-
-    // 布局先定：progress panel 宽度给进度条（按占比分色分段）。
+pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
+    // 布局先定：progress panel + 列表面板高度（列表按可见高度分页）。
     let chunks = stack(
         area,
         &[
@@ -39,6 +35,12 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
             Constraint::Length(1),
         ],
     );
+    let rows_avail = chunks[1].height.saturating_sub(3); // 边框 2 + 表头 1
+    m.set_page_size(rows_avail as usize);
+
+    // 进度用视图作用域全集（含 done/dropped，不受列表筛选影响）；列表行仍走 page_issues 筛选。
+    let all = m.scope_issues();
+    let page = m.page_issues();
     let bar_width = chunks[0].width.saturating_sub(4) as usize; // panel 内容宽（border 2 + padding 2）
     let mut prog_lines = vec![progress_bar(&all, bar_width)];
     prog_lines.push(progress_pct_line(&all));
@@ -129,7 +131,7 @@ mod tests {
         });
         let mut terminal = test_backend(60, 10);
         terminal
-            .draw(|f| draw_issues_panel(f, &m, f.area()))
+            .draw(|f| draw_issues_panel(f, &mut m, f.area()))
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         // 进度用 scope_issues（dropped 计入完成 → done 33% + dropped 33%），不受 all=false 影响。
@@ -143,13 +145,13 @@ mod tests {
 
     #[test]
     fn draw_issue_panel_shows_title_rate_and_dot() {
-        let m = model_with(vec![
+        let mut m = model_with(vec![
             mk_issue(1, "open one", Status::Open, None),
             mk_issue(2, "done one", Status::Done, None),
         ]);
         let mut terminal = test_backend(60, 10);
         terminal
-            .draw(|f| draw_issues_panel(f, &m, f.area()))
+            .draw(|f| draw_issues_panel(f, &mut m, f.area()))
             .unwrap();
         let joined = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(joined.contains("issues"), "标题: {joined}");
@@ -161,7 +163,7 @@ mod tests {
 
     #[test]
     fn issue_title_truncates_with_ellipsis_in_tab_and_plan_detail() {
-        let m = model_with(vec![mk_issue(
+        let mut m = model_with(vec![mk_issue(
             1,
             "一个非常非常非常非常非常长的 issue 标题用于验证截断省略行为",
             Status::Open,
@@ -170,7 +172,7 @@ mod tests {
         // Issues tab。
         let mut terminal = test_backend(100, 10);
         terminal
-            .draw(|f| draw_issues_panel(f, &m, f.area()))
+            .draw(|f| draw_issues_panel(f, &mut m, f.area()))
             .unwrap();
         let lines = buffer_text(terminal.backend().buffer());
         let row = lines.iter().find(|l| l.contains("#1")).expect("issue 行");
@@ -185,7 +187,7 @@ mod tests {
         m2.view = View::PlanDetail { plan_id: 7 };
         let mut terminal2 = test_backend(100, 10);
         terminal2
-            .draw(|f| draw_issues_panel(f, &m2, f.area()))
+            .draw(|f| draw_issues_panel(f, &mut m2, f.area()))
             .unwrap();
         let lines2 = buffer_text(terminal2.backend().buffer());
         let row2 = lines2
@@ -205,7 +207,7 @@ mod tests {
         m.selected = 0;
         let mut terminal = test_backend(60, 10);
         terminal
-            .draw(|f| draw_issues_panel(f, &m, f.area()))
+            .draw(|f| draw_issues_panel(f, &mut m, f.area()))
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("plan #7"), "标题: {text}");

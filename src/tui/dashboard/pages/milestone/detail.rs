@@ -14,7 +14,7 @@ use crate::tui::panel::{render_panel, stack};
 use crate::tui::text::truncate;
 
 /// MilestoneDetail：basic / body / plan 列表 / 直属 issue 列表 四个 panel。
-pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, area: Rect) {
+pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, milestone_id: i64, area: Rect) {
     let Some((c, _)) = m.milestones.iter().find(|(c, _)| c.id == milestone_id) else {
         render_panel(
             frame,
@@ -24,10 +24,10 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         );
         return;
     };
-    // 进度用视图作用域全集（直接+间接，含 dropped；dropped 计入完成）。
-    let all: Vec<&Issue> = m.scope_issues();
-    let total = all.len();
-    let done = all
+    // 进度计数（临时 scope_issues，不跨后续 page_size mutation 持有借用）。
+    let total = m.scope_issues().len();
+    let done = m
+        .scope_issues()
         .iter()
         .filter(|i| matches!(i.status, Status::Done | Status::Dropped))
         .count();
@@ -44,9 +44,16 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
     kv.push(("updated".into(), c.updated_at.clone()));
     let basic_rows = kv_lines(&kv, area.width.saturating_sub(4));
 
-    // 2. plans panel + issues panel（2 个独立 panel，各自独立分页；跨 panel 导航保留，selected 1-indexed 跨段）。
+    // 2. plans panel（内容定高）+ issues panel（填满剩余），各自独立分页；跨 panel 导航保留，selected 1-indexed 跨段。
+    // 剩余可用高度（basic + body? + progress(4) + footer(1) 之外），plans 页大小取一半（给 issues 留空间）。
+    let avail_h = area
+        .height
+        .saturating_sub(basic_rows.len() as u16 + 2)
+        .saturating_sub(if c.body.is_some() { 4 } else { 0 })
+        .saturating_sub(4)
+        .saturating_sub(1);
+    m.plans_page_size = (avail_h as usize / 2).max(1);
     let plans = m.page_milestone_plans(milestone_id);
-    let direct_ids = m.page_milestone_direct_ids(milestone_id);
     let n = plans.len();
     let mut plan_lines: Vec<Line> = Vec::new();
     if plans.is_empty() {
@@ -70,6 +77,15 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
             Span::styled(truncate(&plan.title, avail.saturating_sub(pw)), style),
         ]));
     }
+    // plans 面板内容定高后，issues 填满剩余、按该高度分页。
+    let plans_panel_h = plan_lines.len() as u16 + 2;
+    m.issues_page_size = (avail_h as usize)
+        .saturating_sub(plans_panel_h as usize)
+        .saturating_sub(2)
+        .max(1);
+    let direct_ids = m.page_milestone_direct_ids(milestone_id);
+    // 进度条数据（直接+间接全部 issue；mutation 完成后再取，避免借用冲突）。
+    let all: Vec<&Issue> = m.scope_issues();
     let mut issue_lines: Vec<Line> = Vec::new();
     if direct_ids.is_empty() {
         issue_lines.push(Line::from("(no direct issues)"));
@@ -97,14 +113,14 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         ]));
     }
 
-    // 布局：basic + body(有) + plans + issues + footer。
+    // 布局：basic + body(有) + progress + plans（内容定高）+ issues（填满剩余）+ footer。
     let mut constraints: Vec<Constraint> = vec![Constraint::Length(basic_rows.len() as u16 + 2)];
     if c.body.is_some() {
         constraints.push(Constraint::Length(4));
     }
     constraints.push(Constraint::Length(4)); // progress 面板（bar + 分组百分比）
-    constraints.push(Constraint::Length(plan_lines.len() as u16 + 2));
-    constraints.push(Constraint::Length(issue_lines.len() as u16 + 2));
+    constraints.push(Constraint::Length(plans_panel_h));
+    constraints.push(Constraint::Min(0)); // issues 填满剩余
     constraints.push(Constraint::Length(1));
     let chunks = stack(area, &constraints);
     let mut ci = 0;
@@ -183,7 +199,9 @@ mod tests {
         m.milestone_directs = vec![(4, 1)]; // issue 1 直属 milestone 4
         m.view = View::MilestoneDetail { milestone_id: 4 };
         let mut terminal = test_backend(100, 20);
-        terminal.draw(|f| draw_detail(f, &m, 4, f.area())).unwrap();
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 4, f.area()))
+            .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("#4 TUI"), "标题: {text}");
         assert!(text.contains("0.4.0"), "version: {text}");
@@ -207,7 +225,9 @@ mod tests {
         m.milestone_directs = vec![(4, 2)];
         m.view = View::MilestoneDetail { milestone_id: 4 };
         let mut terminal = test_backend(80, 20);
-        terminal.draw(|f| draw_detail(f, &m, 4, f.area())).unwrap();
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 4, f.area()))
+            .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         // 直接+间接 2 issue（done + dropped）→ 分组行含 dropped 50%。
         assert!(text.contains("dropped 50%"), "聚合进度: {text}");
@@ -225,7 +245,9 @@ mod tests {
         );
         m.view = View::MilestoneDetail { milestone_id: 4 };
         let mut terminal = test_backend(100, 30);
-        terminal.draw(|f| draw_detail(f, &m, 4, f.area())).unwrap();
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 4, f.area()))
+            .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("plans · page 1/2"), "plans 页码: {text}");
         assert!(text.contains("issues · page 1/1"), "issues 页码: {text}");
@@ -248,7 +270,9 @@ mod tests {
         );
         m.view = View::MilestoneDetail { milestone_id: 4 };
         let mut terminal = test_backend(80, 20);
-        terminal.draw(|f| draw_detail(f, &m, 4, f.area())).unwrap();
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 4, f.area()))
+            .unwrap();
         let lines = buffer_text(terminal.backend().buffer());
         let plan_row = lines.iter().find(|l| l.contains("#7")).expect("plan 行");
         assert!(plan_row.contains('…'), "长 plan 标题应右侧省略: {plan_row}");
@@ -256,13 +280,15 @@ mod tests {
 
     #[test]
     fn milestone_detail_omits_issues_panel_without_direct_issues() {
-        let m = model_full(
+        let mut m = model_full(
             vec![mk_issue(1, "open one", Status::Open, Some(7))],
             vec![(mk_container(7, "tui plan", None, Some(4)), 0)],
             vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
         );
         let mut terminal = test_backend(100, 20);
-        terminal.draw(|f| draw_detail(f, &m, 4, f.area())).unwrap();
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 4, f.area()))
+            .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(
             text.contains("no direct issues"),

@@ -23,7 +23,7 @@ const STATUSES: [Status; 6] = [
 ];
 
 /// PlanDetail：basic / body / kanban / issue list 四个 panel。
-pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Rect) {
+pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, plan_id: i64, area: Rect) {
     let Some((c, _)) = m.plans.iter().find(|(c, _)| c.id == plan_id) else {
         render_panel(
             frame,
@@ -147,7 +147,9 @@ mod tests {
         );
         m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
         let mut terminal = test_backend(120, 24);
-        terminal.draw(|f| draw_detail(f, &m, 7, f.area())).unwrap();
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 7, f.area()))
+            .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("plan #7"), "标题: {text}");
         assert!(text.contains("tui plan"), "info: {text}");
@@ -172,7 +174,9 @@ mod tests {
         );
         m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
         let mut terminal = test_backend(60, 20);
-        terminal.draw(|f| draw_detail(f, &m, 7, f.area())).unwrap();
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 7, f.area()))
+            .unwrap();
         let lines = buffer_text(terminal.backend().buffer());
         // 按内容定位 kanban 头行（不硬编码行号——布局变动不致断言失效）。
         let header = lines
@@ -194,7 +198,9 @@ mod tests {
         m.plans[0].0.body = Some("plan body content".into());
         m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
         let mut terminal = test_backend(120, 24);
-        terminal.draw(|f| draw_detail(f, &m, 7, f.area())).unwrap();
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 7, f.area()))
+            .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("plan body content"), "body panel: {text}");
     }

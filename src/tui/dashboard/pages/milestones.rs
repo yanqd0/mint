@@ -27,7 +27,11 @@ fn milestone_counts(m: &DashboardModel, mid: i64) -> (usize, usize) {
 }
 
 /// Milestones tab：全部 milestone 列表（ratatui Table：状态点 + id + version + PLANS/ISSUES 数字列 + TITLE 右置）。
-pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
+pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
+    // 布局先定：表格面板高度（按可见高度分页）。
+    let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
+    let rows_avail = chunks[0].height.saturating_sub(3); // 边框 2 + 表头 1
+    m.set_page_size(rows_avail as usize);
     // 列宽 + TITLE 弹性列实际宽（title 按此预截断、右侧省略，避免长文本溢出/换行）。
     let widths = [
         Constraint::Length(2),
@@ -75,7 +79,6 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
         m.page + 1,
         m.pages()
     );
-    let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
     let title = format!("─milestones · page {}/{}", m.page + 1, m.pages());
     let mut rows = rows;
     if rows.is_empty() {
@@ -151,7 +154,7 @@ mod tests {
         m.view = View::Milestones;
         let mut terminal = test_backend(60, 10);
         terminal
-            .draw(|f| draw_milestones_panel(f, &m, f.area()))
+            .draw(|f| draw_milestones_panel(f, &mut m, f.area()))
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("milestones"), "标题: {text}");
@@ -179,7 +182,7 @@ mod tests {
         m.view = View::Milestones;
         let mut terminal = test_backend(100, 10);
         terminal
-            .draw(|f| draw_milestones_panel(f, &m, f.area()))
+            .draw(|f| draw_milestones_panel(f, &mut m, f.area()))
             .unwrap();
         let lines = buffer_text(terminal.backend().buffer());
         let row = lines

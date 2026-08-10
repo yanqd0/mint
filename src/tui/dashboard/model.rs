@@ -36,8 +36,12 @@ pub struct DashboardModel {
     pub plans_page: usize,
     /// MilestoneDetail 直属 issues 面板页。
     pub issues_page: usize,
-    /// 每页行数。
+    /// 每页行数（渲染器按列表面板高度写回，动态）。
     pub page_size: usize,
+    /// MilestoneDetail plans 面板页大小（与 issues 面板独立，内容定高）。
+    pub(crate) plans_page_size: usize,
+    /// MilestoneDetail issues 面板页大小（按面板高度动态）。
+    pub(crate) issues_page_size: usize,
     /// 用户空闲 tick（handle_key 重置 0，refresh 递增）；自动切换前置 ≥ AUTO_SWITCH_IDLE。
     pub(crate) user_idle: u32,
     /// 距上次自动切换的 tick；两次自动切换间隔 ≥ AUTO_SWITCH_GAP。
@@ -79,6 +83,8 @@ impl DashboardModel {
             plans_page: 0,
             issues_page: 0,
             page_size: 10,
+            plans_page_size: 10,
+            issues_page_size: 10,
             user_idle: 0,
             auto_last: 0,
             pending: VecDeque::new(),
@@ -310,6 +316,13 @@ impl DashboardModel {
         self.plans_page = 0;
         self.issues_page = 0;
         self.selected = 0;
+    }
+
+    /// 渲染器写回 page_size（按列表面板可见高度），并夹取 page/selected 防越界。
+    pub fn set_page_size(&mut self, n: usize) {
+        self.page_size = n.max(1);
+        self.clamp_page();
+        self.clamp_selected();
     }
 
     /// 用户/自动导航：记录历史（链式截断前进段）；与当前相同则仅重置状态（去重）。

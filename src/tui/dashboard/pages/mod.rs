@@ -32,9 +32,10 @@ fn tab_index(m: &DashboardModel) -> usize {
 }
 
 /// 渲染 dashboard：最外框（项目名标题）+ 顶部 Tabs（立体高亮）+ 内容（左右 padding）。
-pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
+/// `&mut`：列表页按面板高度写回 page_size。
+pub fn draw_dashboard(frame: &mut Frame, m: &mut DashboardModel) {
     let outer = Block::bordered().title(
-        ratatui::text::Line::from(m.project.as_str()).alignment(ratatui::layout::Alignment::Center),
+        ratatui::text::Line::from(m.project.clone()).alignment(ratatui::layout::Alignment::Center),
     );
     let inner = outer.inner(frame.area());
     // 左右各 1 格 padding（panel 与外框边界留白）。
@@ -59,7 +60,9 @@ pub fn draw_dashboard(frame: &mut Frame, m: &DashboardModel) {
     );
     // 标题栏（预留空行保持布局稳定；TUI 纯只读，无操作提示）。
     frame.render_widget(Paragraph::new(""), v[1]);
-    match m.view {
+    // 先拷贝 view（View: Copy），避免 match 借用 m 与 &mut 传参冲突。
+    let view = m.view;
+    match view {
         View::Issues => issues::draw_issues_panel(frame, m, v[2]),
         View::Plans => plans::draw_plans_panel(frame, m, v[2]),
         View::Milestones => milestones::draw_milestones_panel(frame, m, v[2]),

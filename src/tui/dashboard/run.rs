@@ -42,7 +42,7 @@ pub fn run_dashboard_view(
         ratatui::restore();
         result
     } else {
-        render_text(&model)
+        render_text(&mut model)
     }
 }
 
@@ -77,7 +77,7 @@ fn run_loop<B: Backend>(
 }
 
 /// 非 TTY：TestBackend 渲染初始 Issue 面板 → 逐行文本。
-fn render_text(model: &DashboardModel) -> Result<(), Error> {
+fn render_text(model: &mut DashboardModel) -> Result<(), Error> {
     let backend = ratatui::backend::TestBackend::new(100, 30);
     let mut terminal =
         ratatui::Terminal::new(backend).map_err(|e| Error::Other(format!("tui init: {e:?}")))?;

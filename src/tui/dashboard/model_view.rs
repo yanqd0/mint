@@ -240,25 +240,25 @@ impl DashboardModel {
         all[start..end].to_vec()
     }
 
-    /// MilestoneDetail plans 面板当前页行（按 plans_page 切片）。
+    /// MilestoneDetail plans 面板当前页行（按 plans_page + plans_page_size 切片）。
     pub(crate) fn page_milestone_plans(&self, milestone_id: i64) -> Vec<&(Container, i64)> {
         let all = self.milestone_plans(milestone_id);
-        let start = self.plans_page * self.page_size;
+        let start = self.plans_page * self.plans_page_size;
         if start >= all.len() {
             return Vec::new();
         }
-        let end = (start + self.page_size).min(all.len());
+        let end = (start + self.plans_page_size).min(all.len());
         all[start..end].to_vec()
     }
 
-    /// MilestoneDetail 直属 issues 面板当前页 id（按 issues_page 切片）。
+    /// MilestoneDetail 直属 issues 面板当前页 id（按 issues_page + issues_page_size 切片）。
     pub(crate) fn page_milestone_direct_ids(&self, milestone_id: i64) -> Vec<i64> {
         let all = self.milestone_direct_ids(milestone_id);
-        let start = self.issues_page * self.page_size;
+        let start = self.issues_page * self.issues_page_size;
         if start >= all.len() {
             return Vec::new();
         }
-        let end = (start + self.page_size).min(all.len());
+        let end = (start + self.issues_page_size).min(all.len());
         all[start..end].to_vec()
     }
 
@@ -266,7 +266,7 @@ impl DashboardModel {
     pub(crate) fn milestone_plans_pages(&self, milestone_id: i64) -> usize {
         self.milestone_plans(milestone_id)
             .len()
-            .div_ceil(self.page_size)
+            .div_ceil(self.plans_page_size)
             .max(1)
     }
 
@@ -274,7 +274,7 @@ impl DashboardModel {
     pub(crate) fn milestone_issues_pages(&self, milestone_id: i64) -> usize {
         self.milestone_direct_ids(milestone_id)
             .len()
-            .div_ceil(self.page_size)
+            .div_ceil(self.issues_page_size)
             .max(1)
     }
 
