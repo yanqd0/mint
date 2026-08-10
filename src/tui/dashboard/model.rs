@@ -238,13 +238,20 @@ impl DashboardModel {
                         self.selected = 0;
                     }
                 }
-                View::MilestoneDetail { .. } => {
-                    // milestone 详情：进入选中的 plan 详情。
-                    if let Some((c, _)) = self.page_plans().get(self.selected) {
-                        self.view = View::PlanDetail { plan_id: c.id };
-                        self.page = 0;
-                        self.selected = 0;
+                View::MilestoneDetail { milestone_id } => {
+                    // 跨 panel 导航：plans 段 → plan 详情；issues 段 → 直属 issue 详情。
+                    let plans = self.milestone_plans(milestone_id);
+                    if self.selected < plans.len() {
+                        let plan = &plans[self.selected].0;
+                        self.view = View::PlanDetail { plan_id: plan.id };
+                    } else {
+                        let direct = self.milestone_direct_ids(milestone_id);
+                        if let Some(&iid) = direct.get(self.selected - plans.len()) {
+                            self.view = View::IssueDetail { id: iid };
+                        }
                     }
+                    self.page = 0;
+                    self.selected = 0;
                 }
                 _ => {}
             },

@@ -233,11 +233,29 @@ impl DashboardModel {
     }
 
     /// 当前面板一页的行数（随视图切换）。
+    /// MilestoneDetail 统一列表行数：plans 行 + 直属 issue 行（跨 panel 导航用）。
+    pub(crate) fn milestone_detail_len(&self, milestone_id: i64) -> usize {
+        self.milestone_plans(milestone_id).len()
+            + self
+                .milestone_directs
+                .iter()
+                .filter(|(mid, _)| *mid == milestone_id)
+                .count()
+    }
+
+    /// MilestoneDetail 直属 issue id 列表（按快照顺序）。
+    pub(crate) fn milestone_direct_ids(&self, milestone_id: i64) -> Vec<i64> {
+        self.milestone_directs
+            .iter()
+            .filter(|(mid, _)| *mid == milestone_id)
+            .map(|(_, iid)| *iid)
+            .collect()
+    }
+
     pub(crate) fn current_page_len(&self) -> usize {
         match self.view {
-            View::Issues | View::PlanDetail { .. } | View::MilestoneDetail { .. } => {
-                self.page_issues().len()
-            }
+            View::Issues | View::PlanDetail { .. } => self.page_issues().len(),
+            View::MilestoneDetail { milestone_id } => self.milestone_detail_len(milestone_id),
             View::Plans => self.page_plans().len(),
             View::Milestones => self.page_milestones().len(),
             View::IssueDetail { .. } => 0,
