@@ -9,12 +9,28 @@ use ratatui::widgets::{Block, BorderType, Padding, Paragraph};
 
 /// 渲染圆角 panel：紧贴 area、带标题、内容多行。内容左右 1 格 padding（全局 margin 配置）。
 pub fn render_panel(frame: &mut Frame, area: Rect, title: &str, lines: Vec<Line>) {
+    render_panel_with(frame, area, title, lines, Padding::horizontal(1));
+}
+
+/// 渲染圆角 panel（无内容 padding）：窄列场景（kanban 6 态列等）省宽度。
+pub fn render_panel_tight(frame: &mut Frame, area: Rect, title: &str, lines: Vec<Line>) {
+    render_panel_with(frame, area, title, lines, Padding::ZERO);
+}
+
+/// panel 渲染核心：统一圆角 border + 标题，padding 由调用方定。
+fn render_panel_with(
+    frame: &mut Frame,
+    area: Rect,
+    title: &str,
+    lines: Vec<Line>,
+    padding: Padding,
+) {
     frame.render_widget(
         Paragraph::new(lines).block(
             Block::bordered()
                 .border_type(BorderType::Rounded)
                 .title(title)
-                .padding(Padding::horizontal(1)),
+                .padding(padding),
         ),
         area,
     );

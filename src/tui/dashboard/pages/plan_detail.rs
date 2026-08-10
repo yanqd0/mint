@@ -9,7 +9,7 @@ use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, truncate};
 use crate::tui::dashboard::pages::issues;
-use crate::tui::panel::{columns, render_panel, stack};
+use crate::tui::panel::{columns, render_panel, render_panel_tight, stack};
 
 /// kanban 全列状态（6 态顺序）。
 const STATUSES: [Status; 6] = [
@@ -101,7 +101,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
         if lines.is_empty() {
             lines.push(Line::from("(empty)"));
         }
-        render_panel(frame, k_cols[i], title, lines);
+        render_panel_tight(frame, k_cols[i], title, lines);
     }
     ci += 1;
 

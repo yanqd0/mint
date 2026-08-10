@@ -37,9 +37,9 @@ fn status_color(status: Status) -> Color {
     }
 }
 
-/// 状态是否闪烁（Planned 已排期待做、Dev 开发中）。
+/// 状态点是否默认闪烁（Planned 已排期、Dev 开发中、Test 测试中）。
 fn status_blinks(status: Status) -> bool {
-    matches!(status, Status::Planned | Status::Dev)
+    matches!(status, Status::Planned | Status::Dev | Status::Test)
 }
 
 /// 状态点样式（闪烁状态加 SLOW_BLINK）。
@@ -248,6 +248,12 @@ mod tests {
                 .contains(Modifier::SLOW_BLINK)
         );
         assert_eq!(status_dot(Status::Test).1.fg, Some(C::Green));
+        assert!(
+            status_dot(Status::Test)
+                .1
+                .add_modifier
+                .contains(Modifier::SLOW_BLINK)
+        );
         assert_eq!(status_dot(Status::Done).1.fg, Some(C::White));
         assert_eq!(status_dot(Status::Dropped).1.fg, Some(C::Red));
     }
