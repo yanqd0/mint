@@ -61,7 +61,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     )));
     for (idx, i) in page.iter().enumerate() {
         let (dot, dot_style) = status_dot(i.status);
-        let selected = idx == m.selected;
+        let selected = m.selected_idx() == Some(idx);
         let mut row_style = if selected {
             Style::new().add_modifier(Modifier::REVERSED)
         } else {

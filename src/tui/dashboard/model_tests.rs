@@ -108,7 +108,7 @@ fn selection_clamped_when_list_shrinks() {
     m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
     m.selected = 5;
     m.refresh(&snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
-    assert_eq!(m.selected, 0);
+    assert_eq!(m.selected, 1); // clamp 上界 len（1-indexed）
 }
 
 #[rstest]
@@ -133,6 +133,7 @@ fn navigation_keys(#[case] key: KeyCode, #[case] sel: usize) {
 fn enter_detail_and_esc_back() {
     let mut m = DashboardModel::new();
     m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
+    m.selected = 1; // 选中第一个 issue
     m.handle_key(KeyCode::Enter);
     assert_eq!(m.view, View::IssueDetail { id: 1 });
     m.handle_key(KeyCode::Esc);
@@ -180,6 +181,7 @@ fn plans_tab_enter_opens_plan_detail() {
     let mut m = DashboardModel::new();
     m.init(snap(vec![], vec![(mk_plan(7, Some(4), "1"), 0)]));
     m.handle_key(KeyCode::Char('2'));
+    m.selected = 1; // 选中第一个 plan（selected 1-indexed，0=无选中）
     m.handle_key(KeyCode::Enter);
     assert_eq!(m.view, View::PlanDetail { plan_id: 7 });
     m.handle_key(KeyCode::Esc);
@@ -193,6 +195,7 @@ fn p_key_jumps_to_plan_detail_from_issue() {
         vec![mk_issue(1, Status::Dev, Some(7), "1")],
         vec![(mk_plan(7, Some(4), "1"), 0)],
     ));
+    m.selected = 1; // 选中 issue（0=无选中）
     m.handle_key(KeyCode::Char('p'));
     assert_eq!(m.view, View::PlanDetail { plan_id: 7 });
 }
@@ -236,6 +239,7 @@ fn milestones_tab_enter_opens_milestone_detail() {
     m.init(snap(vec![], vec![]));
     m.milestones = vec![(mk_container(4), 0)];
     m.handle_key(KeyCode::Char('3'));
+    m.selected = 1; // 选中第一个 milestone
     m.handle_key(KeyCode::Enter);
     assert_eq!(m.view, View::MilestoneDetail { milestone_id: 4 });
     m.handle_key(KeyCode::Esc);
@@ -251,6 +255,7 @@ fn milestone_detail_enter_opens_plan_detail() {
         vec![(mk_container(4), 0)],
     ));
     m.view = View::MilestoneDetail { milestone_id: 4 };
+    m.selected = 1; // plans 段第一个 plan
     m.handle_key(KeyCode::Enter);
     assert_eq!(m.view, View::PlanDetail { plan_id: 7 });
     m.handle_key(KeyCode::Esc);
@@ -261,6 +266,7 @@ fn milestone_detail_enter_opens_plan_detail() {
 fn number_keys_from_detail_switch_tab() {
     let mut m = DashboardModel::new();
     m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
+    m.selected = 1; // 选中第一个 issue
     m.handle_key(KeyCode::Enter); // IssueDetail
     assert_eq!(m.view, View::IssueDetail { id: 1 });
     m.handle_key(KeyCode::Char('2'));

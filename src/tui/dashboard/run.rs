@@ -251,6 +251,7 @@ mod tests {
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].status, Status::Open);
         let open_id = v[0].id;
+        m.selected = 1; // 选中第一个 issue（0=无选中）
         m.handle_key(KeyCode::Enter);
         assert_eq!(m.view, View::IssueDetail { id: open_id });
         m.handle_key(KeyCode::Esc);

@@ -28,7 +28,7 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) 
         "ID", "VERSION"
     )));
     for (idx, (ms, _)) in m.page_milestones().iter().enumerate() {
-        let selected = idx == m.selected;
+        let selected = m.selected_idx() == Some(idx);
         let mut style = if selected {
             Style::new().add_modifier(Modifier::REVERSED)
         } else {
@@ -80,7 +80,7 @@ pub fn draw_milestone_detail(frame: &mut Frame, m: &DashboardModel, milestone_id
     let mut lines: Vec<Line> = Vec::new();
     for (idx, (plan, _)) in m.page_plans().iter().enumerate() {
         let (done, total) = m.plan_progress(plan.id);
-        let selected = idx == m.selected;
+        let selected = m.selected_idx() == Some(idx);
         let style = if selected {
             Style::new().add_modifier(Modifier::REVERSED)
         } else {

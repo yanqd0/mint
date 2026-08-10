@@ -58,7 +58,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
     for (plan, _) in plans.iter() {
         let (pdone, ptotal) = m.plan_progress(plan.id);
         let bar = mini_bar(pdone, ptotal, 20);
-        let sel = row == m.selected;
+        let sel = m.selected_idx() == Some(row);
         let style = if sel {
             Style::new().add_modifier(Modifier::REVERSED)
         } else {
@@ -78,7 +78,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         )));
     }
     for iid in direct_ids {
-        let sel = row == m.selected;
+        let sel = m.selected_idx() == Some(row);
         let style = if sel {
             Style::new().add_modifier(Modifier::REVERSED)
         } else {

@@ -171,11 +171,11 @@ impl DashboardModel {
         (done, total)
     }
 
-    /// 面板切换后校正选中（避免越界）。
+    /// 面板切换后校正选中（selected 1-indexed，上界 len；避免越界）。
     pub(crate) fn clamp_selected(&mut self) {
         let len = self.current_page_len();
-        if self.selected >= len {
-            self.selected = len.saturating_sub(1);
+        if self.selected > len {
+            self.selected = len;
         }
     }
 

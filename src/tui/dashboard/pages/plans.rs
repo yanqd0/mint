@@ -40,7 +40,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
             if global < start || global >= end {
                 continue;
             }
-            let selected = global - start == m.selected;
+            let selected = m.selected_idx() == Some(global - start);
             let (done, total) = m.plan_progress(plan.id);
             let mut style = if selected {
                 Style::new().add_modifier(Modifier::REVERSED)

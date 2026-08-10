@@ -46,30 +46,26 @@ impl DashboardModel {
 
     /// 选中行的 plan id（Issues 行的 plan_id 或 Plans 行的 plan id）。
     pub(crate) fn selected_plan_id(&self) -> Option<i64> {
+        let idx = self.selected_idx()?;
         match self.view {
-            View::Issues => self
-                .page_issues()
-                .get(self.selected)
-                .and_then(|i| i.plan_id),
-            View::Plans => self.page_plans().get(self.selected).map(|(c, _)| c.id),
+            View::Issues => self.page_issues().get(idx).and_then(|i| i.plan_id),
+            View::Plans => self.page_plans().get(idx).map(|(c, _)| c.id),
             _ => None,
         }
     }
 
     /// 选中行的 milestone id（issue 所属 plan 的 milestone / plan 的 milestone / milestone 行）。
     pub(crate) fn selected_milestone_id(&self) -> Option<i64> {
+        let idx = self.selected_idx()?;
         match self.view {
             View::Issues => self
                 .page_issues()
-                .get(self.selected)
+                .get(idx)
                 .and_then(|i| i.plan_id)
                 .and_then(|pid| self.plans.iter().find(|(c, _)| c.id == pid))
                 .and_then(|(c, _)| c.milestone_id),
-            View::Plans => self
-                .page_plans()
-                .get(self.selected)
-                .and_then(|(c, _)| c.milestone_id),
-            View::Milestones => self.page_milestones().get(self.selected).map(|(c, _)| c.id),
+            View::Plans => self.page_plans().get(idx).and_then(|(c, _)| c.milestone_id),
+            View::Milestones => self.page_milestones().get(idx).map(|(c, _)| c.id),
             _ => None,
         }
     }

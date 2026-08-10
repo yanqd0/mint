@@ -165,6 +165,11 @@ impl DashboardModel {
         KeyAction::None
     }
 
+    /// 选中条目的 0-indexed 行号（selected 0 = 无选中，返回 None）。
+    pub(crate) fn selected_idx(&self) -> Option<usize> {
+        self.selected.checked_sub(1)
+    }
+
     /// 视图内导航（tab / 上下行 / 翻页 / 详情跳转 / Esc 返回），仅改状态。
     fn handle_nav(&mut self, key: KeyCode) {
         match key {
@@ -181,7 +186,8 @@ impl DashboardModel {
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 let len = self.current_page_len();
-                if self.selected + 1 < len {
+                // 0 = 无选中；j 进入第 1 行（selected 1-indexed），上界 len。
+                if self.selected < len {
                     self.selected += 1;
                 }
             }
@@ -218,35 +224,45 @@ impl DashboardModel {
             }
             KeyCode::Enter => match self.view {
                 View::Issues => {
-                    if let Some(i) = self.page_issues().get(self.selected) {
-                        self.view = View::IssueDetail { id: i.id };
+                    if let Some(id) = self
+                        .selected_idx()
+                        .and_then(|idx| self.page_issues().get(idx).map(|i| i.id))
+                    {
+                        self.view = View::IssueDetail { id };
                         self.page = 0;
                         self.selected = 0;
                     }
                 }
                 View::Plans => {
-                    if let Some((c, _)) = self.page_plans().get(self.selected) {
-                        self.view = View::PlanDetail { plan_id: c.id };
+                    if let Some(pid) = self
+                        .selected_idx()
+                        .and_then(|idx| self.page_plans().get(idx).map(|(c, _)| c.id))
+                    {
+                        self.view = View::PlanDetail { plan_id: pid };
                         self.page = 0;
                         self.selected = 0;
                     }
                 }
                 View::Milestones => {
-                    if let Some((c, _)) = self.page_milestones().get(self.selected) {
-                        self.view = View::MilestoneDetail { milestone_id: c.id };
+                    if let Some(mid) = self
+                        .selected_idx()
+                        .and_then(|idx| self.page_milestones().get(idx).map(|(c, _)| c.id))
+                    {
+                        self.view = View::MilestoneDetail { milestone_id: mid };
                         self.page = 0;
                         self.selected = 0;
                     }
                 }
                 View::MilestoneDetail { milestone_id } => {
-                    // 跨 panel 导航：plans 段 → plan 详情；issues 段 → 直属 issue 详情。
+                    // 跨 panel 导航（selected 1-indexed）：plans 段 1..=n；issues 段 n+1..。
                     let plans = self.milestone_plans(milestone_id);
-                    if self.selected < plans.len() {
-                        let plan = &plans[self.selected].0;
+                    let n = plans.len();
+                    if self.selected >= 1 && self.selected <= n {
+                        let plan = &plans[self.selected - 1].0;
                         self.view = View::PlanDetail { plan_id: plan.id };
-                    } else {
+                    } else if self.selected > n {
                         let direct = self.milestone_direct_ids(milestone_id);
-                        if let Some(&iid) = direct.get(self.selected - plans.len()) {
+                        if let Some(&iid) = direct.get(self.selected - n - 1) {
                             self.view = View::IssueDetail { id: iid };
                         }
                     }
