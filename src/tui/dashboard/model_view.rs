@@ -11,10 +11,11 @@ pub struct PlanGroup<'a> {
 }
 
 impl DashboardModel {
-    /// 当前视图展示的 issue 集合（Issues tab = 全部；PlanDetail = 该 plan 下；
-    /// MilestoneDetail = 其下 plan 的 issue 聚合）。随后应用 list --tui 的初始筛选。
-    pub fn visible_issues(&self) -> Vec<&Issue> {
-        let mut v: Vec<&Issue> = match self.view {
+    /// 当前视图作用域内的 issue（**不应用**显示筛选）。进度统计用（done/dropped 计入，
+    /// 不受 list 默认只显活跃影响）。Issues tab = 全部；PlanDetail = 该 plan；
+    /// MilestoneDetail = 其下 plan 的 issue（间接）+ 直属 issue（直接）。
+    pub fn scope_issues(&self) -> Vec<&Issue> {
+        match self.view {
             View::Issues => self.issues.iter().collect(),
             View::PlanDetail { plan_id } => self
                 .issues
@@ -25,14 +26,21 @@ impl DashboardModel {
                 .issues
                 .iter()
                 .filter(|i| {
-                    i.plan_id
+                    let indirect = i
+                        .plan_id
                         .and_then(|pid| self.plans.iter().find(|(c, _)| c.id == pid))
                         .map(|(c, _)| c.milestone_id == Some(milestone_id))
-                        .unwrap_or(false)
+                        .unwrap_or(false);
+                    indirect || self.milestone_direct_ids(milestone_id).contains(&i.id)
                 })
                 .collect(),
             _ => Vec::new(),
-        };
+        }
+    }
+
+    /// 当前视图展示的 issue 集合（视图作用域 + list --tui 初始筛选）。
+    pub fn visible_issues(&self) -> Vec<&Issue> {
+        let mut v = self.scope_issues();
         // 初始筛选：all=false 排除 done/dropped（对齐 list 默认只显活跃）；其余精确匹配。
         if let Some(f) = &self.filter {
             v.retain(|i| {

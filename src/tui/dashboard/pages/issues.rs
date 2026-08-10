@@ -26,7 +26,8 @@ fn panel_title(m: &DashboardModel) -> String {
 
 /// 渲染 issues 页面：进度 panel（上）+ 列表 panel（下）+ footer（Issues tab / PlanDetail 共用）。
 pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
-    let all = m.visible_issues();
+    // 进度用视图作用域全集（含 done/dropped，不受列表筛选影响）；列表行仍走 page_issues 筛选。
+    let all = m.scope_issues();
     let page = m.page_issues();
     // dropped 计入完成（需求 10）；total 含 dropped。
     let total = all.len();
@@ -117,6 +118,34 @@ mod tests {
     use crate::tui::dashboard::pages::tests_common::{
         buffer_text, mk_issue, model_with, test_backend,
     };
+
+    #[test]
+    fn progress_counts_dropped_even_with_all_filter() {
+        let mut m = model_with(vec![
+            mk_issue(1, "open", Status::Open, None),
+            mk_issue(2, "done", Status::Done, None),
+            mk_issue(3, "dropped_issue", Status::Dropped, None),
+        ]);
+        // 模拟 list --tui 默认筛选：all=false 隐藏 done/dropped 行。
+        m.filter = Some(crate::tui::dashboard::types::IssueFilter {
+            all: false,
+            status: None,
+            label: None,
+            priority: None,
+        });
+        let mut terminal = test_backend(60, 10);
+        terminal
+            .draw(|f| draw_issues_panel(f, &m, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        // 进度用 scope_issues（dropped 计入完成 → 2/3=66%），不受 all=false 影响。
+        assert!(text.contains("progress: 66%"), "进度应含 dropped: {text}");
+        // 列表行仍受筛选：dropped 行隐藏。
+        assert!(
+            !text.contains("dropped_issue"),
+            "列表应隐藏 dropped 行: {text}"
+        );
+    }
 
     #[test]
     fn draw_issue_panel_shows_title_rate_and_dot() {

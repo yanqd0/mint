@@ -8,7 +8,9 @@ use ratatui::widgets::Paragraph;
 
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, mini_bar, panel_wrap};
+use crate::tui::dashboard::pages::common::{
+    body_paragraph, kv_lines, mini_bar, panel_wrap, progress_bar,
+};
 use crate::tui::panel::{render_panel, stack};
 use crate::tui::text::truncate;
 
@@ -23,12 +25,13 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         );
         return;
     };
-    let all: Vec<&Issue> = m.visible_issues();
-    let total = all
+    // 进度用视图作用域全集（直接+间接，含 dropped；dropped 计入完成）。
+    let all: Vec<&Issue> = m.scope_issues();
+    let total = all.len();
+    let done = all
         .iter()
-        .filter(|i| !matches!(i.status, Status::Dropped))
+        .filter(|i| matches!(i.status, Status::Done | Status::Dropped))
         .count();
-    let done = all.iter().filter(|i| i.status == Status::Done).count();
 
     // 1. basic 键值对（有值才显）。
     let mut kv: Vec<(String, String)> = vec![
@@ -100,6 +103,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
     if c.body.is_some() {
         constraints.push(Constraint::Length(4));
     }
+    constraints.push(Constraint::Length(4)); // progress 面板（bar + 百分比）
     constraints.push(Constraint::Length(plan_lines.len() as u16 + 2));
     constraints.push(Constraint::Length(issue_lines.len() as u16 + 2));
     constraints.push(Constraint::Length(1));
@@ -119,6 +123,22 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         frame.render_widget(body_paragraph(b, "body", chunks[ci].width), chunks[ci]);
         ci += 1;
     }
+    // progress 面板：直接+间接全部 issue 聚合进度条（dropped 红色计入完成）。
+    let rate = done
+        .checked_mul(100)
+        .and_then(|d| d.checked_div(total.max(1)))
+        .unwrap_or(0);
+    let bw = chunks[ci].width.saturating_sub(4) as usize; // render_panel 内容宽（border 2 + padding 2）
+    render_panel(
+        frame,
+        chunks[ci],
+        "progress",
+        vec![
+            progress_bar(&all, bw),
+            Line::from(format!("progress: {rate}%")),
+        ],
+    );
+    ci += 1;
     render_panel(frame, chunks[ci], "plans", plan_lines);
     ci += 1;
     render_panel(frame, chunks[ci], "issues", issue_lines);
@@ -158,6 +178,26 @@ mod tests {
         assert!(text.contains("tui plan"), "plan 行: {text}");
         assert!(text.contains("╭─issues"), "issues panel: {text}");
         assert!(text.contains("open one"), "直属 issue 行: {text}");
+    }
+
+    #[test]
+    fn progress_panel_shows_aggregate_direct_and_indirect() {
+        // plan 7 属 ms4（1 个 done 间接）+ issue 2 直属 ms4（dropped）。
+        let mut m = model_full(
+            vec![
+                mk_issue(1, "done in plan", Status::Done, Some(7)),
+                mk_issue(2, "direct dropped", Status::Dropped, None),
+            ],
+            vec![(mk_container(7, "tui plan", None, Some(4)), 0)],
+            vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
+        );
+        m.milestone_directs = vec![(4, 2)];
+        m.view = View::MilestoneDetail { milestone_id: 4 };
+        let mut terminal = test_backend(80, 20);
+        terminal.draw(|f| draw_detail(f, &m, 4, f.area())).unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        // 直接+间接 2 issue，done+dropped=2 → 100%。
+        assert!(text.contains("progress: 100%"), "聚合进度: {text}");
     }
 
     #[test]
