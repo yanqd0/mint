@@ -9,7 +9,7 @@
 ```
 claude-plugin/
 ├── .claude-plugin/
-│   └── marketplace.json    # 私有 marketplace 聚合（name + plugins 列表）
+│   └── marketplace.json    # 私有 marketplace 聚合（name + plugins 列表，source 相对本目录 ./mint-faa*）
 ├── CLAUDE.md               # 本文档
 ├── README.md               # 安装说明
 ├── mint-faa/               # 英文版
@@ -26,6 +26,8 @@ claude-plugin/
 └── mint-faa-cn/            # 中文版（主版本）
     └── ...（同上结构）
 ```
+
+> 仓库根另有一份 `.claude-plugin/marketplace.json`：供 `claude plugin marketplace add <git-url>` 远程安装发现（Claude 要求 marketplace.json 位于 git 仓库根）。它与 `claude-plugin/.claude-plugin/marketplace.json` **内容一致**（name/plugins/version 相同），仅 `source` 相对各自位置（根版 `./claude-plugin/mint-faa*`）。改任一份必须同步另一份。
 
 ### Skill 规范
 
@@ -78,6 +80,6 @@ claude-plugin/
 ### 版本同步
 
 - **Cargo.toml `version` 是权威版本号**
-- **正式版发布**（如 `0.4.0`）：同步更新两个 plugin.json + marketplace.json 的 version
+- **正式版发布**（如 `0.4.0`）：同步更新两个 plugin.json + **两处** marketplace.json（仓库根 `.claude-plugin/` 与 `claude-plugin/.claude-plugin/`）的 version，两处保持一致
 - **预发布版**（`-alpha.N` / `-beta.N`）：不碰 plugin 版本号
 - 发布流程见 `my-git-tag` skill
