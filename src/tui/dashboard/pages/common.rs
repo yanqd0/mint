@@ -7,6 +7,7 @@ use ratatui::widgets::{Block, BorderType, Padding, Paragraph, Wrap};
 use crate::models::{ContainerStatus, Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::types::JumpKind;
+use crate::tui::panel::panel_title;
 
 /// 闪烁样式：目标（id+kind）在 `m.flash` 中 → SLOW_BLINK（列表行闪烁标记，变化内容提示）。
 pub fn flash_style(m: &DashboardModel, id: i64, kind: JumpKind) -> Option<Style> {
@@ -125,19 +126,19 @@ pub fn mini_bar(done: usize, total: usize, width: usize) -> String {
 }
 
 /// 带标题的 wrap 段落：行超宽自动换行（不截断），basic panel 用。
-/// 内容左右 1 格 padding（全局 margin 配置）。
-pub fn panel_wrap<'a>(title: &str, lines: Vec<Line<'a>>) -> Paragraph<'a> {
+/// 内容左右 1 格 padding（全局 margin 配置）；标题按面板宽自适应（见 `panel_title`）。
+pub fn panel_wrap<'a>(title: &str, lines: Vec<Line<'a>>, width: u16) -> Paragraph<'a> {
     Paragraph::new(lines).wrap(Wrap { trim: true }).block(
         Block::bordered()
             .border_type(BorderType::Rounded)
-            .title(format!("─{title}"))
+            .title(panel_title(title, width.saturating_sub(2) as usize))
             .padding(Padding::horizontal(1)),
     )
 }
 
 /// body 段落：wrap 多行 + 圆角 border + 标题（issue/plan/milestone 详情 body panel 共用）。
-/// 内容左右 1 格 padding（全局 margin 配置）。
-pub fn body_paragraph(body: &str, title: &str) -> Paragraph<'static> {
+/// 内容左右 1 格 padding（全局 margin 配置）；标题按面板宽自适应（见 `panel_title`）。
+pub fn body_paragraph(body: &str, title: &str, width: u16) -> Paragraph<'static> {
     let lines: Vec<Line> = body
         .split('\n')
         .map(|l| Line::from(l.to_string()))
@@ -145,7 +146,7 @@ pub fn body_paragraph(body: &str, title: &str) -> Paragraph<'static> {
     Paragraph::new(lines).wrap(Wrap { trim: true }).block(
         Block::bordered()
             .border_type(BorderType::Rounded)
-            .title(format!("─{title}"))
+            .title(panel_title(title, width.saturating_sub(2) as usize))
             .padding(Padding::horizontal(1)),
     )
 }
@@ -317,6 +318,30 @@ mod tests {
         }];
         assert!(flash_style(&m, 7, JumpKind::Plan).is_some());
         assert!(flash_style(&m, 8, JumpKind::Plan).is_none());
+    }
+
+    #[test]
+    fn panel_wrap_title_ellipsis_when_narrow() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let mut terminal = Terminal::new(TestBackend::new(30, 3)).unwrap();
+        terminal
+            .draw(|f| {
+                f.render_widget(
+                    panel_wrap(
+                        "这是一个非常非常非常非常长的标题",
+                        vec![Line::from("x")],
+                        f.area().width,
+                    ),
+                    f.area(),
+                );
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        let top: String = (0..buf.area.width).map(|x| buf[(x, 0)].symbol()).collect();
+        // 标题按宽右侧省略，右角保留（不硬切角）。
+        assert!(top.contains('…'), "窄宽下标题应省略: {top}");
+        assert!(top.contains('╮'), "右角应保留: {top}");
     }
 
     #[test]

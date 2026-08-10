@@ -99,12 +99,16 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
     let mut ci = 0;
 
     frame.render_widget(
-        panel_wrap(&format!("#{} {}", c.id, c.title), basic_rows),
+        panel_wrap(
+            &format!("#{} {}", c.id, c.title),
+            basic_rows,
+            chunks[ci].width,
+        ),
         chunks[ci],
     );
     ci += 1;
     if let Some(b) = &c.body {
-        frame.render_widget(body_paragraph(b, "body"), chunks[ci]);
+        frame.render_widget(body_paragraph(b, "body", chunks[ci].width), chunks[ci]);
         ci += 1;
     }
     render_panel(frame, chunks[ci], "plans", plan_lines);

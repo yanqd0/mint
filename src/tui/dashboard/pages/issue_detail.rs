@@ -70,7 +70,11 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64, area: Rect) {
     let mut ci = 0;
 
     frame.render_widget(
-        panel_wrap(&format!("#{} {}", issue.id, issue.title), basic_rows),
+        panel_wrap(
+            &format!("#{} {}", issue.id, issue.title),
+            basic_rows,
+            chunks[ci].width,
+        ),
         chunks[ci],
     );
     ci += 1;
@@ -89,7 +93,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64, area: Rect) {
         ci += 1;
     }
     if let Some(b) = &issue.body {
-        frame.render_widget(body_paragraph(b, "body"), chunks[ci]);
+        frame.render_widget(body_paragraph(b, "body", chunks[ci].width), chunks[ci]);
         ci += 1;
     }
     if !issue.links.is_empty() {
