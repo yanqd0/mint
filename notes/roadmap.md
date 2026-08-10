@@ -90,7 +90,7 @@
 - **TUI 状态操作**（plan #25，2026-08-09，补齐验收缺口）：Shift+首字母推进状态（P/S/C/X/R/D/O → plan/start/commit/close/reset/drop/reopen），操作选中 issue 或详情当前 issue；close/drop 进入参数输入态（test_cmd/reason，Enter 提交 / Esc 取消）；结果标题栏提示（成功绿/失败红，5s 自动消失）。共享 `state::apply_transition`（CLI 与 TUI 同一转换核心，cli/issue/state.rs 瘦身为只打印）。
 - **show 与详情精致修改**（plan #18，2026-08-10）：show 默认输出改 TSV（issue/plan/milestone，body 末列 tab/换行转义）；skill 提示 LLM 取 body 走 `get body`；issue 详情页重构为 basic（动态多列键值对，有值才显，plan/milestone 显 #N）+ tags/test/body/links 多 panel；plan/milestone 详情加 basic/body（保留 kanban + 直属 issue 列表）；`show --tui` 复用 dashboard 详情页（初始视图注入）；`list --tui` 归一 dashboard 列表页（IssueFilter 初始筛选 + Enter 进详情/Esc 返回；label list 不参与）。
 
-**待做**：各子命令默认 TUI（`mint list`/`show` 等直接进 TUI，无需显式 `--tui`）。
+**策略（dropped：默认 TUI）**：默认全 TSV（AI/脚本稳定解析）；部分子命令配置 `--tui`（list/show 交互表格）；完整能力在 `tui` 子命令。~~各子命令默认 TUI~~（2026-08-10 dropped——显式 `--tui` + TTY 降级已覆盖人类交互，默认进 TUI 依赖 TTY 检测、会破坏 AI 侧 TSV 确定性）。
 
 **验收**：人工可滚动浏览并按状态推进 issue。
 
