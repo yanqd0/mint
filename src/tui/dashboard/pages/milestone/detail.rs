@@ -10,6 +10,7 @@ use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, mini_bar, panel_wrap};
 use crate::tui::panel::{render_panel, stack};
+use crate::tui::text::truncate;
 
 /// MilestoneDetail：basic / body / plan 列表 / 直属 issue 列表 四个 panel。
 pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, area: Rect) {
@@ -58,10 +59,13 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         } else {
             Style::new()
         };
+        // 前缀（id+bar+进度）宽度固定，title 按面板内容宽 − 前缀宽截断（右侧省略），避免溢出。
+        let prefix = format!("#{:<3}{bar} {pdone}/{ptotal}  ", plan.id);
+        let avail = area.width.saturating_sub(4) as usize; // render_panel 内容宽（border 2 + padding 2）
+        let pw = unicode_width::UnicodeWidthStr::width(prefix.as_str());
         plan_lines.push(Line::from(vec![
-            Span::styled(format!("#{:<3}", plan.id), style),
-            Span::styled(bar, style),
-            Span::styled(format!(" {pdone}/{ptotal}  {}", plan.title), style),
+            Span::styled(prefix, style),
+            Span::styled(truncate(&plan.title, avail.saturating_sub(pw)), style),
         ]));
     }
     let mut issue_lines: Vec<Line> = Vec::new();
@@ -75,15 +79,19 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         } else {
             Style::new()
         };
-        let title = m
+        let t = m
             .issues
             .iter()
             .find(|i| i.id == *iid)
             .map(|i| i.title.clone())
             .unwrap_or_default();
+        // 前缀（id+缩进）固定，title 按剩余宽截断，避免溢出。
+        let prefix = format!("#{:<3}  ", iid);
+        let avail = area.width.saturating_sub(4) as usize;
+        let pw = unicode_width::UnicodeWidthStr::width(prefix.as_str());
         issue_lines.push(Line::from(vec![
-            Span::styled(format!("#{:<3}", iid), style),
-            Span::styled(format!("  {title}"), style),
+            Span::styled(prefix, style),
+            Span::styled(truncate(&t, avail.saturating_sub(pw)), style),
         ]));
     }
 
@@ -150,6 +158,29 @@ mod tests {
         assert!(text.contains("tui plan"), "plan 行: {text}");
         assert!(text.contains("╭─issues"), "issues panel: {text}");
         assert!(text.contains("open one"), "直属 issue 行: {text}");
+    }
+
+    #[test]
+    fn plan_row_title_truncates_when_long() {
+        let mut m = model_full(
+            vec![mk_issue(1, "a", Status::Done, Some(7))],
+            vec![(
+                mk_container(
+                    7,
+                    "一个非常非常非常非常非常长的 plan 标题用于验证省略",
+                    None,
+                    Some(4),
+                ),
+                0,
+            )],
+            vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
+        );
+        m.view = View::MilestoneDetail { milestone_id: 4 };
+        let mut terminal = test_backend(80, 20);
+        terminal.draw(|f| draw_detail(f, &m, 4, f.area())).unwrap();
+        let lines = buffer_text(terminal.backend().buffer());
+        let plan_row = lines.iter().find(|l| l.contains("#7")).expect("plan 行");
+        assert!(plan_row.contains('…'), "长 plan 标题应右侧省略: {plan_row}");
     }
 
     #[test]
