@@ -144,7 +144,7 @@ mod tests {
         assert!(text.contains("0.4.0"), "version: {text}");
         assert!(text.contains("plans"), "plan 列表标题: {text}");
         assert!(text.contains("tui plan"), "plan 行: {text}");
-        assert!(text.contains("╭issues"), "issues panel: {text}");
+        assert!(text.contains("╭─issues"), "issues panel: {text}");
         assert!(text.contains("open one"), "直属 issue 行: {text}");
     }
 

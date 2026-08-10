@@ -150,7 +150,7 @@ pub fn panel_wrap<'a>(title: &str, lines: Vec<Line<'a>>) -> Paragraph<'a> {
     Paragraph::new(lines).wrap(Wrap { trim: true }).block(
         Block::bordered()
             .border_type(BorderType::Rounded)
-            .title(title.to_string())
+            .title(format!("─{title}"))
             .padding(Padding::horizontal(1)),
     )
 }
@@ -165,7 +165,7 @@ pub fn body_paragraph(body: &str, title: &str) -> Paragraph<'static> {
     Paragraph::new(lines).wrap(Wrap { trim: true }).block(
         Block::bordered()
             .border_type(BorderType::Rounded)
-            .title(title.to_string())
+            .title(format!("─{title}"))
             .padding(Padding::horizontal(1)),
     )
 }

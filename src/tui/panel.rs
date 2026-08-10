@@ -18,6 +18,7 @@ pub fn render_panel_tight(frame: &mut Frame, area: Rect, title: &str, lines: Vec
 }
 
 /// panel 渲染核心：统一圆角 border + 标题，padding 由调用方定。
+/// 标题右移一格（ratatui Block 无 title 偏移，title 前加 `─` 模拟边框线延伸）。
 fn render_panel_with(
     frame: &mut Frame,
     area: Rect,
@@ -25,11 +26,16 @@ fn render_panel_with(
     lines: Vec<Line>,
     padding: Padding,
 ) {
+    let titled = if title.is_empty() {
+        String::new()
+    } else {
+        format!("─{title}")
+    };
     frame.render_widget(
         Paragraph::new(lines).block(
             Block::bordered()
                 .border_type(BorderType::Rounded)
-                .title(title)
+                .title(titled)
                 .padding(padding),
         ),
         area,
