@@ -41,44 +41,35 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
     kv.push(("updated".into(), c.updated_at.clone()));
     let basic_rows = kv_lines(&kv, area.width.saturating_sub(4));
 
-    // 2. 统一列表：plans 段 + 直属 issue 段（跨 panel 导航，selected 高亮）。
+    // 2. plans panel + issues panel（2 个独立 panel；跨 panel 导航保留，selected 1-indexed 跨段）。
     let plans = m.milestone_plans(milestone_id);
     let direct_ids = m.milestone_direct_ids(milestone_id);
-    let mut list_lines: Vec<Line> = Vec::new();
-    let mut row = 0usize;
-    if plans.is_empty() && direct_ids.is_empty() {
-        list_lines.push(Line::from("(nothing in this milestone)"));
+    let n = plans.len();
+    let mut plan_lines: Vec<Line> = Vec::new();
+    if plans.is_empty() {
+        plan_lines.push(Line::from("(no plans in this milestone)"));
     }
-    if !plans.is_empty() {
-        list_lines.push(Line::from(Span::styled(
-            "plans",
-            Style::new().add_modifier(Modifier::BOLD),
-        )));
-    }
-    for (plan, _) in plans.iter() {
+    for (i, (plan, _)) in plans.iter().enumerate() {
         let (pdone, ptotal) = m.plan_progress(plan.id);
         let bar = mini_bar(pdone, ptotal, 20);
-        let sel = m.selected_idx() == Some(row);
+        let sel = m.selected_idx() == Some(i); // plans 段：selected 1..=n
         let style = if sel {
             Style::new().add_modifier(Modifier::REVERSED)
         } else {
             Style::new()
         };
-        list_lines.push(Line::from(vec![
+        plan_lines.push(Line::from(vec![
             Span::styled(format!("#{:<3}", plan.id), style),
             Span::styled(bar, style),
             Span::styled(format!(" {pdone}/{ptotal}  {}", plan.title), style),
         ]));
-        row += 1;
     }
-    if !direct_ids.is_empty() {
-        list_lines.push(Line::from(Span::styled(
-            "issues",
-            Style::new().add_modifier(Modifier::BOLD),
-        )));
+    let mut issue_lines: Vec<Line> = Vec::new();
+    if direct_ids.is_empty() {
+        issue_lines.push(Line::from("(no direct issues)"));
     }
-    for iid in direct_ids {
-        let sel = m.selected_idx() == Some(row);
+    for (j, iid) in direct_ids.iter().enumerate() {
+        let sel = m.selected_idx() == Some(n + j); // issues 段：selected n+1..
         let style = if sel {
             Style::new().add_modifier(Modifier::REVERSED)
         } else {
@@ -87,22 +78,22 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         let title = m
             .issues
             .iter()
-            .find(|i| i.id == iid)
+            .find(|i| i.id == *iid)
             .map(|i| i.title.clone())
             .unwrap_or_default();
-        list_lines.push(Line::from(vec![
+        issue_lines.push(Line::from(vec![
             Span::styled(format!("#{:<3}", iid), style),
             Span::styled(format!("  {title}"), style),
         ]));
-        row += 1;
     }
 
-    // 布局：basic + body(有) + 统一列表(弹性) + footer。
+    // 布局：basic + body(有) + plans + issues + footer。
     let mut constraints: Vec<Constraint> = vec![Constraint::Length(basic_rows.len() as u16 + 2)];
     if c.body.is_some() {
         constraints.push(Constraint::Length(4));
     }
-    constraints.push(Constraint::Min(0));
+    constraints.push(Constraint::Length(plan_lines.len() as u16 + 2));
+    constraints.push(Constraint::Length(issue_lines.len() as u16 + 2));
     constraints.push(Constraint::Length(1));
     let chunks = stack(area, &constraints);
     let mut ci = 0;
@@ -116,7 +107,9 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         frame.render_widget(body_paragraph(b, "body"), chunks[ci]);
         ci += 1;
     }
-    render_panel(frame, chunks[ci], "plans & issues", list_lines);
+    render_panel(frame, chunks[ci], "plans", plan_lines);
+    ci += 1;
+    render_panel(frame, chunks[ci], "issues", issue_lines);
     ci += 1;
     frame.render_widget(
         Paragraph::new(Line::from("Esc back · 1/2/3 tab · q quit")),
@@ -151,7 +144,7 @@ mod tests {
         assert!(text.contains("0.4.0"), "version: {text}");
         assert!(text.contains("plans"), "plan 列表标题: {text}");
         assert!(text.contains("tui plan"), "plan 行: {text}");
-        assert!(text.contains("│ issues"), "直属 issue 组: {text}");
+        assert!(text.contains("╭issues"), "issues panel: {text}");
         assert!(text.contains("open one"), "直属 issue 行: {text}");
     }
 
@@ -166,8 +159,8 @@ mod tests {
         terminal.draw(|f| draw_detail(f, &m, 4, f.area())).unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(
-            !text.contains("│ issues"),
-            "无直属 issue 不应有 issues 组: {text}"
+            text.contains("no direct issues"),
+            "无直属 issue 时 issues panel 显示空提示: {text}"
         );
     }
 }
