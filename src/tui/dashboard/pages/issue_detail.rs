@@ -5,7 +5,7 @@ use ratatui::layout::{Constraint, Rect};
 use ratatui::text::Line;
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines};
+use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, panel_wrap};
 use crate::tui::panel::{render_panel, stack};
 
 /// 渲染 issue 详情：basic（键值对动态多列）→ tags → test → body（弹性）→ links。
@@ -69,11 +69,9 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, id: i64, area: Rect) {
     let chunks = stack(area, &constraints);
     let mut ci = 0;
 
-    render_panel(
-        frame,
+    frame.render_widget(
+        panel_wrap(&format!("#{} {}", issue.id, issue.title), basic_rows),
         chunks[ci],
-        &format!("#{} {}", issue.id, issue.title),
-        basic_rows,
     );
     ci += 1;
 

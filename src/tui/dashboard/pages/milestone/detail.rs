@@ -7,7 +7,7 @@ use ratatui::widgets::Paragraph;
 
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, mini_bar};
+use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, mini_bar, panel_wrap};
 use crate::tui::panel::{render_panel, stack};
 
 /// MilestoneDetail：basic / body / plan 列表 / 直属 issue 列表 四个 panel。
@@ -86,11 +86,9 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
     let chunks = stack(area, &constraints);
     let mut ci = 0;
 
-    render_panel(
-        frame,
+    frame.render_widget(
+        panel_wrap(&format!("#{} {}", c.id, c.title), basic_rows),
         chunks[ci],
-        &format!("#{} {}", c.id, c.title),
-        basic_rows,
     );
     ci += 1;
     if let Some(b) = &c.body {

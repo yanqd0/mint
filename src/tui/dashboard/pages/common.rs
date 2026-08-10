@@ -127,6 +127,17 @@ pub fn truncate(s: &str, max: usize) -> String {
     out
 }
 
+/// 带标题的 wrap 段落：行超宽自动换行（不截断），basic panel 用。
+/// 内容左右 1 格 padding（全局 margin 配置）。
+pub fn panel_wrap<'a>(title: &str, lines: Vec<Line<'a>>) -> Paragraph<'a> {
+    Paragraph::new(lines).wrap(Wrap { trim: true }).block(
+        Block::bordered()
+            .border_type(BorderType::Rounded)
+            .title(title.to_string())
+            .padding(Padding::horizontal(1)),
+    )
+}
+
 /// body 段落：wrap 多行 + 圆角 border + 标题（issue/plan/milestone 详情 body panel 共用）。
 /// 内容左右 1 格 padding（全局 margin 配置）。
 pub fn body_paragraph(body: &str, title: &str) -> Paragraph<'static> {

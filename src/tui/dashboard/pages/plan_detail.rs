@@ -7,7 +7,7 @@ use ratatui::widgets::Paragraph;
 
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, truncate};
+use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, panel_wrap, truncate};
 use crate::tui::dashboard::pages::issues;
 use crate::tui::panel::{columns, render_panel, render_panel_tight, stack};
 
@@ -60,11 +60,9 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, plan_id: i64, area: Re
     let chunks = stack(area, &constraints);
     let mut ci = 0;
 
-    render_panel(
-        frame,
+    frame.render_widget(
+        panel_wrap(&format!("#{} {}", c.id, c.title), basic_rows),
         chunks[ci],
-        &format!("#{} {}", c.id, c.title),
-        basic_rows,
     );
     ci += 1;
 
