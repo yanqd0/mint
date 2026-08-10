@@ -224,7 +224,7 @@ mod tests {
         assert!(
             frame_lines(&terminal)
                 .iter()
-                .any(|l| l.contains("status  : open"))
+                .any(|l| l.contains("status: open"))
         );
     }
 

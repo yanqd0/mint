@@ -2,12 +2,15 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
-use ratatui::text::Line;
+use ratatui::style::Color;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, panel_wrap};
+use crate::tui::dashboard::pages::common::{
+    body_paragraph, container_status_color, kv_lines, panel_wrap,
+};
 use crate::tui::dashboard::pages::issues;
 use crate::tui::panel::{columns, render_panel, render_panel_tight, stack};
 use crate::tui::text::truncate;
@@ -36,18 +39,27 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, plan_id: i64, area
     let (done, total) = m.plan_progress(plan_id);
 
     // 1. basic 键值对（有值才显；milestone 显 #N）。
-    let mut kv: Vec<(String, String)> = vec![
-        ("status".into(), c.status.as_str().to_string()),
-        ("progress".into(), format!("{done}/{total}")),
+    let mut kv: Vec<(String, Span<'static>)> = vec![
+        (
+            "status".into(),
+            Span::styled(c.status.as_str(), container_status_color(c.status)),
+        ),
+        ("progress".into(), Span::raw(format!("{done}/{total}"))),
     ];
     if let Some(mid) = c.milestone_id {
-        kv.push(("milestone".into(), format!("#{mid}")));
+        kv.push(("milestone".into(), Span::raw(format!("#{mid}"))));
     }
     if let Some(v) = &c.version {
-        kv.push(("version".into(), v.clone()));
+        kv.push(("version".into(), Span::raw(v.clone())));
     }
-    kv.push(("created".into(), c.created_at.clone()));
-    kv.push(("updated".into(), c.updated_at.clone()));
+    kv.push((
+        "created".into(),
+        Span::styled(c.created_at.clone(), Color::Magenta),
+    ));
+    kv.push((
+        "updated".into(),
+        Span::styled(c.updated_at.clone(), Color::Magenta),
+    ));
     let basic_rows = kv_lines(&kv, area.width.saturating_sub(4));
 
     // 布局：basic + body(有) + kanban(10) + issues(弹性) + footer。

@@ -2,7 +2,7 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
@@ -35,15 +35,24 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, milestone_id: i64,
         .count();
 
     // 1. basic 键值对（有值才显）。
-    let mut kv: Vec<(String, String)> = vec![
-        ("status".into(), c.status.as_str().to_string()),
-        ("progress".into(), format!("{done}/{total}")),
+    let mut kv: Vec<(String, Span<'static>)> = vec![
+        (
+            "status".into(),
+            Span::styled(c.status.as_str(), container_status_color(c.status)),
+        ),
+        ("progress".into(), Span::raw(format!("{done}/{total}"))),
     ];
     if let Some(v) = &c.version {
-        kv.push(("version".into(), v.clone()));
+        kv.push(("version".into(), Span::raw(v.clone())));
     }
-    kv.push(("created".into(), c.created_at.clone()));
-    kv.push(("updated".into(), c.updated_at.clone()));
+    kv.push((
+        "created".into(),
+        Span::styled(c.created_at.clone(), Color::Magenta),
+    ));
+    kv.push((
+        "updated".into(),
+        Span::styled(c.updated_at.clone(), Color::Magenta),
+    ));
     let basic_rows = kv_lines(&kv, area.width.saturating_sub(4));
 
     // 2. plans panel（内容定高）+ issues panel（填满剩余），各自独立分页；跨 panel 导航保留，selected 1-indexed 跨段。

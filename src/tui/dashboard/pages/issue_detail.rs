@@ -2,10 +2,13 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
-use ratatui::text::Line;
+use ratatui::style::Color;
+use ratatui::text::{Line, Span};
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, panel_wrap};
+use crate::tui::dashboard::pages::common::{
+    body_paragraph, kv_lines, panel_wrap, status_text_style,
+};
 use crate::tui::panel::{render_panel, stack};
 
 /// 渲染 issue 详情：basic（键值对动态多列）→ tags → test → body（弹性）→ links。
@@ -21,33 +24,42 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, id: i64, area: Rec
     };
 
     // basic 键值对：有值才显；plan/milestone 只显 ID（#N）。
-    let mut kv: Vec<(String, String)> = vec![
-        ("status".into(), issue.status.as_str().to_string()),
-        ("kind".into(), issue.kind.as_str().to_string()),
-        ("priority".into(), issue.priority.to_string()),
+    let mut kv: Vec<(String, Span<'static>)> = vec![
+        (
+            "status".into(),
+            Span::styled(issue.status.as_str(), status_text_style(issue.status)),
+        ),
+        ("kind".into(), Span::raw(issue.kind.as_str())),
+        ("priority".into(), Span::raw(issue.priority.to_string())),
     ];
     if let Some(p) = &issue.project {
-        kv.push(("project".into(), p.clone()));
+        kv.push(("project".into(), Span::raw(p.clone())));
     }
     if let Some(pid) = issue.plan_id {
-        kv.push(("plan".into(), format!("#{pid}")));
+        kv.push(("plan".into(), Span::raw(format!("#{pid}"))));
         if let Some(mid) = m
             .plans
             .iter()
             .find(|(c, _)| c.id == pid)
             .and_then(|(c, _)| c.milestone_id)
         {
-            kv.push(("milestone".into(), format!("#{mid}")));
+            kv.push(("milestone".into(), Span::raw(format!("#{mid}"))));
         }
     }
     if let Some(dr) = &issue.dropped_reason {
-        kv.push(("dropped".into(), dr.clone()));
+        kv.push(("dropped".into(), Span::raw(dr.clone())));
     }
     if let Some(sha) = &issue.last_commit_id {
-        kv.push(("commit".into(), sha.clone()));
+        kv.push(("commit".into(), Span::raw(sha.clone())));
     }
-    kv.push(("created".into(), issue.created_at.clone()));
-    kv.push(("updated".into(), issue.updated_at.clone()));
+    kv.push((
+        "created".into(),
+        Span::styled(issue.created_at.clone(), Color::Magenta),
+    ));
+    kv.push((
+        "updated".into(),
+        Span::styled(issue.updated_at.clone(), Color::Magenta),
+    ));
 
     let inner_w = area.width.saturating_sub(4);
     let basic_rows = kv_lines(&kv, inner_w);
@@ -144,8 +156,8 @@ mod tests {
         );
         let text = render(&mut m, 7).join("\n");
         assert!(text.contains("#7 hello"), "标题: {text}");
-        assert!(text.contains("status  : dev"), "status 键值: {text}");
-        assert!(text.contains("plan    : #3"), "plan 显 ID: {text}");
+        assert!(text.contains("status: dev"), "status 键值: {text}");
+        assert!(text.contains("plan: #3"), "plan 显 ID: {text}");
         // 不存在的 issue → deleted 提示
         let text2 = render(&mut m, 99).join("\n");
         assert!(text2.contains("#99 (deleted)"));

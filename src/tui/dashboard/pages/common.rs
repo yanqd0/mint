@@ -137,55 +137,37 @@ pub fn body_paragraph(body: &str, title: &str, width: u16) -> Paragraph<'static>
 }
 
 /// 键值对多列布局：**冒号对齐**（所有 kv 对 `key` 右对齐到全局最宽 key，`: ` 同列），
-/// 列宽 = 该列最宽 + 2 padding。超宽 kv 对（单行放不下）退化为单列（每对一行），
-/// value 由 panel wrap 续行（`key: ` 前缀保留首行，不单独续行悬空）。
+/// 键值对紧凑布局：`key: value | key: value | ...`，**整对**贪心打包进 `Line`（超宽才换行），
+/// 一个键值对**不拆两行**（换行以对为单位）。value 可带样式（状态色/时间紫）。
+/// 单对超 panel 宽 → 独占一行，由 panel wrap 续行（`key: ` 前缀保留首行）。
 /// 返回多行 `Line`，供详情页 basic panel 用（空值由调用方过滤后再传）。
-pub fn kv_lines(pairs: &[(String, String)], width: u16) -> Vec<Line<'static>> {
+pub fn kv_lines(pairs: &[(String, Span<'static>)], width: u16) -> Vec<Line<'static>> {
     use unicode_width::UnicodeWidthStr;
     if pairs.is_empty() {
         return Vec::new();
     }
     let avail = width as usize;
-    // 冒号对齐：key 右对齐到全局最宽 key。
-    let max_key = pairs.iter().map(|(k, _)| k.width()).max().unwrap_or(0);
-    let cells: Vec<(String, usize)> = pairs
-        .iter()
-        .map(|(k, v)| {
-            let s = format!("{:<w$}: {v}", k, w = max_key);
-            let w = s.width();
-            (s, w)
-        })
-        .collect();
-    // 超宽 kv 对 → 单列（每对一行，value wrap 续行）；否则按平均宽估列数。
-    let any_wide = cells.iter().any(|(_, w)| *w > avail);
-    let cols = if any_wide {
-        1
-    } else {
-        let total_w: usize = cells.iter().map(|(_, w)| w).sum();
-        let avg = total_w / cells.len();
-        (avail / avg.max(1)).clamp(1, cells.len())
-    };
-    let rows = cells.len().div_ceil(cols);
-    let mut col_widths = vec![0usize; cols];
-    for (i, (_, w)) in cells.iter().enumerate() {
-        col_widths[i % cols] = col_widths[i % cols].max(*w);
+    let mut lines: Vec<Line> = Vec::new();
+    let mut current: Vec<Span> = Vec::new();
+    let mut cur_w = 0usize;
+    for (k, v) in pairs.iter() {
+        let pair_w = k.width() + 2 + v.content.width(); // "key: " + value
+        if !current.is_empty() && cur_w + 3 + pair_w > avail {
+            lines.push(Line::from(std::mem::take(&mut current)));
+            cur_w = 0;
+        }
+        if !current.is_empty() {
+            current.push(Span::raw(" | "));
+            cur_w += 3;
+        }
+        current.push(Span::raw(format!("{k}: ")));
+        current.push(v.clone());
+        cur_w += pair_w;
     }
-    (0..rows)
-        .map(|r| {
-            let spans: Vec<Span> = (0..cols)
-                .filter_map(|c| {
-                    let idx = r * cols + c;
-                    if idx >= cells.len() {
-                        return None;
-                    }
-                    let (s, w) = &cells[idx];
-                    let pad = col_widths[c] - w + 2; // 列间 2 空格
-                    Some(Span::raw(format!("{s}{}", " ".repeat(pad))))
-                })
-                .collect();
-            Line::from(spans)
-        })
-        .collect()
+    if !current.is_empty() {
+        lines.push(Line::from(current));
+    }
+    lines
 }
 
 #[cfg(test)]
@@ -313,9 +295,9 @@ mod tests {
     #[test]
     fn kv_lines_single_row_when_wide() {
         let pairs = vec![
-            ("status".to_string(), "planned".to_string()),
-            ("kind".to_string(), "problem".to_string()),
-            ("priority".to_string(), "0".to_string()),
+            ("status".to_string(), Span::raw("planned")),
+            ("kind".to_string(), Span::raw("problem")),
+            ("priority".to_string(), Span::raw("0")),
         ];
         let lines = kv_lines(&pairs, 100);
         assert_eq!(lines.len(), 1);
@@ -325,33 +307,33 @@ mod tests {
             .map(|s| s.content.as_ref())
             .collect::<Vec<_>>()
             .join("");
-        // 冒号对齐：key 右对齐到全局最宽 key（priority=8），status 补 2 空格。
-        assert!(text.starts_with("status  : planned"), "冒号应对齐: {text}");
-        assert!(text.contains("kind    : problem"), "冒号同列: {text}");
+        // 紧凑 key: value | 分隔（无冒号对齐）。
+        assert_eq!(text, "status: planned | kind: problem | priority: 0");
     }
 
     #[test]
     fn kv_lines_wraps_when_narrow() {
         let pairs = vec![
-            ("status".to_string(), "planned".to_string()),
-            ("kind".to_string(), "problem".to_string()),
+            ("status".to_string(), Span::raw("planned")),
+            ("kind".to_string(), Span::raw("problem")),
         ];
         let lines = kv_lines(&pairs, 5);
-        assert_eq!(lines.len(), 2); // 每行 1 列
+        assert_eq!(lines.len(), 2); // 窄宽：每对独占一行（整对不拆）
         assert!(lines[0].spans[0].content.starts_with("status:"));
+        assert!(lines[1].spans[0].content.starts_with("kind:"));
     }
 
     #[test]
     fn kv_lines_wide_pair_degrades_to_single_column() {
         let pairs = vec![
-            ("status".to_string(), "planned".to_string()),
+            ("status".to_string(), Span::raw("planned")),
             (
                 "body".to_string(),
-                "a very very long body content that exceeds the width".to_string(),
+                Span::raw("a very very long body content that exceeds the width"),
             ),
         ];
         let lines = kv_lines(&pairs, 30);
-        // 超宽 body 对 → 单列（每对独占一行，value 由 wrap 续行）。
+        // 超宽 body 对 → 独占一行（value 由 wrap 续行，key 前缀保留首行）。
         assert_eq!(lines.len(), 2);
         assert!(lines[0].spans[0].content.starts_with("status"));
         assert!(lines[1].spans[0].content.starts_with("body"));
