@@ -5,7 +5,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Padding, Paragraph, Wrap};
 
-use crate::models::{ContainerStatus, Issue, Status};
+use crate::models::{ContainerStatus, Status};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::panel_title;
@@ -78,41 +78,6 @@ pub fn kind_abbrev(kind: crate::models::Kind) -> &'static str {
         crate::models::Kind::Requirement => "req",
         crate::models::Kind::Problem => "bug",
     }
-}
-
-/// 进度条段样式：open 暗黄 / planned 亮黄 / dev 暗绿 / test 亮绿 / done 白 / dropped 亮红（计入完成）。
-/// 暗色用 Rgb（避免 DIM modifier 在部分终端不可见导致「无色彩」）。
-fn progress_style(status: Status) -> Style {
-    match status {
-        Status::Open => Style::new().fg(Color::Rgb(178, 148, 0)), // 暗黄
-        Status::Planned => Style::new().fg(Color::Yellow),        // 亮黄
-        Status::Dev => Style::new().fg(Color::Rgb(0, 128, 0)),    // 暗绿
-        Status::Test => Style::new().fg(Color::Green),            // 亮绿
-        Status::Done => Style::new().fg(Color::White),
-        Status::Dropped => Style::new().fg(Color::Red), // 亮红
-    }
-}
-
-/// 进度条：定长按占比分段的彩色条——每 issue 一段（颜色按状态），
-/// 段宽 = `width / N`（末段取余补足），issue 数变化占比自动调整。
-pub fn progress_bar(issues: &[&Issue], width: usize) -> Line<'static> {
-    let n = issues.len();
-    if n == 0 || width == 0 {
-        return Line::from(String::new());
-    }
-    let seg = width / n;
-    let mut spans: Vec<Span> = Vec::with_capacity(n);
-    for (i, issue) in issues.iter().enumerate() {
-        let w = if i == n - 1 {
-            width - seg * (n - 1)
-        } else {
-            seg
-        };
-        if w > 0 {
-            spans.push(Span::styled("█".repeat(w), progress_style(issue.status)));
-        }
-    }
-    Line::from(spans)
 }
 
 /// 迷你进度条：固定宽度，█ 填充完成比例（milestone/plan 面板每行用），前后 padding。
@@ -224,29 +189,6 @@ pub fn kv_lines(pairs: &[(String, String)], width: u16) -> Vec<Line<'static>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::Kind;
-
-    fn mk_issue(id: i64, status: Status) -> Issue {
-        Issue {
-            id,
-            title: "t".into(),
-            body: None,
-            kind: Kind::Problem,
-            status,
-            priority: 3,
-            project_id: 1,
-            project: Some("mint".into()),
-            test_cmd: None,
-            dropped_reason: None,
-            last_commit_id: None,
-            plan_id: None,
-            hit_count: 0,
-            labels: vec![],
-            links: vec![],
-            created_at: "t".into(),
-            updated_at: "t".into(),
-        }
-    }
 
     #[test]
     fn status_and_kind_abbrev() {
@@ -257,25 +199,6 @@ mod tests {
         assert_eq!(status_abbrev(Status::Test), "test");
         assert_eq!(kind_abbrev(Kind::Requirement), "req");
         assert_eq!(kind_abbrev(Kind::Problem), "bug");
-    }
-
-    #[test]
-    fn progress_bar_shares_width_and_colors_by_status() {
-        use ratatui::style::Color as C;
-        let issues = [
-            mk_issue(1, Status::Open),
-            mk_issue(2, Status::Done),
-            mk_issue(3, Status::Dropped),
-        ];
-        let refs: Vec<&Issue> = issues.iter().collect();
-        let line = progress_bar(&refs, 9);
-        // 3 issue / 宽 9 → 每段 3 格，总宽 9（末段取余）。
-        let total: usize = line.spans.iter().map(|s| s.content.chars().count()).sum();
-        assert_eq!(total, 9);
-        assert_eq!(line.spans.len(), 3);
-        // open 暗黄（Rgb）、dropped 亮红。
-        assert_eq!(line.spans[0].style.fg, Some(C::Rgb(178, 148, 0)));
-        assert_eq!(line.spans[2].style.fg, Some(C::Red));
     }
 
     #[test]

@@ -9,9 +9,9 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use crate::models::Status;
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    flash_style, flex_col_width, kind_abbrev, progress_bar, status_abbrev, status_dot,
-    status_text_style,
+    flash_style, flex_col_width, kind_abbrev, status_abbrev, status_dot, status_text_style,
 };
+use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
 use crate::tui::dashboard::types::{JumpKind, View};
 use crate::tui::panel::{render_panel, stack};
 use crate::tui::text::truncate;
@@ -45,7 +45,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let chunks = stack(
         area,
         &[
-            Constraint::Length(4),
+            Constraint::Length(5),
             Constraint::Min(0),
             Constraint::Length(1),
         ],
@@ -53,6 +53,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let bar_width = chunks[0].width.saturating_sub(4) as usize; // panel 内容宽（border 2 + padding 2）
     let mut prog_lines = vec![progress_bar(&all, bar_width)];
     prog_lines.push(Line::from(format!("progress: {progress_rate}%")));
+    prog_lines.push(progress_pct_line(&all));
 
     // 列宽 + TITLE 弹性列实际宽（title 按此预截断、右侧省略，避免长文本溢出/换行）。
     let widths = [

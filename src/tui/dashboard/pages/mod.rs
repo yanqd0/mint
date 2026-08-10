@@ -9,6 +9,7 @@ pub mod milestone;
 pub mod milestones;
 pub mod plan_detail;
 pub mod plans;
+pub mod progress;
 
 #[cfg(test)]
 pub mod tests_common;

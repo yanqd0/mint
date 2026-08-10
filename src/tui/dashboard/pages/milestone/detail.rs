@@ -8,9 +8,8 @@ use ratatui::widgets::Paragraph;
 
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{
-    body_paragraph, kv_lines, mini_bar, panel_wrap, progress_bar,
-};
+use crate::tui::dashboard::pages::common::{body_paragraph, kv_lines, mini_bar, panel_wrap};
+use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
 use crate::tui::panel::{render_panel, stack};
 use crate::tui::text::truncate;
 
@@ -103,7 +102,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
     if c.body.is_some() {
         constraints.push(Constraint::Length(4));
     }
-    constraints.push(Constraint::Length(4)); // progress 面板（bar + 百分比）
+    constraints.push(Constraint::Length(5)); // progress 面板（bar + 总百分比 + 分组百分比）
     constraints.push(Constraint::Length(plan_lines.len() as u16 + 2));
     constraints.push(Constraint::Length(issue_lines.len() as u16 + 2));
     constraints.push(Constraint::Length(1));
@@ -136,6 +135,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         vec![
             progress_bar(&all, bw),
             Line::from(format!("progress: {rate}%")),
+            progress_pct_line(&all),
         ],
     );
     ci += 1;

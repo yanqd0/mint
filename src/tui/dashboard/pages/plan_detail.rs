@@ -146,7 +146,7 @@ mod tests {
             vec![],
         );
         m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
-        let mut terminal = test_backend(120, 20);
+        let mut terminal = test_backend(120, 24);
         terminal.draw(|f| draw_detail(f, &m, 7, f.area())).unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("plan #7"), "标题: {text}");
