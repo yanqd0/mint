@@ -3,61 +3,60 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{flash_style, flex_col_width, mini_bar};
+use crate::tui::dashboard::pages::common::{
+    container_status_color, flash_style, flex_col_width, mini_bar,
+};
 use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::stack;
 use crate::tui::text::truncate;
 
-/// Plans tab：按 milestone 分组渲染（每组一 panel 标题），行选中按展平行号映射。
+/// Plans tab：全部 plan 扁平列表（不按 milestone 分组），列：状态点 / ID / STATUS / PROGRESS / DONE/TOTAL / TITLE。
 pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
-    // 布局先定：表格面板高度（按可见高度分页；set_page_size 先于 plan_groups 借用）。
+    // 布局先定：表格面板高度（按可见高度分页）。
     let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
     let rows_avail = chunks[0].height.saturating_sub(3); // 边框 2 + 表头 1
     m.set_page_size(rows_avail as usize);
-    let groups = m.plan_groups();
-    let start = m.page * m.page_size;
-    let end = start + m.page_size;
-    // 列宽 + TITLE 弹性列实际宽（title 按此预截断、右侧省略，避免长文本溢出/换行）。
+
+    // 列宽 + TITLE 弹性列实际宽（title 按此预截断、右侧省略）。
     let widths = [
-        Constraint::Length(18),
-        Constraint::Length(22),
-        Constraint::Length(11),
-        Constraint::Min(0),
+        Constraint::Length(2),  // 状态点
+        Constraint::Length(5),  // ID
+        Constraint::Length(8),  // STATUS
+        Constraint::Length(22), // PROGRESS
+        Constraint::Length(10), // DONE/TOTAL（`{:>4}` 使 / 对齐 header）
+        Constraint::Min(0),     // TITLE
     ];
     let title_w = flex_col_width(area, &widths);
 
-    let header = Row::new(vec!["#", "PROGRESS", "DONE/TOTAL", "TITLE"])
-        .style(Style::new().add_modifier(Modifier::BOLD));
-    let mut rows: Vec<Row> = Vec::new();
-    let mut v = 0; // 展平可见行位置（组标题 + plan 行，跨页组标题重显）
-    for g in &groups {
-        let g_start = v;
-        let g_end = v + 1 + g.plans.len(); // +1 = 组标题行
-        v = g_end;
-        // 组标题仅在页内有该组行时显示（跨页组重显，避免尾部 plan 孤行）。
-        if g_end <= start || g_start >= end {
-            continue;
-        }
-        // 组标题按首列宽（18）截断，避免溢出。
-        rows.push(
-            Row::new(vec![truncate(&g.title, 18)]).style(Style::new().add_modifier(Modifier::BOLD)),
-        );
-        for (i, (plan, _)) in g.plans.iter().enumerate() {
-            let pos = g_start + 1 + i; // 该 plan 的可见行位置
-            if pos < start || pos >= end {
-                continue;
-            }
-            let selected = m.selected_idx() == Some(pos - start);
+    let header = Row::new(vec![
+        Cell::from(""),
+        Cell::from("ID"),
+        Cell::from("STATUS"),
+        Cell::from("PROGRESS"),
+        Cell::from("DONE/TOTAL"), // 右对齐值用 {:>4} 使 / 与 header 对齐
+        Cell::from("TITLE"),
+    ])
+    .style(Style::new().add_modifier(Modifier::BOLD));
+
+    let mut rows: Vec<Row> = m
+        .page_plans()
+        .iter()
+        .enumerate()
+        .map(|(idx, (plan, _))| {
+            let selected = m.selected_idx() == Some(idx);
             let (done, total) = m.plan_progress(plan.id);
             let bar = mini_bar(done, total, 20);
+            let dot = container_status_color(plan.status);
             let mut row = Row::new(vec![
+                Cell::from(Line::from(vec![Span::styled("●", Style::new().fg(dot))])),
                 Cell::from(format!("#{}", plan.id)),
+                Cell::from(plan.status.as_str()),
                 Cell::from(bar),
-                Cell::from(format!("{done}/{total}")),
+                Cell::from(format!("{:>4}/{}", done, total)), // / 固定在第 4 列，与 header DONE/TOTAL 对齐
                 Cell::from(truncate(&plan.title, title_w.max(1) as usize)),
             ]);
             if selected {
@@ -66,9 +65,9 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
             if let Some(fs) = flash_style(m, plan.id, JumpKind::Plan) {
                 row = row.style(fs);
             }
-            rows.push(row);
-        }
-    }
+            row
+        })
+        .collect();
     if rows.is_empty() {
         rows.push(Row::new(vec![Cell::from("(no plans)")]));
     }
@@ -111,9 +110,18 @@ mod tests {
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("plans"), "标题: {text}");
-        assert!(text.contains("TUI (0.4.0)"), "组标题: {text}");
+        assert!(text.contains("ID"), "ID 表头: {text}");
+        assert!(text.contains("STATUS"), "STATUS 表头: {text}");
+        assert!(
+            text.contains("running"),
+            "plan 状态（mk_container 默认 Running）: {text}"
+        );
         assert!(text.contains("tui plan"), "plan 标题: {text}");
         assert!(text.contains("1/1"), "进度: {text}");
+        assert!(
+            !text.contains("TUI (0.4.0)"),
+            "应无 milestone 组标题: {text}"
+        );
     }
 
     #[test]
@@ -154,7 +162,7 @@ mod tests {
             .draw(|f| draw_plans_panel(f, &mut m, f.area()))
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
-        assert!(text.contains("no milestone"), "组标题: {text}");
         assert!(text.contains("free plan"), "plan 标题: {text}");
+        assert!(!text.contains("no milestone"), "应无分组标题: {text}");
     }
 }

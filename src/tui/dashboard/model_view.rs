@@ -65,13 +65,11 @@ impl DashboardModel {
         v
     }
 
-    /// Plans tab 行：分组展平（执行中 milestone → 无 milestone → 剩余 milestone）。
+    /// Plans tab 行：全部 plan 按 updated_at 逆序（扁平，不按 milestone 分组）。
     pub fn visible_plans(&self) -> Vec<&(Container, i64)> {
-        let mut out = Vec::new();
-        for g in self.plan_groups() {
-            out.extend(g.plans);
-        }
-        out
+        let mut ps: Vec<&(Container, i64)> = self.plans.iter().collect();
+        ps.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at));
+        ps
     }
 
     /// Plans 页分组：执行中 milestone（活跃 plan 所属）→ 无 milestone 的 plan → 剩余 milestone 按 updated_at 逆序。
@@ -201,60 +199,32 @@ impl DashboardModel {
         all[start..end].to_vec()
     }
 
-    /// Plans 页展平可见行数（组标题 + plan 行）。组标题每页重显（跨页组），故分页按可见行而非纯 plan 数。
-    pub(crate) fn plans_visible_rows(&self) -> usize {
-        self.plan_groups().iter().map(|g| 1 + g.plans.len()).sum()
-    }
-
     /// 当前面板总页数（至少 1，按视图行集合计算）。
     pub fn pages(&self) -> usize {
         let len = match self.view {
             View::Issues | View::PlanDetail { .. } | View::MilestoneDetail { .. } => {
                 self.visible_issues().len()
             }
-            View::Plans => self.plans_visible_rows(),
+            View::Plans => self.visible_plans().len(),
             View::Milestones => self.visible_milestones().len(),
             View::IssueDetail { .. } => 0,
         };
         len.div_ceil(self.page_size).max(1)
     }
 
-    /// 当前页的 plan 行（Plans tab 按可见行窗口切片；MilestoneDetail = 该 milestone 下）。
+    /// 当前页的 plan 行（Plans tab = 全部 plan 分页；MilestoneDetail = 该 milestone 下）。
     pub fn page_plans(&self) -> Vec<&(Container, i64)> {
-        match self.view {
-            View::Plans => {
-                let groups = self.plan_groups();
-                let start = self.page * self.page_size;
-                let end = start + self.page_size;
-                let mut out = Vec::new();
-                let mut v = 0usize;
-                for g in &groups {
-                    let g_start = v;
-                    let g_end = v + 1 + g.plans.len(); // +1 = 组标题行
-                    v = g_end;
-                    if g_end <= start || g_start >= end {
-                        continue;
-                    }
-                    for (i, plan) in g.plans.iter().enumerate() {
-                        let pos = g_start + 1 + i;
-                        if pos >= start && pos < end {
-                            out.push(*plan);
-                        }
-                    }
-                }
-                out
-            }
-            View::MilestoneDetail { milestone_id } => {
-                let all = self.milestone_plans(milestone_id);
-                let start = self.page * self.page_size;
-                if start >= all.len() {
-                    return Vec::new();
-                }
-                let end = (start + self.page_size).min(all.len());
-                all[start..end].to_vec()
-            }
-            _ => Vec::new(),
+        let all = match self.view {
+            View::Plans => self.visible_plans(),
+            View::MilestoneDetail { milestone_id } => self.milestone_plans(milestone_id),
+            _ => return Vec::new(),
+        };
+        let start = self.page * self.page_size;
+        if start >= all.len() {
+            return Vec::new();
         }
+        let end = (start + self.page_size).min(all.len());
+        all[start..end].to_vec()
     }
 
     /// 当前页的 milestone 行（Milestones tab）。

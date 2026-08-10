@@ -44,8 +44,8 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
     // 列宽 + TITLE 弹性列实际宽（title 按此预截断、右侧省略，避免长文本溢出/换行）。
     let widths = [
         Constraint::Length(2),
-        Constraint::Length(6),
         Constraint::Length(5),
+        Constraint::Length(6),
         Constraint::Length(2),
         Constraint::Length(5),
         Constraint::Length(20),
@@ -54,7 +54,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
     let title_w = flex_col_width(area, &widths);
 
     // 列表 panel：ratatui Table（表头 + 行；列宽按内容，对齐由 Table 按显示宽处理，解决中文/标签歪）。
-    let header = Row::new(vec!["#", "STATUS", "ID", "P", "KIND", "LABEL", "TITLE"])
+    let header = Row::new(vec!["#", "ID", "STATUS", "P", "KIND", "LABEL", "TITLE"])
         .style(Style::new().add_modifier(Modifier::BOLD));
     let rows: Vec<Row> = page
         .iter()
@@ -70,11 +70,11 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
                 Cell::from(Line::from(vec![
                     Span::styled(format!("{dot}"), dot_style), // 状态点 ●（状态色/闪烁）
                 ])),
+                Cell::from(format!("#{}", i.id)),
                 Cell::from(Line::from(vec![Span::styled(
                     status_abbrev(i.status),
                     status_text_style(i.status),
                 )])),
-                Cell::from(format!("#{}", i.id)),
                 Cell::from(i.priority.to_string()),
                 Cell::from(kind_abbrev(i.kind).to_string()),
                 Cell::from(label),

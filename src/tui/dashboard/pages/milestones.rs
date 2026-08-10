@@ -36,6 +36,7 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
     let widths = [
         Constraint::Length(2),
         Constraint::Length(5),
+        Constraint::Length(8), // STATUS
         Constraint::Length(9),
         Constraint::Length(6),
         Constraint::Length(10),
@@ -43,8 +44,10 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
     ];
     let title_w = flex_col_width(area, &widths);
 
-    let header = Row::new(vec!["", "#", "VERSION", "PLANS", "ISSUES", "TITLE"])
-        .style(Style::new().add_modifier(Modifier::BOLD));
+    let header = Row::new(vec![
+        "", "#", "STATUS", "VERSION", "PLANS", "ISSUES", "TITLE",
+    ])
+    .style(Style::new().add_modifier(Modifier::BOLD));
     let rows: Vec<Row> = m
         .page_milestones()
         .iter()
@@ -60,6 +63,7 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
                     Style::new().fg(container_status_color(ms.status)),
                 )])),
                 Cell::from(format!("#{}", ms.id)),
+                Cell::from(ms.status.as_str()),
                 Cell::from(ver),
                 Cell::from(plan_count.to_string()),
                 Cell::from(format!("{total}({direct})")), // 总数(直属)

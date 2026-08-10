@@ -384,10 +384,10 @@ fn plans_paging_covers_all_plans_across_groups() {
     ));
     m.view = View::Plans;
     m.page_size = 3;
-    // 可见行 8（3 组标题 + 5 plans）→ ceil(8/3)=3 页。
-    assert_eq!(m.pages(), 3);
+    // 扁平列表（无组标题）5 plans → ceil(5/3)=2 页。
+    assert_eq!(m.pages(), 2);
     let mut seen: Vec<i64> = Vec::new();
-    for page in 0..3 {
+    for page in 0..2 {
         m.page = page;
         seen.extend(m.page_plans().iter().map(|(c, _)| c.id));
     }
