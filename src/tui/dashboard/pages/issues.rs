@@ -9,7 +9,7 @@ use ratatui::widgets::Paragraph;
 use crate::models::Status;
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    flash_style, progress_bar, status_dot, status_text_style, truncate,
+    flash_style, kind_abbrev, progress_bar, status_abbrev, status_dot, status_text_style, truncate,
 };
 use crate::tui::dashboard::types::{JumpKind, View};
 use crate::tui::panel::{render_panel, stack};
@@ -51,13 +51,13 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let mut prog_lines = vec![progress_bar(&all, bar_width)];
     prog_lines.push(Line::from(format!("progress: {progress_rate}%")));
 
-    // 列表 panel：表头（与行对齐）+ 状态点 # + STATUS + ID + LABEL + 标题（顶格省略）。
+    // 列表 panel：表头（与行对齐）+ 状态点 ● + STATUS 简写 + ID + P + kind 简写 + LABEL + 标题。
     let list_inner_w = chunks[1].width.saturating_sub(4) as usize; // border 2 + padding 2
-    let title_w = list_inner_w.saturating_sub(25).max(1); // 其他列：点2+status6+id5+label11+空格1
+    let title_w = list_inner_w.saturating_sub(42).max(1); // 点2+status5+id4+P3+kind5+label21+空格1
     let mut list_lines: Vec<Line> = Vec::new();
     list_lines.push(Line::from(format!(
-        "# {:<6} #{:<3} {:<10} TITLE",
-        "STATUS", "ID", "LABEL"
+        "# {:<5} #{:<3} {:<2} {:<4} {:<20} TITLE",
+        "STATUS", "ID", "P", "KIND", "LABEL"
     )));
     for (idx, i) in page.iter().enumerate() {
         let (dot, dot_style) = status_dot(i.status);
@@ -73,18 +73,20 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
         let label = i
             .labels
             .first()
-            .map(|l| truncate(l, 10))
+            .map(|l| truncate(l, 20))
             .unwrap_or_default();
         let title = truncate(&i.title, title_w);
         list_lines.push(
             Line::from(vec![
                 Span::styled(format!("{dot} "), dot_style), // 状态点 ●（状态色/闪烁）
                 Span::styled(
-                    format!("{:<6}", i.status.as_str()),
+                    format!("{:<5}", status_abbrev(i.status)),
                     status_text_style(i.status),
                 ),
                 Span::styled(format!("#{:<3}", i.id), Style::new()),
-                Span::styled(format!(" {label:<10}"), Style::new()),
+                Span::styled(format!(" {:<2}", i.priority), Style::new()), // P 列
+                Span::styled(format!(" {:<4}", kind_abbrev(i.kind)), Style::new()), // kind 简写
+                Span::styled(format!(" {label:<20}"), Style::new()),
                 Span::styled(format!(" {title}"), Style::new()),
             ])
             .patch_style(row_style),

@@ -61,6 +61,23 @@ pub fn status_text_style(status: Status) -> Style {
     Style::new().fg(status_color(status))
 }
 
+/// 状态简写（仅列表显示；planned→plan、dropped→drop，其余原样）。
+pub fn status_abbrev(status: Status) -> &'static str {
+    match status {
+        Status::Planned => "plan",
+        Status::Dropped => "drop",
+        other => other.as_str(),
+    }
+}
+
+/// kind 简写（仅列表显示；requirement→req、problem→bug）。
+pub fn kind_abbrev(kind: crate::models::Kind) -> &'static str {
+    match kind {
+        crate::models::Kind::Requirement => "req",
+        crate::models::Kind::Problem => "bug",
+    }
+}
+
 /// 进度条段样式：open 暗黄 / planned 亮黄 / dev 暗绿 / test 亮绿 / done 白 / dropped 亮红（计入完成）。
 fn progress_style(status: Status) -> Style {
     match status {
@@ -219,6 +236,17 @@ mod tests {
             created_at: "t".into(),
             updated_at: "t".into(),
         }
+    }
+
+    #[test]
+    fn status_and_kind_abbrev() {
+        use crate::models::Kind;
+        assert_eq!(status_abbrev(Status::Planned), "plan");
+        assert_eq!(status_abbrev(Status::Dropped), "drop");
+        assert_eq!(status_abbrev(Status::Dev), "dev");
+        assert_eq!(status_abbrev(Status::Test), "test");
+        assert_eq!(kind_abbrev(Kind::Requirement), "req");
+        assert_eq!(kind_abbrev(Kind::Problem), "bug");
     }
 
     #[test]
