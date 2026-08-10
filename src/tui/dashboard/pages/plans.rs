@@ -6,10 +6,10 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
+use crate::models::Issue;
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{
-    container_status_color, flash_style, flex_col_width, mini_bar,
-};
+use crate::tui::dashboard::pages::common::{container_status_color, flash_style, flex_col_width};
+use crate::tui::dashboard::pages::progress::progress_bar;
 use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::stack;
 use crate::tui::text::truncate;
@@ -49,7 +49,13 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
         .map(|(idx, (plan, _))| {
             let selected = m.selected_idx() == Some(idx);
             let (done, total) = m.plan_progress(plan.id);
-            let bar = mini_bar(done, total, 20);
+            // PROGRESS 复用 progress_bar（plan 详情同款分段着色；无前导空格，与表头 P 对齐）。
+            let plan_issues: Vec<&Issue> = m
+                .issues
+                .iter()
+                .filter(|i| i.plan_id == Some(plan.id))
+                .collect();
+            let bar = progress_bar(&plan_issues, 20);
             let dot = container_status_color(plan.status);
             let mut row = Row::new(vec![
                 Cell::from(Line::from(vec![Span::styled("●", Style::new().fg(dot))])),
