@@ -2,7 +2,7 @@
 
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Padding, Paragraph, Wrap};
 
 use crate::models::{ContainerStatus, Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
@@ -128,6 +128,7 @@ pub fn truncate(s: &str, max: usize) -> String {
 }
 
 /// body 段落：wrap 多行 + 圆角 border + 标题（issue/plan/milestone 详情 body panel 共用）。
+/// 内容左右 1 格 padding（全局 margin 配置）。
 pub fn body_paragraph(body: &str, title: &str) -> Paragraph<'static> {
     let lines: Vec<Line> = body
         .split('\n')
@@ -136,7 +137,8 @@ pub fn body_paragraph(body: &str, title: &str) -> Paragraph<'static> {
     Paragraph::new(lines).wrap(Wrap { trim: true }).block(
         Block::bordered()
             .border_type(BorderType::Rounded)
-            .title(title.to_string()),
+            .title(title.to_string())
+            .padding(Padding::horizontal(1)),
     )
 }
 

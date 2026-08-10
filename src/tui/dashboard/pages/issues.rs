@@ -47,7 +47,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
             Constraint::Length(1),
         ],
     );
-    let bar_width = chunks[0].width.saturating_sub(2) as usize; // panel 内容宽（border 2）
+    let bar_width = chunks[0].width.saturating_sub(4) as usize; // panel 内容宽（border 2 + padding 2）
     let mut prog_lines = vec![progress_bar(&all, bar_width)];
     prog_lines.push(Line::from(format!("progress: {progress_rate}%")));
 
