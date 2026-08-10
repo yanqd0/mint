@@ -9,7 +9,8 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use crate::models::Status;
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    flash_style, kind_abbrev, progress_bar, status_abbrev, status_dot, status_text_style,
+    flash_style, flex_col_width, kind_abbrev, progress_bar, status_abbrev, status_dot,
+    status_text_style,
 };
 use crate::tui::dashboard::types::{JumpKind, View};
 use crate::tui::panel::{render_panel, stack};
@@ -53,6 +54,18 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
     let mut prog_lines = vec![progress_bar(&all, bar_width)];
     prog_lines.push(Line::from(format!("progress: {progress_rate}%")));
 
+    // 列宽 + TITLE 弹性列实际宽（title 按此预截断、右侧省略，避免长文本溢出/换行）。
+    let widths = [
+        Constraint::Length(2),
+        Constraint::Length(6),
+        Constraint::Length(5),
+        Constraint::Length(2),
+        Constraint::Length(5),
+        Constraint::Length(20),
+        Constraint::Min(0),
+    ];
+    let title_w = flex_col_width(area, &widths);
+
     // 列表 panel：ratatui Table（表头 + 行；列宽按内容，对齐由 Table 按显示宽处理，解决中文/标签歪）。
     let header = Row::new(vec!["#", "STATUS", "ID", "P", "KIND", "LABEL", "TITLE"])
         .style(Style::new().add_modifier(Modifier::BOLD));
@@ -78,7 +91,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
                 Cell::from(i.priority.to_string()),
                 Cell::from(kind_abbrev(i.kind).to_string()),
                 Cell::from(label),
-                Cell::from(i.title.clone()),
+                Cell::from(truncate(&i.title, title_w.max(1) as usize)),
             ]);
             if m.selected_idx() == Some(idx) {
                 row = row.style(Style::new().add_modifier(Modifier::REVERSED));
@@ -89,15 +102,6 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &DashboardModel, area: Rect) {
             row
         })
         .collect();
-    let widths = [
-        Constraint::Length(2),
-        Constraint::Length(6),
-        Constraint::Length(5),
-        Constraint::Length(2),
-        Constraint::Length(5),
-        Constraint::Length(20),
-        Constraint::Min(0),
-    ];
 
     let footer = "j/k row · ←/→ page · 1/2/3 tab · Enter detail · p plan · m milestone · q quit";
     // 翻页信息移入列表 panel 标题（需求：不放 help 栏）。
@@ -163,6 +167,42 @@ mod tests {
         assert!(joined.contains("open one"), "issue 行: {joined}");
         assert!(joined.contains("STATUS"), "表头: {joined}");
         assert!(joined.contains("●"), "状态点: {joined}");
+    }
+
+    #[test]
+    fn issue_title_truncates_with_ellipsis_in_tab_and_plan_detail() {
+        let m = model_with(vec![mk_issue(
+            1,
+            "一个非常非常非常非常非常长的 issue 标题用于验证截断省略行为",
+            Status::Open,
+            Some(7),
+        )]);
+        // Issues tab。
+        let mut terminal = test_backend(100, 10);
+        terminal
+            .draw(|f| draw_issues_panel(f, &m, f.area()))
+            .unwrap();
+        let lines = buffer_text(terminal.backend().buffer());
+        let row = lines.iter().find(|l| l.contains("#1")).expect("issue 行");
+        assert!(row.contains('…'), "Issues tab 长标题应省略: {row}");
+        // PlanDetail（复用同一列表面板）。
+        let mut m2 = model_with(vec![mk_issue(
+            1,
+            "一个非常非常非常非常非常长的 issue 标题用于验证截断省略行为",
+            Status::Open,
+            Some(7),
+        )]);
+        m2.view = View::PlanDetail { plan_id: 7 };
+        let mut terminal2 = test_backend(100, 10);
+        terminal2
+            .draw(|f| draw_issues_panel(f, &m2, f.area()))
+            .unwrap();
+        let lines2 = buffer_text(terminal2.backend().buffer());
+        let row2 = lines2
+            .iter()
+            .find(|l| l.contains("#1"))
+            .expect("plan issue 行");
+        assert!(row2.contains('…'), "PlanDetail 长标题应省略: {row2}");
     }
 
     #[test]
