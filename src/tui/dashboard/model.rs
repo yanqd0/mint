@@ -32,6 +32,10 @@ pub struct DashboardModel {
     pub(crate) prev: Option<DashboardSnapshot>,
     /// 当前面板页（0-based，每页 page_size 行）。
     pub page: usize,
+    /// MilestoneDetail plans 面板页（与 issues 面板各自独立翻页）。
+    pub plans_page: usize,
+    /// MilestoneDetail 直属 issues 面板页。
+    pub issues_page: usize,
     /// 每页行数。
     pub page_size: usize,
     /// 用户空闲 tick（handle_key 重置 0，refresh 递增）；自动切换前置 ≥ AUTO_SWITCH_IDLE。
@@ -72,6 +76,8 @@ impl DashboardModel {
             filter: None,
             prev: None,
             page: 0,
+            plans_page: 0,
+            issues_page: 0,
             page_size: 10,
             user_idle: 0,
             auto_last: 0,
@@ -110,6 +116,8 @@ impl DashboardModel {
         self.selected = 0;
         self.history = vec![View::Issues];
         self.history_pos = 0;
+        self.plans_page = 0;
+        self.issues_page = 0;
         self.user_idle = 0;
         self.auto_last = 0;
         self.pending.clear();
@@ -210,13 +218,18 @@ impl DashboardModel {
                 }
             }
             KeyCode::Char('h') | KeyCode::Left | KeyCode::PageUp => {
-                if self.page > 0 {
+                if let View::MilestoneDetail { milestone_id } = self.view {
+                    // MilestoneDetail：光标路由翻页（selected=0 不翻）。
+                    self.milestone_detail_page_prev(milestone_id);
+                } else if self.page > 0 {
                     self.page -= 1;
                     self.selected = 0;
                 }
             }
             KeyCode::Char('l') | KeyCode::Right | KeyCode::PageDown => {
-                if self.page + 1 < self.pages() {
+                if let View::MilestoneDetail { milestone_id } = self.view {
+                    self.milestone_detail_page_next(milestone_id);
+                } else if self.page + 1 < self.pages() {
                     self.page += 1;
                     self.selected = 0;
                 }
@@ -257,14 +270,14 @@ impl DashboardModel {
                     }
                 }
                 View::MilestoneDetail { milestone_id } => {
-                    // 跨 panel 导航（selected 1-indexed）：plans 段 1..=n；issues 段 n+1..。
-                    let plans = self.milestone_plans(milestone_id);
+                    // 跨 panel 导航（selected 1-indexed，按当前页切片）：plans 段 1..=n；issues 段 n+1..。
+                    let plans = self.page_milestone_plans(milestone_id);
                     let n = plans.len();
                     if self.selected >= 1 && self.selected <= n {
                         let plan = &plans[self.selected - 1].0;
                         self.navigate(View::PlanDetail { plan_id: plan.id });
                     } else if self.selected > n {
-                        let direct = self.milestone_direct_ids(milestone_id);
+                        let direct = self.page_milestone_direct_ids(milestone_id);
                         if let Some(&iid) = direct.get(self.selected - n - 1) {
                             self.navigate(View::IssueDetail { id: iid });
                         }
@@ -282,10 +295,12 @@ impl DashboardModel {
         }
     }
 
-    /// 统一切视图 + 清空行状态（page/selected）。不记历史。
+    /// 统一切视图 + 清空行状态（page/selected/plans_page/issues_page）。不记历史。
     pub(crate) fn apply_view_state(&mut self, v: View) {
         self.view = v;
         self.page = 0;
+        self.plans_page = 0;
+        self.issues_page = 0;
         self.selected = 0;
     }
 
@@ -319,6 +334,41 @@ impl DashboardModel {
         if self.history_pos + 1 < self.history.len() {
             self.history_pos += 1;
             self.apply_view_state(self.history[self.history_pos]);
+        }
+    }
+
+    /// MilestoneDetail 上一页（光标路由）：selected 在 plans 段（1..=np）翻 plans_page，
+    /// issues 段（>np）翻 issues_page；selected=0（默认无选中）不翻页。
+    fn milestone_detail_page_prev(&mut self, milestone_id: i64) {
+        if self.selected == 0 {
+            return;
+        }
+        let (np, _) = self.milestone_segments(milestone_id);
+        if self.selected <= np {
+            if self.plans_page > 0 {
+                self.plans_page -= 1;
+                self.selected = 0;
+            }
+        } else if self.issues_page > 0 {
+            self.issues_page -= 1;
+            self.selected = 0;
+        }
+    }
+
+    /// MilestoneDetail 下一页（光标路由，同上）。
+    fn milestone_detail_page_next(&mut self, milestone_id: i64) {
+        if self.selected == 0 {
+            return;
+        }
+        let (np, _) = self.milestone_segments(milestone_id);
+        if self.selected <= np {
+            if self.plans_page + 1 < self.milestone_plans_pages(milestone_id) {
+                self.plans_page += 1;
+                self.selected = 0;
+            }
+        } else if self.issues_page + 1 < self.milestone_issues_pages(milestone_id) {
+            self.issues_page += 1;
+            self.selected = 0;
         }
     }
 }

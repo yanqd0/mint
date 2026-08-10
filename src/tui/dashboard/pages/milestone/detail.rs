@@ -45,9 +45,9 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
     kv.push(("updated".into(), c.updated_at.clone()));
     let basic_rows = kv_lines(&kv, area.width.saturating_sub(4));
 
-    // 2. plans panel + issues panel（2 个独立 panel；跨 panel 导航保留，selected 1-indexed 跨段）。
-    let plans = m.milestone_plans(milestone_id);
-    let direct_ids = m.milestone_direct_ids(milestone_id);
+    // 2. plans panel + issues panel（2 个独立 panel，各自独立分页；跨 panel 导航保留，selected 1-indexed 跨段）。
+    let plans = m.page_milestone_plans(milestone_id);
+    let direct_ids = m.page_milestone_direct_ids(milestone_id);
     let n = plans.len();
     let mut plan_lines: Vec<Line> = Vec::new();
     if plans.is_empty() {
@@ -139,12 +139,32 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         ],
     );
     ci += 1;
-    render_panel(frame, chunks[ci], "plans", plan_lines);
+    render_panel(
+        frame,
+        chunks[ci],
+        &format!(
+            "plans · page {}/{}",
+            m.plans_page + 1,
+            m.milestone_plans_pages(milestone_id)
+        ),
+        plan_lines,
+    );
     ci += 1;
-    render_panel(frame, chunks[ci], "issues", issue_lines);
+    render_panel(
+        frame,
+        chunks[ci],
+        &format!(
+            "issues · page {}/{}",
+            m.issues_page + 1,
+            m.milestone_issues_pages(milestone_id)
+        ),
+        issue_lines,
+    );
     ci += 1;
     frame.render_widget(
-        Paragraph::new(Line::from("Esc back · 1/2/3 tab · q quit")),
+        Paragraph::new(Line::from(
+            "j/k ↑↓ row · ←/→ page · 1/2/3 tab · Esc back · q quit",
+        )),
         chunks[ci],
     );
 }
@@ -152,6 +172,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::Container;
     use crate::tui::dashboard::pages::tests_common::{
         buffer_text, mk_container, mk_issue, model_full, test_backend,
     };
@@ -198,6 +219,24 @@ mod tests {
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         // 直接+间接 2 issue，done+dropped=2 → 100%。
         assert!(text.contains("progress: 100%"), "聚合进度: {text}");
+    }
+
+    #[test]
+    fn milestone_detail_shows_page_numbers_when_paged() {
+        let plans: Vec<(Container, i64)> = (1..=12)
+            .map(|i| (mk_container(i, &format!("plan {i}"), None, Some(4)), 0))
+            .collect();
+        let mut m = model_full(
+            vec![],
+            plans,
+            vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
+        );
+        m.view = View::MilestoneDetail { milestone_id: 4 };
+        let mut terminal = test_backend(100, 30);
+        terminal.draw(|f| draw_detail(f, &m, 4, f.area())).unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("plans · page 1/2"), "plans 页码: {text}");
+        assert!(text.contains("issues · page 1/1"), "issues 页码: {text}");
     }
 
     #[test]

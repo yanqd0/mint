@@ -240,15 +240,50 @@ impl DashboardModel {
         all[start..end].to_vec()
     }
 
-    /// 当前面板一页的行数（随视图切换）。
-    /// MilestoneDetail 统一列表行数：plans 行 + 直属 issue 行（跨 panel 导航用）。
-    pub(crate) fn milestone_detail_len(&self, milestone_id: i64) -> usize {
-        self.milestone_plans(milestone_id).len()
-            + self
-                .milestone_directs
-                .iter()
-                .filter(|(mid, _)| *mid == milestone_id)
-                .count()
+    /// MilestoneDetail plans 面板当前页行（按 plans_page 切片）。
+    pub(crate) fn page_milestone_plans(&self, milestone_id: i64) -> Vec<&(Container, i64)> {
+        let all = self.milestone_plans(milestone_id);
+        let start = self.plans_page * self.page_size;
+        if start >= all.len() {
+            return Vec::new();
+        }
+        let end = (start + self.page_size).min(all.len());
+        all[start..end].to_vec()
+    }
+
+    /// MilestoneDetail 直属 issues 面板当前页 id（按 issues_page 切片）。
+    pub(crate) fn page_milestone_direct_ids(&self, milestone_id: i64) -> Vec<i64> {
+        let all = self.milestone_direct_ids(milestone_id);
+        let start = self.issues_page * self.page_size;
+        if start >= all.len() {
+            return Vec::new();
+        }
+        let end = (start + self.page_size).min(all.len());
+        all[start..end].to_vec()
+    }
+
+    /// MilestoneDetail plans 面板页数（至少 1）。
+    pub(crate) fn milestone_plans_pages(&self, milestone_id: i64) -> usize {
+        self.milestone_plans(milestone_id)
+            .len()
+            .div_ceil(self.page_size)
+            .max(1)
+    }
+
+    /// MilestoneDetail issues 面板页数（至少 1）。
+    pub(crate) fn milestone_issues_pages(&self, milestone_id: i64) -> usize {
+        self.milestone_direct_ids(milestone_id)
+            .len()
+            .div_ceil(self.page_size)
+            .max(1)
+    }
+
+    /// MilestoneDetail 当前页分段：(plans 段行数, issues 段行数)。光标路由翻页用。
+    pub(crate) fn milestone_segments(&self, milestone_id: i64) -> (usize, usize) {
+        (
+            self.page_milestone_plans(milestone_id).len(),
+            self.page_milestone_direct_ids(milestone_id).len(),
+        )
     }
 
     /// MilestoneDetail 直属 issue id 列表（按快照顺序）。
@@ -263,17 +298,32 @@ impl DashboardModel {
     pub(crate) fn current_page_len(&self) -> usize {
         match self.view {
             View::Issues | View::PlanDetail { .. } => self.page_issues().len(),
-            View::MilestoneDetail { milestone_id } => self.milestone_detail_len(milestone_id),
+            View::MilestoneDetail { milestone_id } => {
+                self.page_milestone_plans(milestone_id).len()
+                    + self.page_milestone_direct_ids(milestone_id).len()
+            }
             View::Plans => self.page_plans().len(),
             View::Milestones => self.page_milestones().len(),
             View::IssueDetail { .. } => 0,
         }
     }
 
-    /// 面板数据变化后校正页号（避免越界）。
+    /// 面板数据变化后校正页号（避免越界）；MilestoneDetail 对 plans/issues 双页分别夹取。
     pub(crate) fn clamp_page(&mut self) {
-        if self.page >= self.pages() {
-            self.page = self.pages().saturating_sub(1);
+        match self.view {
+            View::MilestoneDetail { milestone_id } => {
+                self.plans_page = self
+                    .plans_page
+                    .min(self.milestone_plans_pages(milestone_id) - 1);
+                self.issues_page = self
+                    .issues_page
+                    .min(self.milestone_issues_pages(milestone_id) - 1);
+            }
+            _ => {
+                if self.page >= self.pages() {
+                    self.page = self.pages().saturating_sub(1);
+                }
+            }
         }
     }
 

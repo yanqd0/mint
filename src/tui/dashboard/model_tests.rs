@@ -270,6 +270,58 @@ fn reset_history_starts_from_initial_view() {
 }
 
 #[test]
+fn milestone_detail_paging_routes_by_cursor() {
+    let plans: Vec<(Container, i64)> = (1..=12).map(|i| (mk_plan(i, Some(4), "1"), 0)).collect();
+    let mut m = DashboardModel::new();
+    m.init(snap_full(vec![], plans, vec![(mk_container(4), 0)]));
+    m.view = View::MilestoneDetail { milestone_id: 4 };
+    m.selected = 1; // plans 段第 1 行
+    m.handle_key(k(KeyCode::Char('l'))); // 翻 plans 页
+    assert_eq!(m.plans_page, 1);
+    assert_eq!(m.issues_page, 0);
+    assert_eq!(m.selected, 0); // 翻页重置选中
+    // selected=0 不翻页。
+    m.handle_key(k(KeyCode::Char('l')));
+    assert_eq!(m.plans_page, 1);
+    // 选中 plans 段行再翻上一页。
+    m.selected = 1;
+    m.handle_key(k(KeyCode::Char('h')));
+    assert_eq!(m.plans_page, 0);
+}
+
+#[test]
+fn milestone_detail_paging_routes_issues_segment() {
+    let mut m = DashboardModel::new();
+    m.init(snap_full(
+        vec![],
+        vec![(mk_plan(7, Some(4), "1"), 0)],
+        vec![(mk_container(4), 0)],
+    ));
+    m.milestone_directs = (1..=12).map(|i| (4, i)).collect();
+    m.view = View::MilestoneDetail { milestone_id: 4 };
+    m.selected = 1; // plans 段（仅 1 个 plan，1 页）
+    m.handle_key(k(KeyCode::Char('l'))); // plans 仅 1 页不翻
+    assert_eq!(m.plans_page, 0);
+    m.selected = 2; // issues 段第 1 行（plans 段 1..=1）
+    m.handle_key(k(KeyCode::Char('l'))); // 翻 issues 页
+    assert_eq!(m.issues_page, 1);
+    assert_eq!(m.plans_page, 0);
+    assert_eq!(m.selected, 0);
+}
+
+#[test]
+fn milestone_detail_enter_uses_current_page_plan() {
+    let plans: Vec<(Container, i64)> = (1..=12).map(|i| (mk_plan(i, Some(4), "1"), 0)).collect();
+    let mut m = DashboardModel::new();
+    m.init(snap_full(vec![], plans, vec![(mk_container(4), 0)]));
+    m.view = View::MilestoneDetail { milestone_id: 4 };
+    m.plans_page = 1; // 第 2 页：plans 11..12
+    m.selected = 1;
+    m.handle_key(k(KeyCode::Enter));
+    assert_eq!(m.view, View::PlanDetail { plan_id: 11 });
+}
+
+#[test]
 fn visible_issues_filters_by_plan() {
     let mut m = DashboardModel::new();
     m.init(snap(
