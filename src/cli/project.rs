@@ -55,10 +55,22 @@ pub fn cmd_project_list(conn: &Connection, a: &ProjectListArgs) -> Result<(), Er
     if a.json {
         println!("{}", serde_json::to_string(&projects)?);
     } else {
-        for p in &projects {
-            let desc = p.description.as_deref().unwrap_or("");
-            println!("{:>4}  {:<20} {}", p.id, p.name, desc);
-        }
+        // 默认 TSV（策略：全 TSV，AI/脚本稳定解析）。
+        let headers: Vec<String> = ["ID", "Name", "Description"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let rows: Vec<Vec<String>> = projects
+            .iter()
+            .map(|p| {
+                vec![
+                    p.id.to_string(),
+                    p.name.clone(),
+                    p.description.clone().unwrap_or_default(),
+                ]
+            })
+            .collect();
+        print!("{}", crate::output::format_tsv(&headers, &rows));
     }
     Ok(())
 }

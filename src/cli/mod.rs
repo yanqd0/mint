@@ -236,9 +236,6 @@ pub struct ListLabelsArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
-    /// Table view (interactive on TTY, single page otherwise)
-    #[arg(long, conflicts_with = "json")]
-    pub tui: bool,
 }
 
 // ── 顶层 Cli 与 Commands ─────────────────────────────────────────
@@ -552,10 +549,6 @@ pub(crate) fn kind_noun(kind: ContainerKind) -> &'static str {
 /// label list：列出所有 label（含关联 issue 数）。
 fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
     let labels = crate::label::list(conn)?;
-    if l.tui {
-        let (headers, rows) = crate::cli::list_common::labels(&labels);
-        return crate::tui::run_list("Labels", headers, rows, l.page_size);
-    }
     let (labels, total, page) = paginate(labels, l.page, l.page_size);
     if l.json {
         let arr: Vec<serde_json::Value> = labels

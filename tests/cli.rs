@@ -1518,16 +1518,13 @@ fn st_tui_containers_and_label() {
         "milestone --tui 缺数据"
     );
     let out = mint(&db)
-        .args(["label", "list", "--tui"])
+        .args(["label", "list"])
         .assert()
         .success()
         .get_output()
         .stdout
         .clone();
-    assert!(
-        String::from_utf8_lossy(&out).contains("Name"),
-        "label --tui 表头"
-    );
+    assert!(String::from_utf8_lossy(&out).contains("Name"), "label 表头");
 }
 
 /// --tui 与 --json 互斥（clap conflicts_with 解析期拒绝）。
