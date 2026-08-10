@@ -29,12 +29,13 @@ pub fn container_status_color(status: ContainerStatus) -> Color {
     }
 }
 
-/// 状态基色（点/文字共用，TUI 统一配色）。
+/// 状态基色（点/文字共用，TUI 统一配色）：
+/// open 白 / planned·dev·test 黄（工作色）/ done 绿 / dropped 红。
 fn status_color(status: Status) -> Color {
     match status {
-        Status::Open | Status::Planned => Color::Yellow,
-        Status::Dev | Status::Test => Color::Green,
-        Status::Done => Color::White,
+        Status::Open => Color::White,
+        Status::Planned | Status::Dev | Status::Test => Color::Yellow,
+        Status::Done => Color::Green,
         Status::Dropped => Color::Red,
     }
 }
@@ -205,7 +206,7 @@ mod tests {
     fn status_dot_colors() {
         use ratatui::style::Color as C;
         assert_eq!(status_dot(Status::Open).0, '●');
-        assert_eq!(status_dot(Status::Open).1.fg, Some(C::Yellow));
+        assert_eq!(status_dot(Status::Open).1.fg, Some(C::White));
         assert!(
             status_dot(Status::Planned)
                 .1
@@ -218,21 +219,21 @@ mod tests {
                 .add_modifier
                 .contains(Modifier::SLOW_BLINK)
         );
-        assert_eq!(status_dot(Status::Test).1.fg, Some(C::Green));
+        assert_eq!(status_dot(Status::Test).1.fg, Some(C::Yellow));
         assert!(
             status_dot(Status::Test)
                 .1
                 .add_modifier
                 .contains(Modifier::SLOW_BLINK)
         );
-        assert_eq!(status_dot(Status::Done).1.fg, Some(C::White));
+        assert_eq!(status_dot(Status::Done).1.fg, Some(C::Green));
         assert_eq!(status_dot(Status::Dropped).1.fg, Some(C::Red));
     }
 
     #[test]
     fn status_text_style_same_color_no_blink() {
         use ratatui::style::Color as C;
-        assert_eq!(status_text_style(Status::Dev).fg, Some(C::Green));
+        assert_eq!(status_text_style(Status::Dev).fg, Some(C::Yellow));
         assert!(
             !status_text_style(Status::Dev)
                 .add_modifier
@@ -244,7 +245,7 @@ mod tests {
                 .add_modifier
                 .contains(Modifier::SLOW_BLINK)
         );
-        assert_eq!(status_text_style(Status::Done).fg, Some(C::White));
+        assert_eq!(status_text_style(Status::Done).fg, Some(C::Green));
     }
 
     #[test]

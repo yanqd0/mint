@@ -28,10 +28,20 @@ const EIGHTH: [char; 8] = ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '█
 
 fn group_color(g: ProgressGroup) -> Color {
     match g {
-        ProgressGroup::Done => Color::White,
-        ProgressGroup::Open => Color::Yellow,
-        ProgressGroup::Working => Color::Green,
+        ProgressGroup::Done => Color::Green,
+        ProgressGroup::Open => Color::White,
+        ProgressGroup::Working => Color::Yellow,
         ProgressGroup::Dropped => Color::Red,
+    }
+}
+
+/// 分组显示词（进度百分比行着色用）。
+fn group_word(g: ProgressGroup) -> &'static str {
+    match g {
+        ProgressGroup::Done => "done",
+        ProgressGroup::Open => "open",
+        ProgressGroup::Working => "working",
+        ProgressGroup::Dropped => "dropped",
     }
 }
 
@@ -150,13 +160,16 @@ pub fn progress_pct_line(issues: &[&Issue]) -> Line<'static> {
     let counts = group_counts(issues);
     let total: usize = counts.iter().sum();
     let pct = |g: ProgressGroup| -> usize { counts[g as usize] * 100 / total.max(1) };
-    Line::from(format!(
-        "done {}% · open {}% · working {}% · dropped {}%",
-        pct(ProgressGroup::Done),
-        pct(ProgressGroup::Open),
-        pct(ProgressGroup::Working),
-        pct(ProgressGroup::Dropped),
-    ))
+    // 分组单词按组色着色，数字随其后。
+    let mut spans: Vec<Span> = Vec::new();
+    for (i, g) in GROUP_ORDER.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::raw(" · "));
+        }
+        spans.push(Span::styled(group_word(*g), group_color(*g)));
+        spans.push(Span::raw(format!(" {}%", pct(*g))));
+    }
+    Line::from(spans)
 }
 
 #[cfg(test)]
@@ -207,10 +220,10 @@ mod tests {
         ];
         let refs: Vec<&Issue> = issues.iter().collect();
         let line = progress_bar(&refs, 9);
-        // 3 组各占约 1/3：done 白、open 黄、dropped 红。
+        // 3 组各占约 1/3：done 绿、open 白、dropped 红。
         assert_eq!(line.spans.len(), 3);
-        assert_eq!(line.spans[0].style.fg, Some(Color::White));
-        assert_eq!(line.spans[1].style.fg, Some(Color::Yellow));
+        assert_eq!(line.spans[0].style.fg, Some(Color::Green));
+        assert_eq!(line.spans[1].style.fg, Some(Color::White));
         assert_eq!(line.spans[2].style.fg, Some(Color::Red));
         // 总渲染亚像素 = 9*8（末格含右组尾部）。
         let px_sum: usize = line
@@ -254,5 +267,10 @@ mod tests {
         let line = progress_pct_line(&refs);
         let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
         assert_eq!(text, "done 33% · open 33% · working 0% · dropped 33%");
+        // 单词着色：done 绿 / open 白 / working 黄 / dropped 红（span 0/3/6/9 为单词）。
+        assert_eq!(line.spans[0].style.fg, Some(Color::Green));
+        assert_eq!(line.spans[3].style.fg, Some(Color::White));
+        assert_eq!(line.spans[6].style.fg, Some(Color::Yellow));
+        assert_eq!(line.spans[9].style.fg, Some(Color::Red));
     }
 }

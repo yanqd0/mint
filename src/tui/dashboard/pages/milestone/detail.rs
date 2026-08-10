@@ -102,7 +102,7 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
     if c.body.is_some() {
         constraints.push(Constraint::Length(4));
     }
-    constraints.push(Constraint::Length(5)); // progress 面板（bar + 总百分比 + 分组百分比）
+    constraints.push(Constraint::Length(4)); // progress 面板（bar + 分组百分比）
     constraints.push(Constraint::Length(plan_lines.len() as u16 + 2));
     constraints.push(Constraint::Length(issue_lines.len() as u16 + 2));
     constraints.push(Constraint::Length(1));
@@ -123,20 +123,12 @@ pub fn draw_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, are
         ci += 1;
     }
     // progress 面板：直接+间接全部 issue 聚合进度条（dropped 红色计入完成）。
-    let rate = done
-        .checked_mul(100)
-        .and_then(|d| d.checked_div(total.max(1)))
-        .unwrap_or(0);
     let bw = chunks[ci].width.saturating_sub(4) as usize; // render_panel 内容宽（border 2 + padding 2）
     render_panel(
         frame,
         chunks[ci],
         "progress",
-        vec![
-            progress_bar(&all, bw),
-            Line::from(format!("progress: {rate}%")),
-            progress_pct_line(&all),
-        ],
+        vec![progress_bar(&all, bw), progress_pct_line(&all)],
     );
     ci += 1;
     render_panel(
@@ -217,8 +209,8 @@ mod tests {
         let mut terminal = test_backend(80, 20);
         terminal.draw(|f| draw_detail(f, &m, 4, f.area())).unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
-        // 直接+间接 2 issue，done+dropped=2 → 100%。
-        assert!(text.contains("progress: 100%"), "聚合进度: {text}");
+        // 直接+间接 2 issue（done + dropped）→ 分组行含 dropped 50%。
+        assert!(text.contains("dropped 50%"), "聚合进度: {text}");
     }
 
     #[test]

@@ -1612,7 +1612,7 @@ fn st_tui_dashboard_output() {
     let text = String::from_utf8_lossy(&out).to_string();
     assert!(text.contains("1. Issues"), "tab: {text}");
     assert!(text.contains("issues"), "标题: {text}");
-    assert!(text.contains("progress:"), "进度: {text}");
+    assert!(text.contains("open 100%"), "分组进度: {text}");
     assert!(text.contains("dashboard issue"), "issue: {text}");
     assert!(text.contains("●"), "状态点: {text}");
 }
