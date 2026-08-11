@@ -159,7 +159,15 @@ pub fn progress_bar(issues: &[&Issue], width: usize) -> Line<'static> {
 pub fn progress_pct_line(issues: &[&Issue]) -> Line<'static> {
     let counts = group_counts(issues);
     let total: usize = counts.iter().sum();
-    let pct = |g: ProgressGroup| -> usize { counts[g as usize] * 100 / total.max(1) };
+    let pct = |g: ProgressGroup| -> usize {
+        let p = counts[g as usize] * 100 / total.max(1);
+        // present 组最小 1%（对齐进度条 min-1 可见性：bar 显示该组 → 占比不为 0）；absent 组仍 0%。
+        if counts[g as usize] > 0 && p == 0 {
+            1
+        } else {
+            p
+        }
+    };
     // 分组单词按组色着色，数字随其后。
     let mut spans: Vec<Span> = Vec::new();
     for (i, g) in GROUP_ORDER.iter().enumerate() {
@@ -254,6 +262,23 @@ mod tests {
         assert_eq!(last.style.fg, Some(Color::Red));
         // 且至少 1 亚像素（非空）。
         assert!(!last.content.is_empty());
+    }
+
+    #[test]
+    fn progress_pct_line_present_group_min_one_percent() {
+        // 101 个 issue：100 done + 1 working。working 占比 <1%（floor 0），但 present 组最小 1%，
+        // 与进度条 min-1 可见性一致（bar 有黄条时 pct 不再显示 working 0%）。
+        let mut issues = Vec::new();
+        for i in 0..100 {
+            issues.push(mk_issue(i, Status::Done));
+        }
+        issues.push(mk_issue(999, Status::Planned));
+        let refs: Vec<&Issue> = issues.iter().collect();
+        let line = progress_pct_line(&refs);
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(text.contains("working 1%"), "present 组最小 1%: {text}");
+        assert!(text.contains("done 99%"), "done: {text}");
+        assert!(text.contains("open 0%"), "absent 组仍 0%: {text}");
     }
 
     #[test]

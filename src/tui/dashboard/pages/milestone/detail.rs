@@ -259,6 +259,29 @@ mod tests {
     }
 
     #[test]
+    fn progress_panel_min_one_percent_for_present_group() {
+        // 100 done（经 plan 间接）+ 1 working（直属）：working 占比 <1%，面板百分比仍显 1%
+        // （与进度条 min-1 可见性一致，不再 working 0%）。
+        let mut issues: Vec<Issue> = (1..=100)
+            .map(|i| mk_issue(i, "done", Status::Done, Some(7)))
+            .collect();
+        issues.push(mk_issue(999, "working one", Status::Planned, None));
+        let mut m = model_full(
+            issues,
+            vec![(mk_container(7, "tui plan", None, Some(4)), 0)],
+            vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
+        );
+        m.milestone_directs = vec![(4, 999)];
+        m.view = View::MilestoneDetail { milestone_id: 4 };
+        let mut terminal = test_backend(100, 30);
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 4, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("working 1%"), "present 组最小 1%: {text}");
+    }
+
+    #[test]
     fn milestone_detail_shows_page_numbers_when_paged() {
         let plans: Vec<(Container, i64)> = (1..=12)
             .map(|i| (mk_container(i, &format!("plan {i}"), None, Some(4)), 0))
