@@ -141,8 +141,10 @@ pub(crate) fn issue_from_row(r: &rusqlite::Row) -> rusqlite::Result<Issue> {
 
 /// 填充 issue 的 labels（每 issue 一次查询，量小可接受）。
 pub fn fill_labels(conn: &Connection, issues: &mut [Issue]) -> Result<(), Error> {
+    // 批量一次取回全部 label 关联，替代逐 issue 查询（dashboard 每秒全量刷新防 N+1）。
+    let map = label::names_for_issues(conn)?;
     for issue in issues {
-        issue.labels = label::names_for_issue(conn, issue.id)?;
+        issue.labels = map.get(&issue.id).cloned().unwrap_or_default();
     }
     Ok(())
 }

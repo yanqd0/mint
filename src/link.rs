@@ -5,6 +5,8 @@
 //! - `blocked_by` 归一到 `blocks`（方向互换）：A blocked_by B → 存 (B, blocks, A)。
 //! - 复用 issue_labels 的 INSERT OR IGNORE 幂等模式（D9）。
 
+use std::collections::HashMap;
+
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::db;
@@ -70,6 +72,63 @@ pub fn remove(conn: &Connection, from_id: i64, ty: LinkType, to_id: i64) -> Resu
         conn.execute(db::ISSUE_LINK_DELETE, params![to, ty, from])?;
     }
     Ok(())
+}
+
+/// 批量取全部 issue 的链接（一次查询，替代逐 issue `links_for`；dashboard 全量加载用）。
+/// 含出向 + 入向反向派生；每 issue 排序与 `links_for` 一致（出向在前 → created_at → other_id）。
+pub fn links_for_many(conn: &Connection) -> Result<HashMap<i64, Vec<Link>>, Error> {
+    let mut stmt = conn.prepare(db::ISSUE_LINKS_FOR_ALL)?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?, // from_id
+            r.get::<_, i64>(1)?, // to_id
+            r.get::<_, LinkType>(2)?,
+            r.get::<_, String>(3)?, // created_at
+            r.get::<_, String>(4)?, // from_title
+            r.get::<_, String>(5)?, // to_title
+        ))
+    })?;
+    // (is_reverse, created_at, other_id, stored_type, link)——排序键含存储 type 与 links_for 一致。
+    let mut out: HashMap<i64, Vec<(bool, String, i64, String, Link)>> = HashMap::new();
+    for row in rows {
+        let (from_id, to_id, ty, created_at, from_title, to_title) = row?;
+        // 出向：from 视角 rel = type，other = to
+        out.entry(from_id).or_default().push((
+            false,
+            created_at.clone(),
+            to_id,
+            ty.as_str().to_string(),
+            Link {
+                other_id: to_id,
+                other_title: to_title,
+                rel: ty.as_str().to_string(),
+                created_at: created_at.clone(),
+            },
+        ));
+        // 入向：to 视角 rel = reverse，other = from
+        out.entry(to_id).or_default().push((
+            true,
+            created_at.clone(),
+            from_id,
+            ty.as_str().to_string(),
+            Link {
+                other_id: from_id,
+                other_title: from_title,
+                rel: ty.reverse().to_string(),
+                created_at,
+            },
+        ));
+    }
+    Ok(out
+        .into_iter()
+        .map(|(id, mut v)| {
+            // 出向(false)在前 → created_at → other_id → type（与 links_for ORDER BY 一致）
+            v.sort_by(|a, b| {
+                (a.0, a.1.as_str(), a.2, a.3.as_str()).cmp(&(b.0, b.1.as_str(), b.2, b.3.as_str()))
+            });
+            (id, v.into_iter().map(|(_, _, _, _, l)| l).collect())
+        })
+        .collect())
 }
 
 /// 聚合某 issue 的全部链接（出向 + 入向反向派生），rel 已编码方向。
@@ -299,6 +358,27 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM issue_links", [], |r| r.get(0))
             .unwrap();
         assert_eq!(cnt2, 1);
+    }
+
+    /// links_for_many 批量结果与逐 issue links_for 的 (other_id, rel) 序列一致。
+    #[test]
+    fn links_for_many_matches_links_for() {
+        let (conn, a, b) = setup();
+        create(&conn, a, LinkType::Solves, b).unwrap();
+        create(&conn, a, LinkType::Related, b).unwrap();
+        let map = links_for_many(&conn).unwrap();
+        for issue_id in [a, b] {
+            let batch: Vec<(i64, String)> = map
+                .get(&issue_id)
+                .map(|ls| ls.iter().map(|l| (l.other_id, l.rel.clone())).collect())
+                .unwrap_or_default();
+            let single: Vec<(i64, String)> = links_for(&conn, issue_id)
+                .unwrap()
+                .into_iter()
+                .map(|l| (l.other_id, l.rel))
+                .collect();
+            assert_eq!(batch, single, "issue {issue_id} 批量应等于逐条");
+        }
     }
 
     /// 多类型混合聚合 + 排序（出向在前、入向在后）。

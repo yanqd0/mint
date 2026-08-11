@@ -10,4 +10,4 @@ SELECT
 FROM issue_links l
 JOIN issues i ON i.id = CASE WHEN l.from_id = ?1 THEN l.to_id ELSE l.from_id END
 WHERE l.from_id = ?1 OR l.to_id = ?1
-ORDER BY is_reverse, l.created_at, i.id;
+ORDER BY is_reverse, l.created_at, i.id, l.type;

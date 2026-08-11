@@ -1,5 +1,7 @@
 //! label 注册、去重与 issue 关联。
 
+use std::collections::HashMap;
+
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::db;
@@ -87,6 +89,22 @@ pub fn names_for_issue(conn: &Connection, issue_id: i64) -> Result<Vec<String>, 
     let mut stmt = conn.prepare(db::LABEL_NAMES_FOR_ISSUE)?;
     let rows = stmt.query_map(params![issue_id], |r| r.get(0))?;
     rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
+}
+
+/// 批量取全部 issue 的 label 名（一次查询，替代逐 issue `names_for_issue`；dashboard 全量加载用）。
+/// 每 issue 按 name 排序（与 `LABEL_NAMES_FOR_ISSUE` 的 `ORDER BY t.name` 一致）。
+pub fn names_for_issues(conn: &Connection) -> Result<HashMap<i64, Vec<String>>, Error> {
+    let mut stmt = conn.prepare(db::ISSUE_LABELS_FOR_ALL)?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+    let mut out: HashMap<i64, Vec<String>> = HashMap::new();
+    for row in rows {
+        let (issue_id, name) = row?;
+        out.entry(issue_id).or_default().push(name);
+    }
+    for names in out.values_mut() {
+        names.sort();
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -206,5 +224,22 @@ mod tests {
         .unwrap();
         let names = names_for_issue(&conn, iid).unwrap();
         assert_eq!(names, vec!["bug", "storage"]);
+    }
+
+    /// names_for_issues 批量结果与逐 issue names_for_issue 一致（按 name 排序）。
+    #[test]
+    fn names_for_issues_matches_single() {
+        let (conn, iid) = setup();
+        attach(
+            &conn,
+            iid,
+            &[("storage".to_string(), None), ("bug".to_string(), None)],
+        )
+        .unwrap();
+        let map = names_for_issues(&conn).unwrap();
+        assert_eq!(
+            map.get(&iid).unwrap(),
+            &names_for_issue(&conn, iid).unwrap()
+        );
     }
 }

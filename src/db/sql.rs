@@ -25,6 +25,8 @@ pub const ISSUE_LINK_EXISTS: &str = include_str!("queries/issue_link_exists.sql"
 pub const ISSUE_LINK_INSERT: &str = include_str!("queries/issue_link_insert.sql");
 pub const ISSUE_LINK_DELETE: &str = include_str!("queries/issue_link_delete.sql");
 pub const ISSUE_LINKS_FOR: &str = include_str!("queries/issue_links_for.sql");
+pub const ISSUE_LINKS_FOR_ALL: &str = include_str!("queries/issue_links_for_all.sql");
+pub const ISSUE_LABELS_FOR_ALL: &str = include_str!("queries/issue_labels_for_all.sql");
 
 pub const PROJECT_INSERT: &str = include_str!("queries/project_insert.sql");
 pub const PROJECT_SELECT_ID: &str = include_str!("queries/project_select_id.sql");
