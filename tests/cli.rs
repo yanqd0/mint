@@ -1446,7 +1446,7 @@ fn st_delete_milestone_detaches() {
     assert_eq!(v["id"].as_i64().unwrap(), i);
 }
 
-/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=5（001-005）。
+/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=1（已合并 001-005）。
 #[test]
 fn st_empty_db_initialized_v1() {
     let (_dir, db) = empty_db();
@@ -1455,7 +1455,7 @@ fn st_empty_db_initialized_v1() {
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 5);
+    assert_eq!(version, 1);
 }
 
 // ── --tui（list 表格浏览）────────────────────────────────────────
