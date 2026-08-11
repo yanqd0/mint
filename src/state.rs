@@ -71,7 +71,8 @@ pub fn requires_test_cmd(action: Action, test_cmd: Option<&str>) -> bool {
     test_cmd.is_some_and(|s| !s.trim().is_empty())
 }
 
-/// 应用状态转换：读当前状态 → 校验 → `BEGIN IMMEDIATE` 事务更新 + 容器状态同步 → COMMIT。
+/// 应用状态转换：`BEGIN IMMEDIATE` 事务内读状态 → 校验 → 更新 + 容器状态同步 → COMMIT。
+/// 状态读与校验置于事务内（写锁串行化），避免多 agent 并发下基于过期快照的 TOCTOU 覆盖。
 /// 返回 `(from, to)`；校验失败 / issue 不存在 / db 错误返回 `Err`（整体回滚）。
 /// CLI 与 TUI 共用；打印由调用方决定。
 pub fn apply_transition(
@@ -82,56 +83,58 @@ pub fn apply_transition(
     reason: Option<&str>,
     commit_sha: Option<&str>,
 ) -> Result<(Status, Status), Error> {
-    let current: Status = conn
-        .query_row(db::ISSUE_SELECT_STATUS, rusqlite::params![id], |r| r.get(0))
-        .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => Error::Other(format!("issue #{id} not found")),
-            other => Error::from(other),
-        })?;
-
     let target = target_of(action);
-    if !can_transition(current, action, target) {
-        return Err(Error::Other(format!(
-            "invalid transition: {} -> {} via {:?}",
-            current, target, action
-        )));
-    }
-
-    if !requires_test_cmd(action, test_cmd) {
-        return Err(Error::Other(
-            "close/retest requires --test-cmd (use 'not-tested' if tests were skipped)".to_string(),
-        ));
-    }
-
-    // commit 需 sha 写 last_commit_id；无 HEAD（非 git 目录）报错置于状态校验之后，
-    // 保证状态非法（如 open 直接 commit）时优先报 invalid transition 而非 git 错误。
-    if action == Action::Commit && commit_sha.is_none() {
-        return Err(Error::Other(
-            "commit requires a git repository (no HEAD)".to_string(),
-        ));
-    }
-
     let reset = action == Action::Reset;
     let reopen = action == Action::Reopen;
     let drop_reason: Option<&str> = if action == Action::Drop { reason } else { None };
 
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let result = (|| {
+        // 事务内读当前状态（BEGIN IMMEDIATE 持写锁，多 agent 并发串行，消除 TOCTOU）
+        let current: Status = conn
+            .query_row(db::ISSUE_SELECT_STATUS, rusqlite::params![id], |r| r.get(0))
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => {
+                    Error::Other(format!("issue #{id} not found"))
+                }
+                other => Error::from(other),
+            })?;
+        // 校验顺序：状态合法性优先（open 直接 commit 报 invalid transition 而非 git 错误）
+        if !can_transition(current, action, target) {
+            return Err(Error::Other(format!(
+                "invalid transition: {} -> {} via {:?}",
+                current, target, action
+            )));
+        }
+        if !requires_test_cmd(action, test_cmd) {
+            return Err(Error::Other(
+                "close/retest requires --test-cmd (use 'not-tested' if tests were skipped)"
+                    .to_string(),
+            ));
+        }
+        // commit 需 sha 写 last_commit_id；无 HEAD（非 git 目录）报错置于状态校验之后
+        if action == Action::Commit && commit_sha.is_none() {
+            return Err(Error::Other(
+                "commit requires a git repository (no HEAD)".to_string(),
+            ));
+        }
         conn.execute(
             db::ISSUE_UPDATE_TRANSITION,
             rusqlite::params![target, test_cmd, id, reset, drop_reason, reopen, commit_sha],
         )?;
         container::sync_container_status(conn, id)?;
-        Ok(())
+        Ok((current, target))
     })();
     match result {
-        Ok(()) => conn.execute_batch("COMMIT")?,
+        Ok(pair) => {
+            conn.execute_batch("COMMIT")?;
+            Ok(pair)
+        }
         Err(e) => {
             let _ = conn.execute_batch("ROLLBACK");
-            return Err(e);
+            Err(e)
         }
     }
-    Ok((current, target))
 }
 
 #[cfg(test)]
