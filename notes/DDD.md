@@ -65,8 +65,8 @@ issue/plan 之上的**聚合容器**。概念层级：`roadmap`（上位抽象�
 | `done` | 全部完成 | 全部子项 done |
 
 优先级：`running > done > dropped > partial > open`。
-- **plan 状态** ← 其下 issue 状态派生
-- **milestone 状态** ← 其下 plan 状态 + 直接挂 issue 状态合并派生
+- **plan 状态** ← 其下 issue 状态派生（全部 done → plan done，自动）
+- **milestone 状态** ← 其下 plan 状态 + 直接挂 issue 状态合并派生，但 **milestone 不自动 done/dropped**（版本桶，需显式 `milestone set --status done` 发布 / `dropped` 取消；派生结果 done/dropped → running）
 
 **status 列保留但派生同步**：子项状态/归属变更时**写后级联同步**（改 issue → 重算 plan → 重算 milestone，同一事务）；无单独更新接口，CLI 只读（价值在按状态筛选）。**无 close/drop/reopen 命令**（状态纯派生）。
 

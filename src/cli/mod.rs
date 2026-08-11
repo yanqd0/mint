@@ -7,6 +7,7 @@ use rusqlite::Connection;
 
 use crate::container::{self, ContainerKind};
 use crate::error::Error;
+use crate::models::ContainerStatus;
 use crate::output;
 use list_common::{containers, paged_json, paginate, print_page_footer};
 
@@ -146,6 +147,9 @@ pub struct MilestoneSetArgs {
     /// New body (omit to keep; empty string clears)
     #[arg(long)]
     pub body: Option<String>,
+    /// Manual status override (done=released / dropped=cancelled; other statuses derived)
+    #[arg(long)]
+    pub status: Option<ContainerStatus>,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,

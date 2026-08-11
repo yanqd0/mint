@@ -483,6 +483,13 @@ fn sync_plan(conn: &Connection, plan_id: i64) -> Result<(), Error> {
 
 /// 重算某 milestone 状态（plan 状态 + 直接挂 issue 状态合并）并写回。
 fn sync_milestone(conn: &Connection, milestone_id: i64) -> Result<(), Error> {
+    // 手动终态（done=已发布 / dropped=已取消，由 `milestone set --status` 单独操作产生）不被派生覆盖。
+    let current = get(conn, ContainerKind::Milestone, milestone_id)?
+        .map(|c| c.status)
+        .unwrap_or(ContainerStatus::Open);
+    if matches!(current, ContainerStatus::Done | ContainerStatus::Dropped) {
+        return Ok(());
+    }
     let mut statuses = container_statuses_from(conn, db::MILESTONE_PLAN_STATUSES, milestone_id)?;
     statuses.extend(issue_statuses_from(
         conn,
@@ -490,7 +497,26 @@ fn sync_milestone(conn: &Connection, milestone_id: i64) -> Result<(), Error> {
         milestone_id,
     )?);
     let st = derive_status(&statuses);
+    // milestone 是版本桶：不随子项全部 done/dropped 自动 close/drop（需显式发布/取消），
+    // 派生结果 done/dropped → running（版本进行中待发布）；其余（open/running/partial）保留自动派生。
+    let st = match st {
+        ContainerStatus::Done | ContainerStatus::Dropped => ContainerStatus::Running,
+        other => other,
+    };
     conn.execute(db::MILESTONE_UPDATE_STATUS, params![st, milestone_id])?;
+    Ok(())
+}
+
+/// 手动设置 milestone 状态（发布 → done；取消 → dropped）。done/dropped 为终态，派生不覆盖。
+pub fn set_milestone_status(
+    conn: &Connection,
+    milestone_id: i64,
+    status: ContainerStatus,
+) -> Result<(), Error> {
+    let affected = conn.execute(db::MILESTONE_UPDATE_STATUS, params![status, milestone_id])?;
+    if affected == 0 {
+        return Err(Error::Other(format!("milestone #{milestone_id} not found")));
+    }
     Ok(())
 }
 
@@ -607,6 +633,34 @@ mod tests {
 
         set_status(&conn, iid, "done");
         sync_container_status(&conn, iid).unwrap();
+        // milestone 不随子项全部完成自动 done：派生 done → running（版本进行中待发布）。
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, rid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Running
+        );
+    }
+
+    /// 手动 done（发布）不被后续派生覆盖。
+    #[test]
+    fn milestone_manual_done_not_overwritten_by_sync() {
+        let (conn, iid) = setup();
+        let rid = create(
+            &conn,
+            ContainerKind::Milestone,
+            "r",
+            Some("0.1.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        link_direct(&conn, rid, iid).unwrap();
+        set_milestone_status(&conn, rid, ContainerStatus::Done).unwrap();
+        // 子项状态变化触发 sync → milestone 保持手动 done。
+        set_status(&conn, iid, "dev");
+        sync_container_status(&conn, iid).unwrap();
         assert_eq!(
             get(&conn, ContainerKind::Milestone, rid)
                 .unwrap()
@@ -671,7 +725,7 @@ mod tests {
                 .unwrap()
                 .unwrap()
                 .status,
-            ContainerStatus::Done
+            ContainerStatus::Running
         );
         unlink_direct(&conn, rid, iid).unwrap();
         assert_eq!(
@@ -743,7 +797,7 @@ mod tests {
                 .unwrap()
                 .unwrap()
                 .status,
-            ContainerStatus::Done
+            ContainerStatus::Running
         );
     }
 
@@ -829,7 +883,7 @@ mod tests {
                 .unwrap()
                 .unwrap()
                 .status,
-            ContainerStatus::Done
+            ContainerStatus::Running
         );
         delete_plan(&conn, pid).unwrap();
         assert_eq!(

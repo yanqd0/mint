@@ -43,9 +43,9 @@ pub fn cmd_milestone_set(conn: &Connection, s: &MilestoneSetArgs) -> Result<(), 
     let title = s.title.as_deref().map(str::trim);
     let version = s.version.as_deref().map(str::trim);
     let body = s.body.as_deref();
-    if title.is_none() && version.is_none() && body.is_none() {
+    if title.is_none() && version.is_none() && body.is_none() && s.status.is_none() {
         return Err(Error::Other(
-            "set requires --title, --version, or --body".to_string(),
+            "set requires --title, --version, --body, or --status".to_string(),
         ));
     }
     if title.is_some_and(|t| t.is_empty()) {
@@ -54,7 +54,13 @@ pub fn cmd_milestone_set(conn: &Connection, s: &MilestoneSetArgs) -> Result<(), 
     if version.is_some_and(|v| v.is_empty()) {
         return Err(Error::Other("version must not be empty".to_string()));
     }
-    container::update_milestone(conn, s.id, title, version, body)?;
+    if title.is_some() || version.is_some() || body.is_some() {
+        container::update_milestone(conn, s.id, title, version, body)?;
+    }
+    // 手动状态（发布 done / 取消 dropped），终态派生不覆盖。
+    if let Some(st) = s.status {
+        container::set_milestone_status(conn, s.id, st)?;
+    }
     if s.json {
         let mut obj = serde_json::Map::new();
         obj.insert("id".into(), serde_json::Value::from(s.id));
@@ -66,6 +72,9 @@ pub fn cmd_milestone_set(conn: &Connection, s: &MilestoneSetArgs) -> Result<(), 
         }
         if let Some(b) = body {
             obj.insert("body".into(), serde_json::Value::from(b));
+        }
+        if let Some(st) = s.status {
+            obj.insert("status".into(), serde_json::Value::from(st.as_str()));
         }
         println!(
             "{}",
