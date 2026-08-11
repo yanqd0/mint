@@ -587,3 +587,35 @@ fn pagination_with_page_size() {
     m.handle_key(k(KeyCode::Char('h'))); // 首页无操作
     assert_eq!(m.page, 0);
 }
+
+/// list --tui 容器视图：all=false 排除 done（与 TSV 容器 list 默认只显活跃一致）。
+#[test]
+fn visible_containers_filter_out_done_when_all_false() {
+    let mut m = DashboardModel::new();
+    m.init(snap_full(
+        vec![],
+        vec![(mk_plan(7, None, "1"), 0)],
+        vec![(mk_container(4), 0), (mk_container(5), 0)],
+    ));
+    m.milestones[0].0.status = ContainerStatus::Done; // milestone 4 置 done
+    m.filter = Some(crate::tui::dashboard::types::IssueFilter {
+        all: false,
+        status: None,
+        label: None,
+        priority: None,
+    });
+    m.view = View::Milestones;
+    let ms = m.visible_milestones();
+    assert_eq!(ms.len(), 1, "all=false 应排除 done milestone");
+    assert_eq!(ms[0].0.id, 5);
+    // all=true 不过滤
+    m.filter.as_mut().unwrap().all = true;
+    assert_eq!(m.visible_milestones().len(), 2);
+    // plans 同样过滤 done
+    m.plans[0].0.status = ContainerStatus::Done;
+    m.filter.as_mut().unwrap().all = false;
+    m.view = View::Plans;
+    assert_eq!(m.visible_plans().len(), 0, "done plan 应被排除");
+    m.filter.as_mut().unwrap().all = true;
+    assert_eq!(m.visible_plans().len(), 1);
+}

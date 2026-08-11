@@ -1,6 +1,6 @@
 //! dashboard 数据/视图查询方法：可见集、分页、分组（impl DashboardModel 独立模块，控制 model.rs 体积）。
 
-use crate::models::{Container, Issue, Status};
+use crate::models::{Container, ContainerStatus, Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::types::View;
 
@@ -75,8 +75,14 @@ impl DashboardModel {
     }
 
     /// Plans tab 行：全部 plan 按 updated_at 逆序（扁平，不按 milestone 分组）。
+    /// list --tui 初始筛选：all=false 排除 done（对齐容器 list 默认只显活跃）。
     pub fn visible_plans(&self) -> Vec<&(Container, i64)> {
         let mut ps: Vec<&(Container, i64)> = self.plans.iter().collect();
+        if let Some(f) = &self.filter {
+            if !f.all {
+                ps.retain(|(c, _)| c.status != ContainerStatus::Done);
+            }
+        }
         ps.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at));
         ps
     }
@@ -168,8 +174,14 @@ impl DashboardModel {
     }
 
     /// Milestones tab 行：全部 milestone（按 updated_at 逆序）。
+    /// list --tui 初始筛选：all=false 排除 done（对齐容器 list 默认只显活跃）。
     pub fn visible_milestones(&self) -> Vec<&(Container, i64)> {
         let mut ms: Vec<&(Container, i64)> = self.milestones.iter().collect();
+        if let Some(f) = &self.filter {
+            if !f.all {
+                ms.retain(|(c, _)| c.status != ContainerStatus::Done);
+            }
+        }
         ms.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at));
         ms
     }
