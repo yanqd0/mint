@@ -6,6 +6,6 @@
 
 ## 步骤
 
-1. **登记**：先 `list --json` 查重 → `add "<标题>" --body "<说明 + 来源>"`（问题=problem、改进=requirement）。
+1. **登记**：先 `list --json` 查重 → `add "<标题>" --body "<说明 + 来源>"`（问题=problem、改进=requirement、**杂务/文档/调研/观察项=task**）。
 2. **挂载（可选）**：明确归属版本/计划才挂（`plan issue` / `milestone issue`）；不确定则不挂。
 3. **排期**：`state plan`（planned）标记已排期，留待后续开发；不强行推进。

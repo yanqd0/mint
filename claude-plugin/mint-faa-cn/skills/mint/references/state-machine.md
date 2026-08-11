@@ -16,6 +16,18 @@
 | done/dropped | reopen | open | `mint issue state reopen <id>` | 重开 |
 | 任意 | drop | dropped | `mint issue state drop <id> --reason "<TEXT>"` | 可附理由，写入 dropped_reason |
 
+## task kind 状态流（无 dev 态）
+
+kind=task（杂务/文档/调研/CI 等不改行为的工程工作）复用 6 态但**跳过 dev**：
+
+| 当前状态 | 动作 | 目标状态 | 说明 |
+|---|---|---|---|
+| planned | start | **test** | 跳过 dev，直接进入测试 |
+| test | retest | **planned** | 无 dev 中间态，打回排期重新 start |
+| dev | commit | — | **不可达**（task 永不进入 dev），报错 `invalid transition: task kind does not use git commit (skip state commit)` |
+
+其余转换（plan/close/reset/drop/reopen）与通用 6 态一致；problem/requirement 状态流不变。
+
 ## 硬约束（违反会被 CLI 拒绝 / 语义错误）
 
 - **无 dev→done 捷径**：跳过测试也必须 `commit` 到 `test`，close 时 `--test-cmd` 填 `not-tested`。

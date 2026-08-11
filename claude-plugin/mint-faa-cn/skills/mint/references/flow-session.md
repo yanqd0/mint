@@ -8,7 +8,7 @@
 
 1. **概览**：`list --json` 拉当前 open/planned 概览，`milestone list --all` / `plan list --all` 看规划现状。
 2. **扫描 TODO/FIXME/XXX**：`grep -rn "TODO\|FIXME\|XXX" <项目代码目录>` → 逐个与现有 issue 查重
-   （`list --json` 标题模糊匹配），未登记的转 issue（kind 按性质：问题=problem、改进=requirement；
+   （`list --json` 标题模糊匹配），未登记的转 issue（kind 按性质：问题=problem、改进=requirement、杂务=task；
    body 注明 `来源: 文件:行号`）。**不重复创建**。
 3. **milestone/milestone 检查与建议**：对比现有 milestone 与项目当前状态，若发现新的版本规划迹象
    （如代码里出现下一版本需求/方向）→ **向用户确认后** `milestone create`（重复则不问、不加）。

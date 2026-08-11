@@ -4,6 +4,7 @@
 
 - problem → 现象/影响：`登录按钮点击无响应`
 - requirement → 目标：`实现 X 功能`
+- task → 杂务/文档/调研/CI：`docs(skill): flow-todo 映射 task`
 - 描述"做什么"，不描述"为什么"（理由进 body 或决策记录）
 
 **上限**：≤60 字符（约 30 汉字），超长压缩或拆到 body。
@@ -13,3 +14,4 @@
 示例：
 - problem：`列表翻页时偶发白屏`
 - requirement：`实现 issue 全文搜索`
+- task：`chore: 清理废弃 SQL 文件`

@@ -16,6 +16,18 @@
 | done/dropped | reopen | open | `mint issue state reopen <id>` | — |
 | any | drop | dropped | `mint issue state drop <id> --reason <TEXT>` | — |
 
+## task kind state flow (no dev state)
+
+kind=task (chore/documentation/research/CI — engineering work that doesn't change behavior) reuses the 6 states but **skips dev**:
+
+| Current | Action | Next | Note |
+|---|---|---|---|
+| planned | start | **test** | skips dev, goes straight to testing |
+| test | retest | **planned** | no dev intermediate state; back to scheduling, re-start |
+| dev | commit | — | **unreachable** (task never enters dev); errors with `invalid transition: task kind does not use git commit (skip state commit)` |
+
+All other transitions (plan/close/reset/drop/reopen) behave like the generic 6-state flow; problem/requirement flows are unchanged.
+
 ## Hard rules (violations are rejected by the CLI / semantic errors)
 
 - **No dev→done shortcut**: even when skipping tests, `commit` to test, then `close`
