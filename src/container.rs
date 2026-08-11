@@ -223,7 +223,12 @@ pub(crate) fn delete_txn(
     }
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let result = (|| {
-        conn.execute_batch(&sql.replace("?1", &id.to_string()))?;
+        // 逐语句参数化执行：execute_batch 不支持绑定参数，原 `sql.replace("?1", id)` 有
+        // 误替换（字面量含 ?1 / ?10）风险；delete SQL 均仅单参数 `?1`、注释/语句间无分号，
+        // 按 ';' 拆分 + params![id] 绑定安全。
+        for stmt in sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+            conn.execute(stmt, params![id])?;
+        }
         after(conn)?;
         Ok(())
     })();

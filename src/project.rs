@@ -55,10 +55,10 @@ pub fn ensure(conn: &Connection, name: &str, cwd: &Path) -> Result<i64, Error> {
     if let Some(id) = query_id(conn, name)? {
         // 已存在：检查新 git/abs_dir 是否已在 CSV 中，不在则追加
         if let Some(ref new_git) = git {
-            append_csv(conn, id, "git", new_git)?;
+            append_csv(conn, id, CsvField::Git, new_git)?;
         }
         if let Some(ref new_dir) = abs_dir {
-            append_csv(conn, id, "abs_dir", new_dir)?;
+            append_csv(conn, id, CsvField::AbsDir, new_dir)?;
         }
         return Ok(id);
     }
@@ -70,8 +70,25 @@ pub fn ensure(conn: &Connection, name: &str, cwd: &Path) -> Result<i64, Error> {
         .ok_or_else(|| Error::Other(format!("project '{name}' just inserted but not found")))
 }
 
+/// 可追加的 project CSV 字段（git / abs_dir）——白名单枚举化，消除任意字符串拼 SQL 列名。
+enum CsvField {
+    Git,
+    AbsDir,
+}
+
+impl CsvField {
+    /// 固定白名单列名（非用户输入），供 SELECT/UPDATE 拼接。
+    fn col(&self) -> &'static str {
+        match self {
+            CsvField::Git => "git",
+            CsvField::AbsDir => "abs_dir",
+        }
+    }
+}
+
 /// 追加值到 CSV 字段（不存在时追加，逗号分隔）。
-fn append_csv(conn: &Connection, id: i64, col: &str, value: &str) -> Result<(), Error> {
+fn append_csv(conn: &Connection, id: i64, field: CsvField, value: &str) -> Result<(), Error> {
+    let col = field.col(); // 白名单列名："git" / "abs_dir"
     let current: String = conn
         .query_row(
             &format!("SELECT {col} FROM projects WHERE id = ?1"),
