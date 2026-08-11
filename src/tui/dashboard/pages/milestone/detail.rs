@@ -304,6 +304,30 @@ mod tests {
     }
 
     #[test]
+    fn milestone_body_truncates_to_10_lines() {
+        let mut m = model_full(
+            vec![mk_issue(1, "open one", Status::Open, Some(7))],
+            vec![(mk_container(7, "tui plan", None, Some(4)), 0)],
+            vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
+        );
+        m.milestones[0].0.body = Some(
+            (1..=20)
+                .map(|i| format!("line {i}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+        m.view = View::MilestoneDetail { milestone_id: 4 };
+        let mut terminal = test_backend(100, 40);
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 4, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("line 1"), "body 开头: {text}");
+        assert!(text.contains("line 10…"), "末行省略: {text}");
+        assert!(!text.contains("line 11"), "超限行省略: {text}");
+    }
+
+    #[test]
     fn milestone_detail_omits_issues_panel_without_any_issue() {
         let mut m = model_full(
             vec![],
