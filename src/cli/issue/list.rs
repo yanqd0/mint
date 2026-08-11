@@ -147,6 +147,14 @@ pub fn fill_labels(conn: &Connection, issues: &mut [Issue]) -> Result<(), Error>
     Ok(())
 }
 
+/// LIKE 通配符转义：`\`→`\\`、`%`→`\%`、`_`→`\_`（配合 SQL `ESCAPE '\'`），
+/// 避免用户输入中的 `%`/`_` 被当作通配符扩大匹配范围。
+fn escape_like(q: &str) -> String {
+    q.replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
 /// 全文搜索（FTS5 trigram + LIKE 兜底）：≥3 字符走 MATCH，≤2 字符降级 LIKE。
 pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<(), Error> {
     let q = s.query.trim();
@@ -159,7 +167,7 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
     let priority = s.priority;
 
     let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if q.chars().count() < 3 {
-        let like = format!("%{q}%");
+        let like = format!("%{}%", escape_like(q));
         (
             db::ISSUE_SEARCH_LIKE,
             vec![
@@ -242,4 +250,18 @@ pub fn cmd_show(conn: &Connection, project: &str, s: &ShowArgs) -> Result<(), Er
         print!("{}", output::format_tsv(&headers, &rows));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// escape_like：转义 \、%、_，避免被当作 LIKE 通配符。
+    #[test]
+    fn escape_like_escapes_wildcards() {
+        assert_eq!(escape_like("50%"), "50\\%");
+        assert_eq!(escape_like("a_b"), "a\\_b");
+        assert_eq!(escape_like("a\\b"), "a\\\\b");
+        assert_eq!(escape_like("正常中文"), "正常中文");
+    }
 }

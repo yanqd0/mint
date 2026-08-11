@@ -25,8 +25,8 @@ FROM issues i
 JOIN projects p ON p.id = i.project_id
 WHERE
     (
-        i.title LIKE ?1
-        OR i.body LIKE ?1
+        i.title LIKE ?1 ESCAPE '\'
+        OR i.body LIKE ?1 ESCAPE '\'
     )
     AND (?2 IS NULL OR p.name = ?2)
     AND (
