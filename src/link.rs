@@ -57,10 +57,17 @@ pub fn create(conn: &Connection, from_id: i64, ty: LinkType, to_id: i64) -> Resu
 
 /// 删除 issue 链接（对称：任一端表述都能删）。无行静默 no-op。
 pub fn remove(conn: &Connection, from_id: i64, ty: LinkType, to_id: i64) -> Result<(), Error> {
-    let n = conn.execute(db::ISSUE_LINK_DELETE, params![from_id, ty, to_id])?;
+    // blocked_by → blocks 归一化（同 create：方向互换）——A blocked_by B 存的是 (B, blocks, A)，
+    // 不归一化则按 (A, blocked_by, B) 删不到。
+    let (from, ty, to) = if ty == LinkType::BlockedBy {
+        (to_id, LinkType::Blocks, from_id)
+    } else {
+        (from_id, ty, to_id)
+    };
+    let n = conn.execute(db::ISSUE_LINK_DELETE, params![from, ty, to])?;
     if n == 0 {
-        // 存储方向与入参相反时回退删反向（related 对称场景）
-        conn.execute(db::ISSUE_LINK_DELETE, params![to_id, ty, from_id])?;
+        // 存储方向与入参相反时回退删反向（related 对称 / blocks 反向场景）
+        conn.execute(db::ISSUE_LINK_DELETE, params![to, ty, from])?;
     }
     Ok(())
 }
@@ -234,6 +241,38 @@ mod tests {
         assert_eq!(cnt, 0);
         // 再 remove no-op
         remove(&conn, b, LinkType::Related, a).unwrap();
+    }
+
+    /// blocked_by 归一化后用户表述 A blocked_by B 能删（归一化到 (B, blocks, A)）。
+    #[test]
+    fn remove_blocked_by_user_view_deletes() {
+        let (conn, a, b) = setup();
+        create(&conn, a, LinkType::BlockedBy, b).unwrap();
+        remove(&conn, a, LinkType::BlockedBy, b).unwrap();
+        let cnt: i64 = conn
+            .query_row("SELECT COUNT(*) FROM issue_links", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cnt, 0, "blocked_by 用户表述应删到 blocks 行");
+    }
+
+    /// blocked_by 反向（B blocks A 或 B blocked_by A）表述也能删。
+    #[test]
+    fn remove_blocked_by_reverse_view_deletes() {
+        let (conn, a, b) = setup();
+        create(&conn, a, LinkType::BlockedBy, b).unwrap();
+        // B blocks A 出向表述
+        remove(&conn, b, LinkType::Blocks, a).unwrap();
+        let cnt: i64 = conn
+            .query_row("SELECT COUNT(*) FROM issue_links", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cnt, 0, "blocks 出向表述应删到");
+        // 重建后 B blocked_by A（反向用户表述）也删
+        create(&conn, a, LinkType::BlockedBy, b).unwrap();
+        remove(&conn, b, LinkType::BlockedBy, a).unwrap();
+        let cnt2: i64 = conn
+            .query_row("SELECT COUNT(*) FROM issue_links", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(cnt2, 0, "blocked_by 反向表述应删到");
     }
 
     /// blocked_by 归一化为 blocks（方向互换）：A blocked_by B ≡ B blocks A（幂等）。
