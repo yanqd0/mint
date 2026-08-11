@@ -71,7 +71,7 @@
 
 **验收**：agent 会话中自动捕获生效；重复 issue 自动合并。
 
-## 0.4.0 — TUI（人工查看）（进行中）
+## 0.4.0 — TUI（人工查看）（已完成）
 
 **目标**：人工友好的浏览界面，作为 CLI 的补充。
 
@@ -94,7 +94,32 @@
 
 **验收**：人工可滚动浏览并按状态推进 issue。
 
-## 0.5.0 — 多机同步 + 读写分离（S3 桶中转）
+## 0.5.0 — agent 生态 + 发布准备
+
+**目标**：覆盖 Claude Code 之外的 AI 编程开发者（Codex/OpenCode）；准备 crates.io 正式发布流水线。
+
+**范围**：
+- **Codex**：AGENTS.md 指令 + MCP 接入（#50）
+- **OpenCode**：TS 插件 hooks 转发到 `mint capture`（#51）
+- 无事件 hooks 时降级为"指令驱动的主动登记"
+- adapter 抽象不变：`capture`/`context` 通用入口
+- **发布准备**：GitHub Actions 流水线（test/clippy 门禁 + release build + crates.io publish 准备，独立 plan #36）
+
+**验收**：Codex/OpenCode 会话中可主动 add/list issue；发布流水线就绪。
+
+## 0.6.0 — 交付件大小性能总优化
+
+**目标**：评估并优化交付件体积与启动性能。
+
+**范围**：
+- **评估去掉内置 SQLite**：换用系统 libsqlite3 或替代存储，量化对交付件大小/性能的影响后决策
+- **调整技术选型**：评估 CLI 框架、依赖裁剪对体积的影响（`decisions.md` D5 的跟进）
+- SQLite compile options 裁剪未用特性（保留 FTS5）
+- 交叉编译目标验证（Linux/musl 等）
+
+**验收**：给出体积/性能评估报告，按结论实施优化；二进制大小目标明确化。
+
+## 0.7.0 — 多机同步 + 读写分离（S3 桶中转）
 
 > 背景调研（社区方案分类、uid 印证、借鉴点）见 `notes/evaluation-sync.md`。
 
@@ -121,30 +146,6 @@
 - 合并时按 uid 去重（INSERT OR IGNORE）——天然幂等
 
 **验收**：多机 push/拉取；`merged.db` 重建正确（去重幂等）；本机写路径不变、短 id 操作无歧义。
-
-## 0.6.0 — 交付件大小性能总优化
-
-**目标**：评估并优化交付件体积与启动性能。
-
-**范围**：
-- **评估去掉内置 SQLite**：换用系统 libsqlite3 或替代存储，量化对交付件大小/性能的影响后决策
-- **调整技术选型**：评估 CLI 框架、依赖裁剪对体积的影响（`decisions.md` D5 的跟进）
-- SQLite compile options 裁剪未用特性（保留 FTS5）
-- 交叉编译目标验证（Linux/musl 等）
-
-**验收**：给出体积/性能评估报告，按结论实施优化；二进制大小目标明确化。
-
-## 0.7.0 — 其它 agent 支持
-
-**目标**：覆盖 Claude Code 之外的 AI 编程开发者。
-
-**范围**：
-- **Codex**：AGENTS.md 指令 + MCP 接入
-- **OpenCode**：TS 插件 hooks 转发到 `mint capture`
-- 无事件 hooks 时降级为"指令驱动的主动登记"
-- adapter 抽象不变：`capture`/`context` 通用入口
-
-**验收**：Codex/OpenCode 会话中可主动 add/list issue。
 
 ## 1.0 — 正式发布（含 i18n + docs）
 
