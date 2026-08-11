@@ -6,5 +6,9 @@ SELECT
     r.status,
     datetime(r.created_at, 'localtime') AS created_at,
     datetime(r.updated_at, 'localtime') AS updated_at,
-    (SELECT count(*) FROM milestone_direct_issues di WHERE di.milestone_id = r.id)
+    (
+        SELECT count(*)
+        FROM milestone_direct_issues di
+        WHERE di.milestone_id = r.id
+    )
 FROM milestones r WHERE r.id = ?1;
