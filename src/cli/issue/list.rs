@@ -157,6 +157,12 @@ fn escape_like(q: &str) -> String {
         .replace('_', "\\_")
 }
 
+/// FTS5 MATCH 查询串：phrase 包裹（`"..."`）+ 内部引号替换为空格，
+/// 使 AND/OR/NOT/括号等 FTS5 语法字符变为字面匹配，避免语法错误/布尔误解释。
+fn fts_phrase(q: &str) -> String {
+    format!("\"{}\"", q.replace('"', " "))
+}
+
 /// 全文搜索（FTS5 trigram + LIKE 兜底）：≥3 字符走 MATCH，≤2 字符降级 LIKE。
 pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<(), Error> {
     let q = s.query.trim();
@@ -184,7 +190,7 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
         (
             db::ISSUE_SEARCH,
             vec![
-                Box::new(q.to_owned()),
+                Box::new(fts_phrase(q)),
                 Box::new(project.map(|s| s.to_owned())),
                 Box::new(label.map(|s| s.to_owned())),
                 Box::new(status),
@@ -265,5 +271,13 @@ mod tests {
         assert_eq!(escape_like("a_b"), "a\\_b");
         assert_eq!(escape_like("a\\b"), "a\\\\b");
         assert_eq!(escape_like("正常中文"), "正常中文");
+    }
+
+    /// fts_phrase：phrase 包裹 + 内部引号替换，特殊字符字面化。
+    #[test]
+    fn fts_phrase_wraps_and_strips_quotes() {
+        assert_eq!(fts_phrase("issue"), "\"issue\"");
+        assert_eq!(fts_phrase("mint AND bug"), "\"mint AND bug\"");
+        assert_eq!(fts_phrase("say \"hi\""), "\"say  hi \""); // 首尾引号均替换为空格
     }
 }
