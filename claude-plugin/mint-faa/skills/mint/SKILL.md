@@ -43,7 +43,7 @@ Accepts an optional positional `<description>` argument summarizing intent. When
 1. **After CC plan mode approval, the first action is NOT writing code**:
    - Attach the work to a mint plan (step 0 guarantees the plan exists)
    - Create issues for each independent phase (kind=requirement, label `<version>,dev-clean`), attach to mint plan via `mint plan attach`
-   - **Schedule on attach**: run `mint issue state plan <id>` for every open issue of that plan (when CC leaves plan mode and enters execution/auto mode, all issues are uniformly `planned` — no open issues left under a plan)
+   - **Schedule on attach**: `mint plan plan <plan_id>` for all open issues of that plan (or `mint issue state plan <id>` one by one; when CC leaves plan mode and enters execution/auto mode, all issues are uniformly `planned` — no open issues left under a plan)
 2. **For each logical change (one or more commits)**:
    - `mint issue state plan <id>` (schedule; for a whole plan see step 1 "schedule on attach")
    - **Pre-edit gate (mandatory)**: before editing code for an issue, you MUST `mint issue state start <id>` (planned → dev); the issue must stay `dev` while its code is being changed (editing while open/planned = workflow violation)
@@ -52,7 +52,7 @@ Accepts an optional positional `<description>` argument summarizing intent. When
 3. **Unified testing** (multiple issues in the same plan; avoid closing one-by-one which makes intermediate states invisible):
    - Issues in the same plan each `state commit` to **test (stay in test)**, do NOT close immediately
    - Once all are in test, run unified `cargo test` / clippy / fmt
-   - **All green** → close each: `mint issue state close <id> --test-cmd "cargo test"` (or `not-tested`)
+   - **All green** → `mint plan close <plan_id> --test-cmd "cargo test"` (or close each with `mint issue state close <id> --test-cmd ...`; `not-tested` if skipped)
    - **Failure** → `mint issue state retest <id> --test-cmd "<precise method>"` (test→dev, keeps old SHA marking the failed commit) → fix → new commit → `state commit --sha $(git rev-parse --short=7 HEAD)` (new SHA overwrites) → re-test
    - retest test_cmd should be precise (test case/file/lint); a generic command is OK to save an interaction
 4. **After all issues in a phase are closed**, the plan auto-derives to done (no manual plan close needed).
@@ -84,6 +84,11 @@ mint issue state start 42
 mint issue state commit 42 --sha $(git rev-parse HEAD)
 mint issue state close 42 --test-cmd "cargo test"
 mint issue state drop 42 --reason "no longer needed"
+
+# Batch (variadic ids / plan-level)
+mint issue state plan 42 43 44                     # multiple ids at once; invalid transitions skipped with a summary
+mint plan plan 31                                  # all open issues of a plan -> planned (schedule-lock)
+mint plan close 31 --test-cmd "cargo test"         # all test issues of a plan -> done (unified close)
 
 # Edit
 mint issue set 42 --title "new title" --priority 1

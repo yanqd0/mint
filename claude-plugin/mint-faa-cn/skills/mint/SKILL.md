@@ -43,7 +43,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 1. **CC plan mode 审批通过后，第一件事不是写代码**：
    - 将 CC plan 对应的 work 挂入 mint plan（step 0 已保证 plan 存在）
    - 为每个独立 phase 建 issue（kind=requirement，label `<版本>,dev-clean`），`mint plan attach` 挂入
-   - **挂入即排期锁定**：对该 plan 下全部 open issue 逐个 `mint issue state plan <id>`（CC 退出 plan 模式、进入执行/auto 模式时统一 planned，plan 的 issue 不留 open）
+   - **挂入即排期锁定**：对该 plan 下全部 open issue `mint plan plan <plan_id>`（或逐个 `mint issue state plan <id>`；CC 退出 plan 模式、进入执行/auto 模式时统一 planned，plan 的 issue 不留 open）
 2. **每完成一个逻辑变更（对应一次或多次 commit）**：
    - `mint issue state plan <id>`（排入计划；同 plan 批量排期见 step 1「挂入即排期锁定」）
    - **改码前门禁（强制）**：修改某 issue 对应代码前必须先 `mint issue state start <id>`（planned → dev）；改动期间该 issue 必须处于 `dev`（open/planned 直接改码 = 流程违反）
@@ -52,7 +52,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 3. **统一测试模式**（同 plan 多 issue，避免逐个 close 致中间态瞬移）：
    - 同 plan 的多个 issue 各自 commit 到 **test（停在 test）**，不立即 close
    - 全部到 test 后，统一跑 `cargo test` / clippy / fmt
-   - **全绿** → 统一对每个 issue `mint issue state close <id> --test-cmd "cargo test"`（或 `not-tested`）
+   - **全绿** → `mint plan close <plan_id> --test-cmd "cargo test"` 统一 close（或逐个 `mint issue state close <id> --test-cmd ...`；无测试 `not-tested`）
    - **失败** → `mint issue state retest <id> --test-cmd "<精确手法>"`（test→dev 打回，保留旧 SHA 标记失败）→ 修复 → 新 commit → `state commit --sha $(git rev-parse --short=7 HEAD)`（新 SHA 覆盖）→ 再测试
    - retest 的 test_cmd 尽量精确（用例/文件/lint 命令）；省一次交互可用通用命令
 4. **一个 phase 的全部 issue close 后**，plan 自动派生为 done（无需手动关 plan）。
@@ -84,6 +84,11 @@ mint issue state start 42
 mint issue state commit 42 --sha $(git rev-parse HEAD)
 mint issue state close 42 --test-cmd "cargo test"
 mint issue state drop 42 --reason "不再需要"
+
+# 批量（变参多 id / plan 级）
+mint issue state plan 42 43 44                     # 多 id 一次转换，非法跳过并汇总
+mint plan plan 31                                  # plan 下全部 open → planned（排期锁定）
+mint plan close 31 --test-cmd "cargo test"         # plan 下全部 test → done（统一 close）
 
 # 编辑
 mint issue set 42 --title "新标题" --priority 1

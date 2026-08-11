@@ -35,3 +35,13 @@
 - Legal forward chain:
   `mint issue add` → `mint issue state plan N` → `mint issue state start N` → `mint issue state commit N --sha <SHA>` → `mint issue state close N --test-cmd "cargo test"` → done.
 - Drop chain: `mint issue state drop N --reason "superseded by #12"` → dropped.
+
+## Batch (variadic ids / plan-level)
+
+- **Variadic ids**: `mint issue state <action> <id>...` — transitions applied one by one; invalid transitions / missing issues are skipped with a note; a usage error (missing `--test-cmd`/`--sha`) aborts; ends with a `N transitioned, M skipped` summary.
+  - `mint issue state plan 42 43 44` → 3 planned.
+  - `mint issue state commit 42 43 --sha <SHA>` → 2 test.
+  - `mint issue state close 42 43 --test-cmd "cargo test"` → 2 done.
+- **Plan-level batch**:
+  - `mint plan plan <plan_id>`: all `open` issues of the plan → `planned` (schedule-lock on attach).
+  - `mint plan close <plan_id> --test-cmd "cargo test"`: all `test` issues of the plan → `done` (unified close after unified testing).

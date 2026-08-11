@@ -34,3 +34,13 @@
 - 合法正向链路示例：
   `mint issue add` → `mint issue state plan N` → `mint issue state start N` → `mint issue state commit N --sha <SHA>` → `mint issue state close N --test-cmd "cargo test"` → done。
 - 放弃链路示例：`mint issue state drop N --reason "superseded by #12"` → dropped。
+
+## 批量（变参多 id / plan 级）
+
+- **变参多 id**：`mint issue state <action> <id>...` —— 逐个转换，非法转换 / issue 不存在跳过并注明，末尾汇总 `N transitioned, M skipped`；使用错误（缺 `--test-cmd`/`--sha`）中止。
+  - `mint issue state plan 42 43 44` → 3 planned。
+  - `mint issue state commit 42 43 --sha <SHA>` → 2 test。
+  - `mint issue state close 42 43 --test-cmd "cargo test"` → 2 done。
+- **plan 级批量**：
+  - `mint plan plan <plan_id>`：该 plan 下全部 `open` issue → `planned`（挂入即排期锁定）。
+  - `mint plan close <plan_id> --test-cmd "cargo test"`：该 plan 下全部 `test` issue → `done`（统一测试后统一 close）。
