@@ -3,6 +3,8 @@
 `open → planned → dev → test → done`, plus `dropped`. `test` = testing in progress,
 **not** "test finished".
 
+## Transition table
+
 | Current | Action | Next | Command | Constraint |
 |---|---|---|---|---|
 | open | plan | planned | `mint issue state plan <id>` | — |
@@ -14,7 +16,7 @@
 | done/dropped | reopen | open | `mint issue state reopen <id>` | — |
 | any | drop | dropped | `mint issue state drop <id> --reason <TEXT>` | — |
 
-Hard rules (violations are rejected by the CLI):
+## Hard rules (violations are rejected by the CLI / semantic errors)
 
 - **No dev→done shortcut**: even when skipping tests, `commit` to test, then `close`
   with `--test-cmd not-tested`.
@@ -24,6 +26,12 @@ Hard rules (violations are rejected by the CLI):
   if tests were skipped)`.
 - `reset` only for planned/dev/test; `reopen` only for done/dropped; `open` cannot
   `start` directly; `planned` cannot `commit` directly; `open` cannot `close` directly.
+- Every transition writes `updated_at`; `drop` writes `dropped_reason`; `commit` writes `last_commit_id`.
 
-After a transition, check the exit code and the `{id, from, to}` JSON; on failure,
-`mint show <id>` to correct.
+## Verification & examples
+
+- After each `state` action, check the exit code and `{id, from, to}`; on failure, `stderr`
+  contains the reason — run `mint show <id>` to confirm the current state, then correct the action.
+- Legal forward chain:
+  `mint issue add` → `mint issue state plan N` → `mint issue state start N` → `mint issue state commit N --sha <SHA>` → `mint issue state close N --test-cmd "cargo test"` → done.
+- Drop chain: `mint issue state drop N --reason "superseded by #12"` → dropped.
