@@ -1,28 +1,33 @@
 # Change Log
 
-## 0.4.0-alpha.1
+## 0.4.0
 
 ### Features
 
-- list 类命令 `--tui` 表格浏览：`mint list`/`issue list`、`plan list`、`milestone list`、`label list`。
-  - TTY：ratatui 可翻页表格（j/k 或 ↑/↓ 选行，PgUp/PgDn 或 h/l 翻页，q/Esc 退出）。
-  - 非 TTY：降级输出单页表格文本（不可交互，脚本/CI 安全）。
-  - `--tui` 与 `--json` 互斥；列宽按 Unicode 显示宽度对齐（中英文混排）。
-- list 类默认输出改 TSV：表头首行 + tab 分隔数据行（token 最优，喂 LLM 场景）；`--tsv` 参数移除（默认即 TSV），`--json`/`--tui` 保留。
-- `mint tui` 大屏展示：自动变化 issue/plan/milestone 面板，进度条（open 率）+ 状态点（● 黄/绿闪/绿/白/红）；plan 执行中自动切 plan 面板、结束短暂切所属 milestone 面板再回 issue；Enter 查看 issue 详情 / milestone 面板查看其下 plan 行进度；Tab/p 手动循环全部面板。TTY 每秒自动刷新，非 TTY 输出快照文本。
-- `mint tui` 界面重构（plan #20）：6 页面（Issues/Plans/Milestones 3 tab + Issue/Plan/Milestone 3 详情），顶部 Tabs（1/2/3/Tab 切换）、Panel 圆角组件、plan 详情 kanban（6 态分列）、plans 按 milestone 分组；自动切换加空闲约束（用户操作 ≥5s 且两次切换间隔 ≥5s）。页面与 `src/tui/dashboard/pages/` 子模块一一对应。
-- `mint tui` UI 打磨（plan #21）：最外框嵌入项目名、Tabs 立体高亮（【1. Issues】格式）、panel 与边界 padding；issue 列表表头 + 标签（定长省略）+ 状态着色收敛（仅状态点/状态文本）+ 页码总量；detail 页底部操作提示；进度条配色反转（完成=高亮）；milestone 快捷键 m；milestones 行加 plan/issue 计数；kanban 占比调整（固定 10 行省略）。
-- `mint tui` 自动跳转重构（plan #22）：事件驱动的双 queue 管道（事件→queue1→合并器[延迟1s同类聚合]→queue2[限5挤队首]→执行器[空闲≥5s & 间隔≥5s]→UI）；新增 issue/plan/milestone 跳列表+详情（变化内容闪烁 2s）；issue 状态变化跳对应 plan；plan 结束跳所属 milestone；60s 空闲回首页。`jump/` 子模块（parse/merge/exec/home）。
+- `mint tui` 大屏 dashboard：自动变化 issue/plan/milestone 面板 + 进度条 + 状态点（● 黄/绿闪/绿/白/红），TTY 每秒自动刷新、非 TTY 输出快照文本；plan 执行中自动切 plan 面板、结束切所属 milestone 再回 issue；Enter 查看 issue 详情 / milestone 面板查看其下 plan 行进度。
+- `mint tui` 界面重构：6 页面（Issues/Plans/Milestones 3 tab + Issue/Plan/Milestone 3 详情）、顶部 Tabs（1/2/3/Tab 切换）、圆角 Panel、plan 详情 kanban（6 态分列）、plans 按 milestone 分组、自动切换加空闲约束；UI 打磨（最外框项目名、Tabs 立体高亮、操作提示、页码总量）。
+- `mint tui` 自动跳转：事件驱动双 queue 管道（延迟合并 + 限长队列 + 空闲执行），新增 issue/plan/milestone 跳列表+详情（变化内容闪烁 2s），issue 状态变化跳对应 plan、plan 结束跳所属 milestone，60s 空闲回首页。
+- TUI 列表：issues/plans/milestones 三列表改 ratatui Table（按显示宽对齐）+ STATUS/P/Kind 列 + milestones 数字列（PLANS·ISSUES 总数(直属)）+ TITLE 顶格省略 + 无默认选中 + 按面板高度动态分页。
+- TUI 详情页：basic 键值对紧凑 `key: value | ...`（整对换行不拆、status 着色、created/updated 紫）；plan/milestone body ≤10 行省略、issue body 铺满底部；milestone 详情 plans/issues 面板状态点（容器色/issue 色）+ 直属优先显示全部 issue + 聚合进度面板；show 详情 basic 超宽自动换行不截断。
+- TUI 进度条：4 组聚合（done/open/working/dropped）+ eighth-block 亚像素（dropped 恒可见）+ 分组百分比行 + 全局配色对齐（open 白/工作黄/完成绿/放弃红，partial 青）+ plans PROGRESS 复用 plan 详情填色逻辑。
+- TUI 导航交互：Ctrl+C 退出（TuiKey 按键抽象保留修饰符）、Backspace 历史路由链（前进/后退）、milestone 双面板独立分页 + 跨 panel 光标路由、plan detail Enter 进 issue / issue detail p/m 进 plan/milestone。
+- list 类 `--tui` 表格浏览：TTY ratatui 可翻页表格（j/k 或 ↑/↓ 选行、PgUp/PgDn 或 h/l 翻页、q/Esc 退出），非 TTY 降级输出单页表格文本；`--tui` 与 `--json` 互斥，列宽按 Unicode 显示宽度对齐。
+- list 类默认输出改 TSV：表头首行 + tab 分隔数据行（token 最优），`--tsv` 参数移除（默认即 TSV）、`--json`/`--tui` 保留。
+- `show` 与详情：show 默认 TSV（issue/plan/milestone，body 末列转义）；issue 详情 basic 动态多列 + tags/test/body/links panel；`show --tui` 复用 dashboard 详情页；`list --tui` 归一 dashboard 列表页（Enter 进详情/Esc 返回）。
+- 插件与 CLI：根目录 marketplace.json 支持 git URL 远程安装；label list 去 `--tui`、project list TSV 化。
+
+### Bug Fixes
+
+- 插件加载：hooks.json 顶层补 `hooks` 包裹键（修插件加载失败）；hook timeout 提到 50/100 兼容秒/毫秒单位。
+- TUI 显示：长标题按列宽顶格省略防溢出/硬切角（kanban 列标题、panel_wrap/body 标题、三列表 TITLE、milestone 详情 plan/issue 行）；plans 分组分页组标题跨页重显消除计划丢失；issue list 标题恒 `issues`；plans/milestones STATUS 列按容器状态色着色；progress 百分比 present 组最小 1%（与进度条可见性对齐）。
 
 ### Others
 
 - 依赖新增：ratatui 0.30、crossterm 0.29、unicode-width。
-- 分页三件套提升至 `src/cli/list_common.rs`（issue/plan/milestone/label 共用）。
-- TUI 渲染模块 `src/tui/`（model 纯状态机 / draw 渲染 / rows 列转换）。
-- milestone 面板（plan #17）：snapshot 含 milestone、View::Milestone、plan 行迷你进度、倒计时自动回退。
-- dashboard 递归拆分：`src/tui/dashboard/` 子模块（data/diff/draw/model/model_nav/model_view/run/types）+ `pages/`（页面↔子模块对应）；model.rs 拆分至 ≤300 行（#99）。
-- plugin 模板规范（plan #23）：`title-templates/`（issue/plan/milestone 标题语义 + ≤60 字符上限）+ `body-templates/`（T1-T16 场景模板，每文件一模板）；省 token 原则（不写 LLM 已知、不瞎猜、`? 待确认` 尾节）；SKILL.md 精简段 + flow 小索引，en/cn 同步。
-- `state retest` 命令（plan #24）：test→dev 测试失败打回，保留 `last_commit_id`（dev+旧 sha=失败标记）、`--test-cmd` 必填（失败/复测手法）；skill 统一测试模式（同 plan 多 issue 停 test → 统一验证 → 统一 close；git commit 后立即 `state commit --sha` 前 7 位）。
+- 公共代码：分页三件套提升至 `src/cli/list_common.rs`；TUI 渲染分层 `src/tui/`（model 纯状态机 / draw / rows）；dashboard 递归拆分（data/diff/draw/model/model_nav/model_view/run/types + pages/），model.rs 拆分至 ≤300 行。
+- migration 合并回 001_init.sql（v1 基线）；notes 新增 status.md 状态生命周期与着色权威文档；roadmap 默认 TSV 策略。
+- 插件规范：`title-templates/`（标题语义 + ≤60 字符上限）+ `body-templates/`（T1-T16 场景模板）；SKILL.md 精简段 + flow 小索引，en/cn 同步。
+- `state retest` 命令（test→dev 测试失败打回，保留 `last_commit_id` 标记失败、`--test-cmd` 必填）；skill 统一测试模式（同 plan 多 issue 停 test → 统一验证 → 统一 close）。
 - 决策记录：TUI 选型（D25）、默认 TSV（D26）、mint tui 大屏（D27）。
 
 ## 0.3.0
