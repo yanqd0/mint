@@ -9,7 +9,7 @@ use ratatui::widgets::Paragraph;
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    body_paragraph, container_status_color, kv_lines, mini_bar, panel_wrap, status_dot,
+    body_lines_capped, container_status_color, kv_lines, mini_bar, panel_wrap, status_dot,
 };
 use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
 use crate::tui::panel::{render_panel, stack};
@@ -55,12 +55,28 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, milestone_id: i64,
     ));
     let basic_rows = kv_lines(&kv, area.width.saturating_sub(4));
 
+    // body ≤10 行（多余省略，遇 \n 换行 + 贪心 word-wrap）。
+    let body_lines: Vec<Line> = c
+        .body
+        .as_ref()
+        .map(|b| {
+            body_lines_capped(b, area.width.saturating_sub(4) as usize, 10)
+                .into_iter()
+                .map(Line::from)
+                .collect()
+        })
+        .unwrap_or_default();
+
     // 2. plans panel（内容定高）+ issues panel（填满剩余），各自独立分页；跨 panel 导航保留，selected 1-indexed 跨段。
     // 剩余可用高度（basic + body? + progress(4) + footer(1) 之外），plans 页大小取一半（给 issues 留空间）。
     let avail_h = area
         .height
         .saturating_sub(basic_rows.len() as u16 + 2)
-        .saturating_sub(if c.body.is_some() { 4 } else { 0 })
+        .saturating_sub(if body_lines.is_empty() {
+            0
+        } else {
+            body_lines.len() as u16 + 2
+        })
         .saturating_sub(4)
         .saturating_sub(1);
     m.plans_page_size = (avail_h as usize / 2).max(1);
@@ -122,10 +138,10 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, milestone_id: i64,
         ]));
     }
 
-    // 布局：basic + body(有) + progress + plans（内容定高）+ issues（填满剩余）+ footer。
+    // 布局：basic + body(≤10) + progress + plans（内容定高）+ issues（填满剩余）+ footer。
     let mut constraints: Vec<Constraint> = vec![Constraint::Length(basic_rows.len() as u16 + 2)];
-    if c.body.is_some() {
-        constraints.push(Constraint::Length(4));
+    if !body_lines.is_empty() {
+        constraints.push(Constraint::Length(body_lines.len() as u16 + 2));
     }
     constraints.push(Constraint::Length(4)); // progress 面板（bar + 分组百分比）
     constraints.push(Constraint::Length(plans_panel_h));
@@ -143,8 +159,8 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, milestone_id: i64,
         chunks[ci],
     );
     ci += 1;
-    if let Some(b) = &c.body {
-        frame.render_widget(body_paragraph(b, "body", chunks[ci].width), chunks[ci]);
+    if !body_lines.is_empty() {
+        render_panel(frame, chunks[ci], "body", body_lines);
         ci += 1;
     }
     // progress 面板：直接+间接全部 issue 聚合进度条（dropped 红色计入完成）。

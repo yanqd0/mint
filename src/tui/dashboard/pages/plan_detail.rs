@@ -9,7 +9,7 @@ use ratatui::widgets::Paragraph;
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    body_paragraph, container_status_color, kv_lines, panel_wrap,
+    body_lines_capped, container_status_color, kv_lines, panel_wrap,
 };
 use crate::tui::dashboard::pages::issues;
 use crate::tui::panel::{columns, render_panel, render_panel_tight, stack};
@@ -62,10 +62,22 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, plan_id: i64, area
     ));
     let basic_rows = kv_lines(&kv, area.width.saturating_sub(4));
 
-    // 布局：basic + body(有) + kanban(10) + issues(弹性) + footer。
+    // body ≤10 行（多余省略，遇 \n 换行 + 贪心 word-wrap）。
+    let body_lines: Vec<Line> = c
+        .body
+        .as_ref()
+        .map(|b| {
+            body_lines_capped(b, area.width.saturating_sub(4) as usize, 10)
+                .into_iter()
+                .map(Line::from)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // 布局：basic + body(≤10) + kanban(10) + issues(弹性) + footer。
     let mut constraints: Vec<Constraint> = vec![Constraint::Length(basic_rows.len() as u16 + 2)];
-    if c.body.is_some() {
-        constraints.push(Constraint::Length(4));
+    if !body_lines.is_empty() {
+        constraints.push(Constraint::Length(body_lines.len() as u16 + 2));
     }
     constraints.push(Constraint::Length(10));
     constraints.push(Constraint::Min(0));
@@ -83,8 +95,8 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, plan_id: i64, area
     );
     ci += 1;
 
-    if let Some(b) = &c.body {
-        frame.render_widget(body_paragraph(b, "body", chunks[ci].width), chunks[ci]);
+    if !body_lines.is_empty() {
+        render_panel(frame, chunks[ci], "body", body_lines);
         ci += 1;
     }
 
@@ -222,5 +234,29 @@ mod tests {
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("plan body content"), "body panel: {text}");
+    }
+
+    #[test]
+    fn plan_detail_body_truncates_to_10_lines() {
+        let mut m = model_full(
+            vec![mk_issue(1, "task", Status::Open, Some(7))],
+            vec![(mk_container(7, "tui plan", None, None), 0)],
+            vec![],
+        );
+        m.plans[0].0.body = Some(
+            (1..=20)
+                .map(|i| format!("line {i}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+        m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
+        let mut terminal = test_backend(120, 30);
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 7, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("line 1"), "body 开头: {text}");
+        assert!(text.contains("line 10…"), "末行省略: {text}");
+        assert!(!text.contains("line 11"), "超限行省略: {text}");
     }
 }

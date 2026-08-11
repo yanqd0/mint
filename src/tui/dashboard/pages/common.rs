@@ -110,6 +110,70 @@ pub fn flex_col_width(area: Rect, widths: &[Constraint]) -> u16 {
         .saturating_sub(fixed)
 }
 
+/// 单行贪心 word-wrap（按空格断行，超宽换新行；词级不拆）。
+fn wrap_line(line: &str, width: usize) -> Vec<String> {
+    use unicode_width::UnicodeWidthStr;
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut cur_w = 0usize;
+    for word in line.split(' ') {
+        let ww = word.width();
+        let sep = if cur.is_empty() { 0 } else { 1 };
+        if !cur.is_empty() && cur_w + sep + ww > width {
+            out.push(std::mem::take(&mut cur));
+            cur_w = 0;
+        }
+        if !cur.is_empty() {
+            cur.push(' ');
+            cur_w += 1;
+        }
+        cur.push_str(word);
+        cur_w += ww;
+    }
+    out.push(cur);
+    out
+}
+
+/// body 按 \n split + 贪心 word-wrap，截前 max_lines 行；多余省略（末行加 …）。
+/// plan/milestone 详情 body 上限用；issue body 走自然 wrap（见 body_paragraph）。
+pub fn body_lines_capped(body: &str, width: usize, max_lines: usize) -> Vec<String> {
+    use unicode_width::UnicodeWidthStr;
+    let mut out: Vec<String> = Vec::new();
+    let mut truncated = false;
+    'outer: for seg in body.split('\n') {
+        for l in wrap_line(seg, width) {
+            if out.len() >= max_lines {
+                truncated = true;
+                break 'outer;
+            }
+            out.push(l);
+        }
+    }
+    if truncated {
+        out.truncate(max_lines);
+        // 末行加 …（若放不下则截断末行）。
+        let last = &mut out[max_lines.saturating_sub(1)];
+        if last.width() < width {
+            last.push('…');
+        } else {
+            let budget = width.saturating_sub(1);
+            let mut s = String::new();
+            let mut w = 0usize;
+            for c in last.chars() {
+                let cw = unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+                if w + cw > budget {
+                    break;
+                }
+                s.push(c);
+                w += cw;
+            }
+            s.push('…');
+            *last = s;
+        }
+    }
+    out
+}
+
 /// 带标题的 wrap 段落：行超宽自动换行（不截断），basic panel 用。
 /// 内容左右 1 格 padding（全局 margin 配置）；标题按面板宽自适应（见 `panel_title`）。
 pub fn panel_wrap<'a>(title: &str, lines: Vec<Line<'a>>, width: u16) -> Paragraph<'a> {
@@ -282,6 +346,34 @@ mod tests {
         // 标题按宽右侧省略，右角保留（不硬切角）。
         assert!(top.contains('…'), "窄宽下标题应省略: {top}");
         assert!(top.contains('╮'), "右角应保留: {top}");
+    }
+
+    #[test]
+    fn body_lines_capped_respects_newlines_and_wrap() {
+        let body = "line one\nline two\nthird line";
+        let lines = body_lines_capped(body, 100, 10);
+        // 显式 \n 换行优先于 word-wrap：3 段各 1 行。
+        assert_eq!(lines, vec!["line one", "line two", "third line"]);
+    }
+
+    #[test]
+    fn body_lines_capped_caps_at_max_lines_with_ellipsis() {
+        let body = (1..=15)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let lines = body_lines_capped(&body, 100, 10);
+        assert_eq!(lines.len(), 10, "超限截到 max_lines");
+        assert_eq!(lines[9], "line 10…", "末行加省略号");
+    }
+
+    #[test]
+    fn body_lines_capped_wraps_long_lines_then_caps() {
+        // 单行长文本 + 窄宽 → 先 wrap 再封顶。
+        let body = "one two three four five six seven eight nine ten";
+        let lines = body_lines_capped(body, 10, 5);
+        assert_eq!(lines.len(), 5, "窄宽 wrap 后仍封顶");
+        assert!(lines[4].ends_with('…'), "末行应带省略号");
     }
 
     #[test]
