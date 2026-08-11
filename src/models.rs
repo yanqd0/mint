@@ -3,12 +3,13 @@
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
-/// Issue 的 kind：问题 / 需求。
+/// Issue 的 kind：问题 / 需求 / 杂务。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
     Problem,
     Requirement,
+    Task,
 }
 
 impl Kind {
@@ -16,6 +17,7 @@ impl Kind {
         match self {
             Kind::Problem => "problem",
             Kind::Requirement => "requirement",
+            Kind::Task => "task",
         }
     }
 }
@@ -37,6 +39,7 @@ impl rusqlite::types::FromSql for Kind {
         match v.as_str()? {
             "problem" => Ok(Kind::Problem),
             "requirement" => Ok(Kind::Requirement),
+            "task" => Ok(Kind::Task),
             other => Err(rusqlite::types::FromSqlError::Other(
                 format!("invalid kind: {other}").into(),
             )),
@@ -320,6 +323,7 @@ mod tests {
     #[rstest]
     #[case(Kind::Problem, "problem")]
     #[case(Kind::Requirement, "requirement")]
+    #[case(Kind::Task, "task")]
     fn kind_str_and_roundtrip(#[case] k: Kind, #[case] text: &str) {
         assert_eq!(k.as_str(), text);
         assert_eq!(k.to_string(), text);

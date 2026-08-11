@@ -74,11 +74,12 @@ pub fn status_abbrev(status: Status) -> &'static str {
     }
 }
 
-/// kind 简写（仅列表显示；requirement→req、problem→bug）。
+/// kind 简写（仅列表显示；requirement→req、problem→bug、task→task）。
 pub fn kind_abbrev(kind: crate::models::Kind) -> &'static str {
     match kind {
         crate::models::Kind::Requirement => "req",
         crate::models::Kind::Problem => "bug",
+        crate::models::Kind::Task => "task",
     }
 }
 
@@ -247,6 +248,7 @@ mod tests {
         assert_eq!(status_abbrev(Status::Test), "test");
         assert_eq!(kind_abbrev(Kind::Requirement), "req");
         assert_eq!(kind_abbrev(Kind::Problem), "bug");
+        assert_eq!(kind_abbrev(Kind::Task), "task");
     }
 
     #[test]

@@ -172,4 +172,49 @@ mod tests {
             .unwrap_err();
         assert!(err.to_string().contains("FOREIGN KEY"));
     }
+
+    /// issues.kind 无 DB CHECK：task 可插入并回读（本 commit 目标）；非法值 DB 放行但 FromSql 报 invalid kind（应用层兜底）。
+    #[test]
+    fn kind_has_no_db_check_and_fromsql_guards() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+
+        let ddl: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='issues'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(!ddl.contains("kind IN"), "kind 不应有 DB CHECK：{ddl}");
+
+        conn.execute("INSERT INTO projects (name) VALUES ('p')", [])
+            .unwrap();
+
+        // task 可插入并回读（去 CHECK 的目标）
+        conn.execute(
+            "INSERT INTO issues (title, kind, project_id) VALUES ('t', 'task', 1)",
+            [],
+        )
+        .unwrap();
+        let got: crate::models::Kind = conn
+            .query_row("SELECT kind FROM issues WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(got, crate::models::Kind::Task);
+
+        // 非法值 DB 放行，但 FromSql 读取报 invalid kind（应用层兜底）
+        conn.execute(
+            "INSERT INTO issues (title, kind, project_id) VALUES ('b', 'bogus', 1)",
+            [],
+        )
+        .unwrap();
+        let err = conn
+            .query_row::<crate::models::Kind, _, _>(
+                "SELECT kind FROM issues WHERE id = 2",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("invalid kind"), "{err}");
+    }
 }

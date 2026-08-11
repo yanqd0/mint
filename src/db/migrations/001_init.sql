@@ -52,8 +52,7 @@ CREATE TABLE issues (
 id          INTEGER PRIMARY KEY AUTOINCREMENT,
 title       TEXT NOT NULL,
 body        TEXT,
-kind        TEXT NOT NULL DEFAULT 'problem'
-CHECK (kind IN ('problem', 'requirement')),
+kind        TEXT NOT NULL DEFAULT 'problem',
 status      TEXT NOT NULL DEFAULT 'open'
 CHECK (status IN ('open', 'planned', 'dev', 'test', 'done', 'dropped')),
 project_id  INTEGER NOT NULL REFERENCES projects(id),

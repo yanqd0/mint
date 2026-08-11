@@ -17,7 +17,7 @@ pub struct AddArgs {
     /// Optional body text
     #[arg(long)]
     pub body: Option<String>,
-    /// kind: problem (default) or requirement
+    /// kind: problem (default), requirement, or task
     #[arg(long, value_enum, default_value = "problem")]
     pub kind: Kind,
     /// Priority: 0 (highest) to 3 (lowest, default)

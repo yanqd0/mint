@@ -83,8 +83,8 @@ use crate::label;
 
 ## 数据模型约束
 
-- 8 表：`projects` / `issues` / `labels` / `issue_labels` / `milestones` / `plans` / `milestone_direct_issues` / `issue_links`（migration 有序数组驱动 `PRAGMA user_version`，当前 v5，见 `notes/DDD.md`）。
-- `issues`：`kind` 限 `problem|requirement`；`status` 限 `open|planned|dev|test|done|dropped`；`last_commit_id` 记最后关联 commit；`plan_id` 外键 → plans（一对多）。
+- 8 表：`projects` / `issues` / `labels` / `issue_labels` / `milestones` / `plans` / `milestone_direct_issues` / `issue_links`（migration 有序数组驱动 `PRAGMA user_version`，当前 v1，见 `notes/DDD.md`）。
+- `issues`：`kind` 限 `problem|requirement|task`（DB 无 CHECK，由应用层 FromSql/ValueEnum 强校验）；`status` 限 `open|planned|dev|test|done|dropped`；`last_commit_id` 记最后关联 commit；`plan_id` 外键 → plans（一对多）。
 - 容器（`milestones`/`plans`）：`status` 限 `open|running|partial|dropped|done`（5 态派生，写后同步，CLI 只读）；milestones 有 `version`(UNIQUE) + `body`；plans 有 `body` + `milestone_id`。
 - `milestone_direct_issues`：复合主键 `(milestone_id,issue_id)`；issue 二选一（属 plan 后不能直接挂 milestone）。
 - `issue_links`：`type` 限 `related|solves|duplicates`；复合主键 `(from_id,type,to_id)`；禁自环；单向存 + 反向派生。
