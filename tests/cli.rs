@@ -48,6 +48,12 @@ fn add_issue(db: &str, title: &str) -> i64 {
     v["id"].as_i64().expect("add 应返回 id")
 }
 
+/// add 一条 task kind 的 issue，返回 id。
+fn add_task(db: &str, title: &str) -> i64 {
+    let v = run_json(db, &["issue", "add", title, "--kind", "task", "--json"]);
+    v["id"].as_i64().expect("add 应返回 id")
+}
+
 /// 全链路推进到 done。
 fn advance_to_done(db: &str, id: i64) {
     run_json(db, &["issue", "state", "plan", &id.to_string(), "--json"]);
@@ -212,6 +218,42 @@ fn st_state_batch_skips_invalid() {
     assert!(text.contains("1 transitioned, 1 skipped"), "out: {text}");
     let v = run_json(&db, &["show", &i1.to_string(), "--json"]);
     assert_eq!(v["status"], "planned");
+}
+
+/// 批量 commit 混 task：task 无 dev 态不可 commit → 跳过不中止整批；problem 正常提交（#212 回归）。
+#[test]
+fn st_state_batch_commit_mixed_task_skips() {
+    let (_dir, db) = empty_db();
+    // problem：planned→start→dev（可 commit）
+    let ip = add_issue(&db, "p");
+    run_json(&db, &["issue", "state", "plan", &ip.to_string(), "--json"]);
+    run_json(&db, &["issue", "state", "start", &ip.to_string(), "--json"]);
+    // task：planned→start→test（跳过 dev，commit 不可达）
+    let it = add_task(&db, "t");
+    run_json(&db, &["issue", "state", "plan", &it.to_string(), "--json"]);
+    run_json(&db, &["issue", "state", "start", &it.to_string(), "--json"]);
+    // 批量 commit：task 应跳过（错误含 invalid transition 前缀，命中批量跳过谓词），problem 正常 → 不中止
+    let out = mint(&db)
+        .args([
+            "issue",
+            "state",
+            "commit",
+            &ip.to_string(),
+            &it.to_string(),
+            "--sha",
+            "abc123",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out);
+    assert!(text.contains("1 transitioned, 1 skipped"), "out: {text}");
+    let vp = run_json(&db, &["show", &ip.to_string(), "--json"]);
+    assert_eq!(vp["status"], "test", "problem 应提交到 test");
+    let vt = run_json(&db, &["show", &it.to_string(), "--json"]);
+    assert_eq!(vt["status"], "test", "task 保持 test（跳过 commit）");
 }
 
 /// plan 级批量：plan plan <id> 将 open issue 全部排期（#202）。

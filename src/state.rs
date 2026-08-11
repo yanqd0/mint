@@ -12,7 +12,7 @@ use rusqlite::Connection;
 use crate::container;
 use crate::db;
 use crate::error::Error;
-use crate::models::Status;
+use crate::models::{Kind, Status};
 
 /// 触发状态转换的命令动作。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,17 +27,18 @@ pub enum Action {
     Reopen,
 }
 
-/// 校验 `action` 能否把 `current` 推进到 `target`。
-pub fn can_transition(current: Status, action: Action, target: Status) -> bool {
-    target == target_of(action) && from_allowed(current, action)
+/// 校验 `action` 能否把 `current` 推进到 `target`（kind 决定 task 分支行为）。
+pub fn can_transition(current: Status, action: Action, target: Status, kind: Kind) -> bool {
+    target == target_of(action, kind) && from_allowed(current, action, kind)
 }
 
 /// `action` 允许的当前状态集合。
-fn from_allowed(current: Status, action: Action) -> bool {
+fn from_allowed(current: Status, action: Action, kind: Kind) -> bool {
     match action {
         Action::Plan => current == Status::Open,
         Action::Start => current == Status::Planned,
-        Action::Commit => current == Status::Dev,
+        // task 无 dev 态：commit 不可达（task 永不进入 dev）
+        Action::Commit => current == Status::Dev && kind != Kind::Task,
         Action::Retest => current == Status::Test,
         Action::Close => current == Status::Test,
         // reset：活跃链路状态（planned/dev/test）打回 open
@@ -49,17 +50,20 @@ fn from_allowed(current: Status, action: Action) -> bool {
     }
 }
 
-/// 根据 `action` 计算目标状态。
-pub fn target_of(action: Action) -> Status {
-    match action {
-        Action::Plan => Status::Planned,
-        Action::Start => Status::Dev,
-        Action::Commit => Status::Test,
-        Action::Retest => Status::Dev,
-        Action::Close => Status::Done,
-        Action::Reset => Status::Open,
-        Action::Drop => Status::Dropped,
-        Action::Reopen => Status::Open,
+/// 根据 `action` 与 issue `kind` 计算目标状态。
+/// task 无 dev 态：start 跳过 dev 直接到 test；retest 打回 planned；commit 由 from_allowed 拦下（不可达）。
+pub fn target_of(action: Action, kind: Kind) -> Status {
+    match (action, kind) {
+        (Action::Start, Kind::Task) => Status::Test,
+        (Action::Retest, Kind::Task) => Status::Planned,
+        (Action::Plan, _) => Status::Planned,
+        (Action::Start, _) => Status::Dev,
+        (Action::Commit, _) => Status::Test,
+        (Action::Retest, _) => Status::Dev,
+        (Action::Close, _) => Status::Done,
+        (Action::Reset, _) => Status::Open,
+        (Action::Drop, _) => Status::Dropped,
+        (Action::Reopen, _) => Status::Open,
     }
 }
 
@@ -84,24 +88,34 @@ pub fn apply_transition(
     reason: Option<&str>,
     commit_sha: Option<&str>,
 ) -> Result<(Status, Status), Error> {
-    let target = target_of(action);
     let reset = action == Action::Reset;
     let reopen = action == Action::Reopen;
     let drop_reason: Option<&str> = if action == Action::Drop { reason } else { None };
 
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let result = (|| {
-        // 事务内读当前状态（BEGIN IMMEDIATE 持写锁，多 agent 并发串行，消除 TOCTOU）
-        let current: Status = conn
-            .query_row(db::ISSUE_SELECT_STATUS, rusqlite::params![id], |r| r.get(0))
+        // 事务内读当前状态与 kind（BEGIN IMMEDIATE 持写锁，多 agent 并发串行，消除 TOCTOU）
+        let (current, kind): (Status, Kind) = conn
+            .query_row(db::ISSUE_SELECT_STATUS_KIND, rusqlite::params![id], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
             .map_err(|e| match e {
                 rusqlite::Error::QueryReturnedNoRows => {
                     Error::Other(format!("issue #{id} not found"))
                 }
                 other => Error::from(other),
             })?;
+        let target = target_of(action, kind);
         // 校验顺序：状态合法性优先（open 直接 commit 报 invalid transition 而非 git 错误）
-        if !can_transition(current, action, target) {
+        if !can_transition(current, action, target, kind) {
+            // task 无 dev 态，commit 恒不可达：给更明确的提示（含 invalid transition 前缀，
+            // 让 CLI 批量跳过谓词能识别——task 与非法转换同属"状态机拒绝该 action"）。
+            if action == Action::Commit && kind == Kind::Task {
+                return Err(Error::Other(
+                    "invalid transition: task kind does not use git commit (skip state commit)"
+                        .to_string(),
+                ));
+            }
             return Err(Error::Other(format!(
                 "invalid transition: {} -> {} via {:?}",
                 current, target, action
@@ -144,20 +158,25 @@ mod tests {
     use crate::db;
     use rstest::rstest;
 
-    /// 建一个含单 issue（status 可指定）的已迁移内存库，返回 (conn, issue_id)。
-    fn db_with_issue(status: Status) -> (rusqlite::Connection, i64) {
+    /// 建一个含单 issue（status/kind 可指定）的已迁移内存库，返回 (conn, issue_id)。
+    fn db_with_issue_kind(status: Status, kind: Kind) -> (rusqlite::Connection, i64) {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         db::migrate_for_test(&conn);
         conn.execute("INSERT INTO projects (name) VALUES ('mint')", [])
             .unwrap();
         let project_id = conn.last_insert_rowid();
         conn.execute(
-            "INSERT INTO issues (title, project_id, kind, status, priority) VALUES ('t', ?1, 'problem', ?2, 3)",
-            rusqlite::params![project_id, status.to_string()],
+            "INSERT INTO issues (title, project_id, kind, status, priority) VALUES ('t', ?1, ?2, ?3, 3)",
+            rusqlite::params![project_id, kind, status.to_string()],
         )
         .unwrap();
         let id = conn.last_insert_rowid();
         (conn, id)
+    }
+
+    /// problem kind 的 issue（状态机基准，requirement 与其一致）。
+    fn db_with_issue(status: Status) -> (rusqlite::Connection, i64) {
+        db_with_issue_kind(status, Kind::Problem)
     }
 
     #[test]
@@ -183,8 +202,9 @@ mod tests {
         assert!(err.to_string().contains("requires --test-cmd"));
     }
 
-    /// 穷举 (status, action) 全矩阵（6×7=42 组合），对**硬编码期望表**断言——
+    /// 穷举 (status, action, kind) 全矩阵（6×8×2=96 组合），对**硬编码期望表**断言——
     /// 期望表独立于实现，能发现 `from_allowed` 的语义错误（非同义反复）。
+    /// task 无 dev 态：start 跳过 dev（planned→test）、commit 不可达、retest 打回 planned。
     #[rstest]
     fn transition_matrix_all_combos(
         #[values(
@@ -207,37 +227,52 @@ mod tests {
             Action::Reopen
         )]
         action: Action,
+        #[values(Kind::Problem, Kind::Requirement, Kind::Task)] kind: Kind,
     ) {
         // 期望表：from_allowed 的语义（reset 限活跃三态、reopen 限 done/dropped、drop 任意）。
-        let allowed = matches!(
-            (current, action),
-            (Status::Open, Action::Plan)
-                | (Status::Planned, Action::Start)
-                | (Status::Dev, Action::Commit)
-                | (Status::Test, Action::Retest | Action::Close)
-                | (Status::Planned | Status::Dev | Status::Test, Action::Reset)
-                | (_, Action::Drop)
-                | (Status::Done | Status::Dropped, Action::Reopen)
-        );
+        let allowed = match kind {
+            Kind::Problem | Kind::Requirement => matches!(
+                (current, action),
+                (Status::Open, Action::Plan)
+                    | (Status::Planned, Action::Start)
+                    | (Status::Dev, Action::Commit)
+                    | (Status::Test, Action::Retest | Action::Close)
+                    | (Status::Planned | Status::Dev | Status::Test, Action::Reset)
+                    | (_, Action::Drop)
+                    | (Status::Done | Status::Dropped, Action::Reopen)
+            ),
+            Kind::Task => matches!(
+                (current, action),
+                (Status::Open, Action::Plan)
+                    | (Status::Planned, Action::Start)
+                    | (Status::Test, Action::Retest | Action::Close)
+                    | (Status::Planned | Status::Dev | Status::Test, Action::Reset)
+                    | (_, Action::Drop)
+                    | (Status::Done | Status::Dropped, Action::Reopen)
+            ),
+        };
         assert_eq!(
-            can_transition(current, action, target_of(action)),
+            can_transition(current, action, target_of(action, kind), kind),
             allowed,
-            "组合不符: {current:?} × {action:?}"
+            "组合不符: {current:?} × {action:?} × {kind:?}"
         );
     }
 
-    /// target_of：每个 action 的目标状态。
+    /// target_of：每个 action × kind 的目标状态。
+    /// task 的 Start→Test（跳过 dev）、Retest→Planned（无 dev 中间态）。
     #[rstest]
-    #[case(Action::Plan, Status::Planned)]
-    #[case(Action::Start, Status::Dev)]
-    #[case(Action::Commit, Status::Test)]
-    #[case(Action::Retest, Status::Dev)]
-    #[case(Action::Close, Status::Done)]
-    #[case(Action::Reset, Status::Open)]
-    #[case(Action::Drop, Status::Dropped)]
-    #[case(Action::Reopen, Status::Open)]
-    fn target_of_cases(#[case] action: Action, #[case] expected: Status) {
-        assert_eq!(target_of(action), expected);
+    #[case(Action::Plan, Kind::Problem, Status::Planned)]
+    #[case(Action::Start, Kind::Problem, Status::Dev)]
+    #[case(Action::Commit, Kind::Problem, Status::Test)]
+    #[case(Action::Retest, Kind::Problem, Status::Dev)]
+    #[case(Action::Close, Kind::Problem, Status::Done)]
+    #[case(Action::Reset, Kind::Problem, Status::Open)]
+    #[case(Action::Drop, Kind::Problem, Status::Dropped)]
+    #[case(Action::Reopen, Kind::Problem, Status::Open)]
+    #[case(Action::Start, Kind::Task, Status::Test)]
+    #[case(Action::Retest, Kind::Task, Status::Planned)]
+    fn target_of_cases(#[case] action: Action, #[case] kind: Kind, #[case] expected: Status) {
+        assert_eq!(target_of(action, kind), expected);
     }
 
     /// 目标状态不匹配 target_of 时一律拒绝。
@@ -250,7 +285,7 @@ mod tests {
         #[case] action: Action,
         #[case] wrong: Status,
     ) {
-        assert!(!can_transition(current, action, wrong));
+        assert!(!can_transition(current, action, wrong, Kind::Problem));
     }
 
     /// close/retest 必须带 test_cmd；跳过测试填"没测"可通过；其它动作不强制。
@@ -269,5 +304,35 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(test_cmd_requirement_met(action, test_cmd), expected);
+    }
+
+    /// task 流程：planned→start→test（跳过 dev）；test→retest→planned（打回排期）；
+    /// commit 恒拒绝（task 无 dev 态，给明确提示）；close 正常到 done。
+    #[test]
+    fn task_flow_skips_dev_and_commit_unreachable() {
+        let (conn, id) = db_with_issue_kind(Status::Planned, Kind::Task);
+
+        // start 直接到 test（跳过 dev）
+        let (from, to) = apply_transition(&conn, id, Action::Start, None, None, None).unwrap();
+        assert_eq!((from, to), (Status::Planned, Status::Test));
+
+        // test 上 commit 拒绝（task 无 dev 态，commit 不可达）
+        let err = apply_transition(&conn, id, Action::Commit, None, None, Some("abc")).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("task kind does not use git commit"),
+            "{err}"
+        );
+
+        // test→retest→planned（无 dev 中间态，打回排期重新 start）
+        let (from, to) =
+            apply_transition(&conn, id, Action::Retest, Some("cargo test"), None, None).unwrap();
+        assert_eq!((from, to), (Status::Test, Status::Planned));
+
+        // planned→start→test→close→done
+        apply_transition(&conn, id, Action::Start, None, None, None).unwrap();
+        let (from, to) =
+            apply_transition(&conn, id, Action::Close, Some("cargo test"), None, None).unwrap();
+        assert_eq!((from, to), (Status::Test, Status::Done));
     }
 }

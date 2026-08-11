@@ -18,11 +18,11 @@ pub struct StateArgs {
 pub enum StateCmd {
     /// Advance open -> planned
     Plan(TransArgs),
-    /// Advance planned -> dev
+    /// Advance planned -> dev (task: planned -> test)
     Start(TransArgs),
-    /// Advance dev -> test (commit code, requires --sha)
+    /// Advance dev -> test (commit code, requires --sha; task: unreachable)
     Commit(CommitArgs),
-    /// Rework test -> dev (test failed; keeps last_commit_id, requires --test-cmd)
+    /// Rework test -> dev (test failed; keeps last_commit_id, requires --test-cmd; task: test -> planned)
     Retest(CloseArgs),
     /// Close test -> done (requires --test-cmd)
     Close(CloseArgs),
@@ -105,7 +105,8 @@ fn cmd_trans(conn: &Connection, t: &TransArgs, action: Action) -> Result<(), Err
     transition(conn, &t.ids, action, None, None, None, t.json)
 }
 
-/// commit：dev→test，必填 --sha（写 last_commit_id）。
+/// commit：dev→test，必填 --sha（写 last_commit_id）；task 不可达（CLI 层先解析 sha，
+/// 非 git 目录无 --sha 时 task 会先报 git 错误，再被 apply_transition 拦下）。
 fn cmd_commit(conn: &Connection, cwd: &Path, c: &CommitArgs) -> Result<(), Error> {
     let sha: String = match &c.sha {
         Some(s) if !s.trim().is_empty() => s.trim().to_string(),
@@ -140,7 +141,7 @@ fn cmd_close(conn: &Connection, c: &CloseArgs) -> Result<(), Error> {
     )
 }
 
-/// retest：test→dev（测试失败打回），必填 --test-cmd；保留 last_commit_id（commit_sha=None）。
+/// retest：test→dev（测试失败打回），必填 --test-cmd；保留 last_commit_id（commit_sha=None）；task 为 test→planned。
 fn cmd_retest(conn: &Connection, r: &CloseArgs) -> Result<(), Error> {
     transition(
         conn,

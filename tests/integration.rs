@@ -6,7 +6,7 @@ use tempfile::TempDir;
 
 use mint_faa::db;
 use mint_faa::label;
-use mint_faa::models::Status;
+use mint_faa::models::{Kind, Status};
 use mint_faa::project;
 use mint_faa::state::{self, Action};
 
@@ -53,8 +53,11 @@ fn full_workflow_passes() {
         (Action::Close, Some("cargo test")),
     ] {
         let cur = status_of(&conn, id);
-        let target = state::target_of(action);
-        assert!(state::can_transition(cur, action, target), "{cur}→{target}");
+        let target = state::target_of(action, Kind::Problem);
+        assert!(
+            state::can_transition(cur, action, target, Kind::Problem),
+            "{cur}→{target}"
+        );
         assert!(state::test_cmd_requirement_met(action, test_cmd));
         conn.execute(
             "UPDATE issues SET status=?1, test_cmd=COALESCE(?2,test_cmd), updated_at=datetime('now') WHERE id=?3",
@@ -72,7 +75,12 @@ fn illegal_direct_close_rejected() {
     let (conn, _dir, pid) = setup();
     let id = add_issue(&conn, pid, "illegal");
     let cur = status_of(&conn, id);
-    assert!(!state::can_transition(cur, Action::Close, Status::Done));
+    assert!(!state::can_transition(
+        cur,
+        Action::Close,
+        Status::Done,
+        Kind::Problem
+    ));
 }
 
 /// project 自动注册：同名幂等，不同名新增。
