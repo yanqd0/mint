@@ -43,6 +43,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 1. **CC plan mode 审批通过后，第一件事不是写代码**：
    - 将 CC plan 对应的 work 挂入 mint plan（step 0 已保证 plan 存在）
    - 为每个独立 phase 建 issue（kind=requirement，label `<版本>,dev-clean`），`mint plan attach` 挂入
+   - **挂入即排期锁定**：对该 plan 下全部 open issue 逐个 `mint issue state plan <id>`（CC 退出 plan 模式、进入执行/auto 模式时统一 planned，plan 的 issue 不留 open）
 2. **每完成一个逻辑变更（对应一次或多次 commit）**：
    - `mint issue state plan <id>`（排入计划）
    - `mint issue state start <id>`（开始开发）

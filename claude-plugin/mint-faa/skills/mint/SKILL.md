@@ -43,6 +43,7 @@ Accepts an optional positional `<description>` argument summarizing intent. When
 1. **After CC plan mode approval, the first action is NOT writing code**:
    - Attach the work to a mint plan (step 0 guarantees the plan exists)
    - Create issues for each independent phase (kind=requirement, label `<version>,dev-clean`), attach to mint plan via `mint plan attach`
+   - **Schedule on attach**: run `mint issue state plan <id>` for every open issue of that plan (when CC leaves plan mode and enters execution/auto mode, all issues are uniformly `planned` — no open issues left under a plan)
 2. **For each logical change (one or more commits)**:
    - `mint issue state plan <id>` (schedule)
    - `mint issue state start <id>` (start development)
