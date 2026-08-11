@@ -36,7 +36,9 @@ pub enum StateCmd {
 
 #[derive(clap::Args)]
 pub struct TransArgs {
-    pub id: i64,
+    /// One or more issue IDs (batch: invalid transitions are skipped and reported)
+    #[arg(required = true, num_args = 1..)]
+    pub ids: Vec<i64>,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -44,7 +46,9 @@ pub struct TransArgs {
 
 #[derive(clap::Args)]
 pub struct CommitArgs {
-    pub id: i64,
+    /// One or more issue IDs (batch: invalid transitions are skipped and reported)
+    #[arg(required = true, num_args = 1..)]
+    pub ids: Vec<i64>,
     /// Commit SHA (default: current HEAD; required in non-git dirs)
     #[arg(long)]
     pub sha: Option<String>,
@@ -58,7 +62,9 @@ pub struct CommitArgs {
 
 #[derive(clap::Args)]
 pub struct CloseArgs {
-    pub id: i64,
+    /// One or more issue IDs (batch: invalid transitions are skipped and reported)
+    #[arg(required = true, num_args = 1..)]
+    pub ids: Vec<i64>,
     /// Test command used to reproduce/verify (required; 'not-tested' if skipped)
     #[arg(long)]
     pub test_cmd: Option<String>,
@@ -69,7 +75,9 @@ pub struct CloseArgs {
 
 #[derive(clap::Args)]
 pub struct DropArgs {
-    pub id: i64,
+    /// One or more issue IDs (batch: invalid transitions are skipped and reported)
+    #[arg(required = true, num_args = 1..)]
+    pub ids: Vec<i64>,
     /// Optional reason
     #[arg(long)]
     pub reason: Option<String>,
@@ -94,7 +102,7 @@ pub fn dispatch(conn: &Connection, cwd: &Path, cmd: &StateCmd) -> Result<(), Err
 
 /// 执行无额外参数的状态转换（plan/start/reset/reopen）。
 fn cmd_trans(conn: &Connection, t: &TransArgs, action: Action) -> Result<(), Error> {
-    transition(conn, t.id, action, None, None, None, t.json)
+    transition(conn, &t.ids, action, None, None, None, t.json)
 }
 
 /// commit：dev→test，必填 --sha（写 last_commit_id）。
@@ -110,7 +118,7 @@ fn cmd_commit(conn: &Connection, cwd: &Path, c: &CommitArgs) -> Result<(), Error
     let test_cmd = c.test_cmd.as_deref().filter(|s| !s.trim().is_empty());
     transition(
         conn,
-        c.id,
+        &c.ids,
         Action::Commit,
         test_cmd,
         None,
@@ -123,7 +131,7 @@ fn cmd_commit(conn: &Connection, cwd: &Path, c: &CommitArgs) -> Result<(), Error
 fn cmd_close(conn: &Connection, c: &CloseArgs) -> Result<(), Error> {
     transition(
         conn,
-        c.id,
+        &c.ids,
         Action::Close,
         c.test_cmd.as_deref(),
         None,
@@ -136,7 +144,7 @@ fn cmd_close(conn: &Connection, c: &CloseArgs) -> Result<(), Error> {
 fn cmd_retest(conn: &Connection, r: &CloseArgs) -> Result<(), Error> {
     transition(
         conn,
-        r.id,
+        &r.ids,
         Action::Retest,
         r.test_cmd.as_deref(),
         None,
@@ -149,7 +157,7 @@ fn cmd_retest(conn: &Connection, r: &CloseArgs) -> Result<(), Error> {
 fn cmd_drop(conn: &Connection, d: &DropArgs) -> Result<(), Error> {
     transition(
         conn,
-        d.id,
+        &d.ids,
         Action::Drop,
         None,
         d.reason.as_deref(),
@@ -158,26 +166,62 @@ fn cmd_drop(conn: &Connection, d: &DropArgs) -> Result<(), Error> {
     )
 }
 
-/// 核心状态转换：复用 `state::apply_transition`（读当前 -> 校验 -> 事务更新），仅负责打印。
+/// 核心状态转换（支持批量）：逐个复用 `state::apply_transition`（读当前 -> 校验 -> 事务更新）。
+/// 非法转换 / issue 不存在 → 跳过并注明；使用错误（缺 test_cmd/sha）或 db 错误 → 中止。
+/// 末尾汇总 `N transitioned, M skipped`（单 id 时不打汇总，保持原输出）。
 fn transition(
     conn: &Connection,
-    id: i64,
+    ids: &[i64],
     action: Action,
     test_cmd: Option<&str>,
     reason: Option<&str>,
     commit_sha: Option<&str>,
     json: bool,
 ) -> Result<(), Error> {
-    let (current, target) =
-        state::apply_transition(conn, id, action, test_cmd, reason, commit_sha)?;
-    if json {
-        let mut v = serde_json::json!({"id": id, "from": current, "to": target});
-        if let Some(sha) = commit_sha {
-            v["last_commit_id"] = serde_json::Value::String(sha.to_string());
+    let mut ok = 0usize;
+    let mut skipped = 0usize;
+    for &id in ids {
+        match state::apply_transition(conn, id, action, test_cmd, reason, commit_sha) {
+            Ok((current, target)) => {
+                ok += 1;
+                if json {
+                    let mut v = serde_json::json!({"id": id, "from": current, "to": target});
+                    if let Some(sha) = commit_sha {
+                        v["last_commit_id"] = serde_json::Value::String(sha.to_string());
+                    }
+                    println!("{}", serde_json::to_string(&v)?);
+                } else {
+                    println!("issue #{id}: {} -> {}", current, target);
+                }
+            }
+            Err(e)
+                if e.to_string().contains("invalid transition")
+                    || e.to_string().contains("not found") =>
+            {
+                skipped += 1;
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string(&serde_json::json!({
+                            "id": id, "skipped": true, "error": e.to_string(),
+                        }))?
+                    );
+                } else {
+                    println!("issue #{id}: skipped ({e})");
+                }
+            }
+            Err(e) => return Err(e), // 使用/db 错误中止（不应静默跳过）
         }
-        println!("{}", serde_json::to_string(&v)?);
-    } else {
-        println!("issue #{id}: {} -> {}", current, target);
+    }
+    if ids.len() > 1 {
+        if json {
+            println!(
+                "{}",
+                serde_json::to_string(&serde_json::json!({"ok": ok, "skipped": skipped}))?
+            );
+        } else {
+            println!("{ok} transitioned, {skipped} skipped");
+        }
     }
     Ok(())
 }

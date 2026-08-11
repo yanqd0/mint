@@ -165,6 +165,55 @@ fn st_state_retest_requires_test_cmd() {
     assert!(stderr.contains("test-cmd"), "stderr: {stderr}");
 }
 
+/// 批量 state：多个 id 一次转换 + 汇总（#201）。
+#[test]
+fn st_state_batch_plan_multiple() {
+    let (_dir, db) = empty_db();
+    let i1 = add_issue(&db, "a");
+    let i2 = add_issue(&db, "b");
+    let i3 = add_issue(&db, "c");
+    let out = mint(&db)
+        .args([
+            "issue",
+            "state",
+            "plan",
+            &i1.to_string(),
+            &i2.to_string(),
+            &i3.to_string(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out);
+    assert!(text.contains("3 transitioned, 0 skipped"), "out: {text}");
+    for id in [i1, i2, i3] {
+        let v = run_json(&db, &["show", &id.to_string(), "--json"]);
+        assert_eq!(v["status"], "planned", "issue {id} 应 planned");
+    }
+}
+
+/// 批量 state：混合合法/非法 → 跳过非法并汇总（#201）。
+#[test]
+fn st_state_batch_skips_invalid() {
+    let (_dir, db) = empty_db();
+    let i1 = add_issue(&db, "a"); // open → 可 plan
+    let i2 = add_issue(&db, "b");
+    run_json(&db, &["issue", "state", "plan", &i2.to_string(), "--json"]); // i2 已 planned
+    let out = mint(&db)
+        .args(["issue", "state", "plan", &i1.to_string(), &i2.to_string()])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out);
+    assert!(text.contains("1 transitioned, 1 skipped"), "out: {text}");
+    let v = run_json(&db, &["show", &i1.to_string(), "--json"]);
+    assert_eq!(v["status"], "planned");
+}
+
 /// add 后 show 能取回 title。
 #[test]
 fn st_add_issue_creates_row() {
