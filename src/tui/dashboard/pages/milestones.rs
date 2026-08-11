@@ -63,7 +63,10 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
                     Style::new().fg(container_status_color(ms.status)),
                 )])),
                 Cell::from(format!("#{}", ms.id)),
-                Cell::from(ms.status.as_str()),
+                Cell::from(Span::styled(
+                    ms.status.as_str(),
+                    container_status_color(ms.status),
+                )),
                 Cell::from(ver),
                 Cell::from(plan_count.to_string()),
                 Cell::from(format!("{total}({direct})")), // 总数(直属)
@@ -144,9 +147,10 @@ mod tests {
     use super::*;
     use crate::models::Status;
     use crate::tui::dashboard::pages::tests_common::{
-        buffer_text, mk_container, mk_issue, model_full, test_backend,
+        buffer_text, cell_fg, mk_container, mk_issue, model_full, test_backend,
     };
     use crate::tui::dashboard::types::View;
+    use ratatui::style::Color;
 
     #[test]
     fn draw_milestones_panel_lists_milestones() {
@@ -166,6 +170,12 @@ mod tests {
         assert!(text.contains("TUI"), "标题: {text}");
         assert!(text.contains("PLANS"), "PLANS 表头: {text}");
         assert!(text.contains("0(0)"), "ISSUES 总数(直属): {text}");
+        // STATUS 列按容器状态色着色（running → 黄，与状态点一致）。
+        assert_eq!(
+            cell_fg(terminal.backend().buffer(), "running"),
+            Some(Color::Yellow),
+            "STATUS 列 running 应按容器状态色着色"
+        );
     }
 
     #[test]

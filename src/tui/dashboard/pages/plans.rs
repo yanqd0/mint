@@ -60,7 +60,10 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
             let mut row = Row::new(vec![
                 Cell::from(Line::from(vec![Span::styled("●", Style::new().fg(dot))])),
                 Cell::from(format!("#{}", plan.id)),
-                Cell::from(plan.status.as_str()),
+                Cell::from(Span::styled(
+                    plan.status.as_str(),
+                    container_status_color(plan.status),
+                )),
                 Cell::from(bar),
                 Cell::from(format!("{:>4}/{}", done, total)), // / 固定在第 4 列，与 header DONE/TOTAL 对齐
                 Cell::from(truncate(&plan.title, title_w.max(1) as usize)),
@@ -98,9 +101,10 @@ mod tests {
     use super::*;
     use crate::models::Status;
     use crate::tui::dashboard::pages::tests_common::{
-        buffer_text, mk_container, mk_issue, model_full, test_backend,
+        buffer_text, cell_fg, mk_container, mk_issue, model_full, test_backend,
     };
     use crate::tui::dashboard::types::View;
+    use ratatui::style::Color;
 
     #[test]
     fn draw_plans_panel_groups_by_milestone() {
@@ -127,6 +131,12 @@ mod tests {
         assert!(
             !text.contains("TUI (0.4.0)"),
             "应无 milestone 组标题: {text}"
+        );
+        // STATUS 列按容器状态色着色（running → 黄，与状态点一致）。
+        assert_eq!(
+            cell_fg(terminal.backend().buffer(), "running"),
+            Some(Color::Yellow),
+            "STATUS 列 running 应按容器状态色着色"
         );
     }
 

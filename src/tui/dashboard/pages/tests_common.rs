@@ -86,6 +86,14 @@ pub fn buffer_text(buf: &ratatui::buffer::Buffer) -> Vec<String> {
         .collect()
 }
 
+/// 找首个含 `needle` 的 buffer cell 前景色（着色断言用）。
+pub fn cell_fg(buf: &ratatui::buffer::Buffer, needle: &str) -> Option<ratatui::style::Color> {
+    let text = buffer_text(buf);
+    let (y, line) = text.iter().enumerate().find(|(_, l)| l.contains(needle))?;
+    let x = line.find(needle)?;
+    Some(buf[(x as u16, y as u16)].fg)
+}
+
 pub fn test_backend(w: u16, h: u16) -> ratatui::Terminal<TestBackend> {
     ratatui::Terminal::new(TestBackend::new(w, h)).unwrap()
 }
