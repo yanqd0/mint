@@ -45,9 +45,9 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
    - 为每个独立 phase 建 issue（kind=requirement，label `<版本>,dev-clean`），`mint plan attach` 挂入
    - **挂入即排期锁定**：对该 plan 下全部 open issue 逐个 `mint issue state plan <id>`（CC 退出 plan 模式、进入执行/auto 模式时统一 planned，plan 的 issue 不留 open）
 2. **每完成一个逻辑变更（对应一次或多次 commit）**：
-   - `mint issue state plan <id>`（排入计划）
-   - `mint issue state start <id>`（开始开发）
-   - 修改代码 → **git commit 后立即** `mint issue state commit <id> --sha $(git rev-parse --short=7 HEAD)`（前 7 位）
+   - `mint issue state plan <id>`（排入计划；同 plan 批量排期见 step 1「挂入即排期锁定」）
+   - **改码前门禁（强制）**：修改某 issue 对应代码前必须先 `mint issue state start <id>`（planned → dev）；改动期间该 issue 必须处于 `dev`（open/planned 直接改码 = 流程违反）
+   - 修改代码 → **git commit 后立即** `mint issue state commit <id> --sha $(git rev-parse --short=7 HEAD)`（前 7 位，dev → test）
    - 同一 issue 有多个 commit 时，**每次 commit 都执行一次 `state commit`**（只记最后一个 SHA，但流程上每次都要走）
 3. **统一测试模式**（同 plan 多 issue，避免逐个 close 致中间态瞬移）：
    - 同 plan 的多个 issue 各自 commit 到 **test（停在 test）**，不立即 close

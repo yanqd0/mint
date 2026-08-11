@@ -45,9 +45,9 @@ Accepts an optional positional `<description>` argument summarizing intent. When
    - Create issues for each independent phase (kind=requirement, label `<version>,dev-clean`), attach to mint plan via `mint plan attach`
    - **Schedule on attach**: run `mint issue state plan <id>` for every open issue of that plan (when CC leaves plan mode and enters execution/auto mode, all issues are uniformly `planned` — no open issues left under a plan)
 2. **For each logical change (one or more commits)**:
-   - `mint issue state plan <id>` (schedule)
-   - `mint issue state start <id>` (start development)
-   - Edit code → **immediately after git commit**, `mint issue state commit <id> --sha $(git rev-parse --short=7 HEAD)` (first 7 chars)
+   - `mint issue state plan <id>` (schedule; for a whole plan see step 1 "schedule on attach")
+   - **Pre-edit gate (mandatory)**: before editing code for an issue, you MUST `mint issue state start <id>` (planned → dev); the issue must stay `dev` while its code is being changed (editing while open/planned = workflow violation)
+   - Edit code → **immediately after git commit**, `mint issue state commit <id> --sha $(git rev-parse --short=7 HEAD)` (first 7 chars, dev → test)
    - When an issue has multiple commits, run `state commit` for EACH commit (only the last SHA is stored, but the workflow requires each one)
 3. **Unified testing** (multiple issues in the same plan; avoid closing one-by-one which makes intermediate states invisible):
    - Issues in the same plan each `state commit` to **test (stay in test)**, do NOT close immediately
