@@ -314,6 +314,60 @@ pub fn issues_for(
     rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
 }
 
+/// 当前 issue 的容器归属（plan + 直属 milestone），供归属变更前记录源端。
+fn current_affiliations(conn: &Connection, issue_id: i64) -> Result<(Vec<i64>, Vec<i64>), Error> {
+    let plans: Vec<i64> = conn
+        .prepare(db::PLAN_IDS_FOR_ISSUE)?
+        .query_map(params![issue_id], |r| r.get(0))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(Error::from)?;
+    let milestones: Vec<i64> = conn
+        .prepare(db::MILESTONE_IDS_FOR_ISSUE)?
+        .query_map(params![issue_id], |r| r.get(0))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(Error::from)?;
+    Ok((plans, milestones))
+}
+
+/// 归属变更 + 容器状态重算（含源端），同一事务内原子；拒绝嵌套事务（同 delete_txn）。
+/// `write` 执行归属变更；之后重算该 issue 当前容器（sync_container_status）+ 显式重算
+/// 源容器（旧 plan/旧直属 milestone，写入后已不在 PLAN_IDS/MILESTONE_IDS 中）。
+fn reassign_container(
+    conn: &Connection,
+    issue_id: i64,
+    old_plans: &[i64],
+    old_milestones: &[i64],
+    write: impl FnOnce(&Connection) -> Result<(), Error>,
+) -> Result<(), Error> {
+    if !conn.is_autocommit() {
+        return Err(Error::Other(
+            "container reassign must not run inside another transaction".to_string(),
+        ));
+    }
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let result = (|| {
+        write(conn)?;
+        sync_container_status(conn, issue_id)?;
+        for &p in old_plans {
+            sync_plan(conn, p)?;
+        }
+        for &m in old_milestones {
+            sync_milestone(conn, m)?;
+        }
+        Ok(())
+    })();
+    match result {
+        Ok(()) => {
+            conn.execute_batch("COMMIT")?;
+            Ok(())
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
 /// milestone 直接挂 issue（仅接受无 plan 的 issue）。幂等。
 pub fn link_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Result<(), Error> {
     if get(conn, ContainerKind::Milestone, milestone_id)?.is_none() {
@@ -332,16 +386,20 @@ pub fn link_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Resul
         }
         Some(None) => {}
     }
-    conn.execute(db::MILESTONE_ATTACH, params![milestone_id, issue_id])?;
-    sync_container_status(conn, issue_id)?;
-    Ok(())
+    let (old_plans, old_milestones) = current_affiliations(conn, issue_id)?;
+    reassign_container(conn, issue_id, &old_plans, &old_milestones, |conn| {
+        conn.execute(db::MILESTONE_ATTACH, params![milestone_id, issue_id])?;
+        Ok(())
+    })
 }
 
 /// 解除 milestone 直接挂的 issue。无行静默 no-op。
 pub fn unlink_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Result<(), Error> {
-    conn.execute(db::MILESTONE_DETACH, params![milestone_id, issue_id])?;
-    sync_container_status(conn, issue_id)?;
-    Ok(())
+    let (old_plans, old_milestones) = current_affiliations(conn, issue_id)?;
+    reassign_container(conn, issue_id, &old_plans, &old_milestones, |conn| {
+        conn.execute(db::MILESTONE_DETACH, params![milestone_id, issue_id])?;
+        Ok(())
+    })
 }
 
 /// 把 issue 挂到 plan 下（plan_id 外键）。plan 不存在报错。
@@ -356,18 +414,22 @@ pub fn set_issue_plan(conn: &Connection, issue_id: i64, plan_id: i64) -> Result<
     if exists.is_none() {
         return Err(Error::Other(format!("issue #{issue_id} not found")));
     }
-    // 若该 issue 已直接挂 milestone，需先解除（二选一）
-    conn.execute(db::MILESTONE_DIRECT_DELETE_BY_ISSUE, params![issue_id])?;
-    conn.execute(db::ISSUE_SET_PLAN, params![plan_id, issue_id])?;
-    sync_container_status(conn, issue_id)?;
-    Ok(())
+    let (old_plans, old_milestones) = current_affiliations(conn, issue_id)?;
+    reassign_container(conn, issue_id, &old_plans, &old_milestones, |conn| {
+        // 若该 issue 已直接挂 milestone，需先解除（二选一）
+        conn.execute(db::MILESTONE_DIRECT_DELETE_BY_ISSUE, params![issue_id])?;
+        conn.execute(db::ISSUE_SET_PLAN, params![plan_id, issue_id])?;
+        Ok(())
+    })
 }
 
 /// 解除 issue 的 plan 归属（plan_id 置 NULL）。
 pub fn unset_issue_plan(conn: &Connection, issue_id: i64) -> Result<(), Error> {
-    conn.execute(db::ISSUE_UNSET_PLAN, params![issue_id])?;
-    sync_container_status(conn, issue_id)?;
-    Ok(())
+    let (old_plans, old_milestones) = current_affiliations(conn, issue_id)?;
+    reassign_container(conn, issue_id, &old_plans, &old_milestones, |conn| {
+        conn.execute(db::ISSUE_UNSET_PLAN, params![issue_id])?;
+        Ok(())
+    })
 }
 
 /// 写后级联同步：某 issue 状态/归属变化后，重算其所属 plan 与 milestone 的状态。
@@ -543,6 +605,73 @@ mod tests {
                 .unwrap()
                 .status,
             ContainerStatus::Done
+        );
+    }
+
+    /// 转移 plan 后源容器状态回落（源端重算，不再残留 running）。
+    #[test]
+    fn set_issue_plan_recomputes_source_plan() {
+        let (conn, iid) = setup();
+        let pid_a = create(&conn, ContainerKind::Plan, "a", None, None, None).unwrap();
+        let pid_b = create(&conn, ContainerKind::Plan, "b", None, None, None).unwrap();
+        set_issue_plan(&conn, iid, pid_a).unwrap();
+        set_status(&conn, iid, "done");
+        sync_container_status(&conn, iid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Plan, pid_a)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Done
+        );
+        // 移到 plan B → A 无 issue 应回落 open，B 全 done
+        set_issue_plan(&conn, iid, pid_b).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Plan, pid_a)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open
+        );
+        assert_eq!(
+            get(&conn, ContainerKind::Plan, pid_b)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Done
+        );
+    }
+
+    /// 解绑直属 milestone 后源 milestone 状态回落。
+    #[test]
+    fn unlink_direct_recomputes_source_milestone() {
+        let (conn, iid) = setup();
+        let rid = create(
+            &conn,
+            ContainerKind::Milestone,
+            "r",
+            Some("0.1.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        link_direct(&conn, rid, iid).unwrap();
+        set_status(&conn, iid, "done");
+        sync_container_status(&conn, iid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, rid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Done
+        );
+        unlink_direct(&conn, rid, iid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, rid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open
         );
     }
 
