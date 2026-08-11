@@ -3,7 +3,7 @@
 //! 6 态：`open` `planned` `dev` `test` `done` `dropped`（见 notes/DDD.md）。
 //! `test` 语义 = testing（测试中/等待测试）。close 仅允许 test→done 且必填 test_cmd。
 //!
-//! 校验部分（`can_transition`/`target_of`/`requires_test_cmd`）为纯函数；
+//! 校验部分（`can_transition`/`target_of`/`test_cmd_requirement_met`）为纯函数；
 //! `apply_transition` 将转换落到 db（读状态 → 校验 → 事务更新 + 容器状态同步），
 //! CLI（`cli/issue/state.rs`）与 TUI（dashboard 状态快捷键）共用同一转换核心。
 
@@ -63,8 +63,9 @@ pub fn target_of(action: Action) -> Status {
     }
 }
 
-/// close/retest 必须提供 test_cmd（close=通过验证手法；retest=失败/复测手法，尽量精确）。
-pub fn requires_test_cmd(action: Action, test_cmd: Option<&str>) -> bool {
+/// 是否满足 test_cmd 要求：非 close/retest 恒满足（true）；close/retest 需非空 test_cmd
+/// （close=通过验证手法；retest=失败/复测手法，尽量精确）。
+pub fn test_cmd_requirement_met(action: Action, test_cmd: Option<&str>) -> bool {
     if !matches!(action, Action::Close | Action::Retest) {
         return true;
     }
@@ -106,7 +107,7 @@ pub fn apply_transition(
                 current, target, action
             )));
         }
-        if !requires_test_cmd(action, test_cmd) {
+        if !test_cmd_requirement_met(action, test_cmd) {
             return Err(Error::Other(
                 "close/retest requires --test-cmd (use 'not-tested' if tests were skipped)"
                     .to_string(),
@@ -176,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_close_requires_test_cmd() {
+    fn apply_close_test_cmd_requirement_met() {
         let (conn, id) = db_with_issue(Status::Test);
         let err = apply_transition(&conn, id, Action::Close, None, None, None).unwrap_err();
         assert!(err.to_string().contains("requires --test-cmd"));
@@ -262,11 +263,11 @@ mod tests {
     #[case(Action::Retest, Some("  "), false)]
     #[case(Action::Retest, Some("cargo test xxx"), true)]
     #[case(Action::Commit, None, true)]
-    fn requires_test_cmd_rule(
+    fn test_cmd_requirement_met_rule(
         #[case] action: Action,
         #[case] test_cmd: Option<&str>,
         #[case] expected: bool,
     ) {
-        assert_eq!(requires_test_cmd(action, test_cmd), expected);
+        assert_eq!(test_cmd_requirement_met(action, test_cmd), expected);
     }
 }
