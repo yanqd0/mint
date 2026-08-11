@@ -55,7 +55,7 @@ fn status_style(status: Status) -> Style {
     s
 }
 
-/// 状态点：`●` + 颜色（黄=待做、黄闪=已排期、绿闪=开发、绿=在做、白=完成、红=drop）。
+/// 状态点：`●` + 颜色（open 白 / planned·dev·test 黄[工作色，点闪] / done 绿 / dropped 红）。
 pub fn status_dot(status: Status) -> (char, Style) {
     ('●', status_style(status))
 }
