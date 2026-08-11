@@ -86,7 +86,38 @@ impl CsvField {
     }
 }
 
-/// 追加值到 CSV 字段（不存在时追加，逗号分隔）。
+/// CSV 单元格编码：含逗号/引号/换行时引号包裹 + 内部引号加倍（RFC 4180 子集），
+/// 避免含逗号路径（如 abs_dir `/path/with,comma`）被 split 误拆致每次 ensure 重复追加。
+fn csv_escape(v: &str) -> String {
+    if v.contains(',') || v.contains('"') || v.contains('\n') {
+        format!("\"{}\"", v.replace('"', "\"\""))
+    } else {
+        v.to_string()
+    }
+}
+
+/// 解析 CSV 行（引号包裹 + 双引号转义），返回字段列表。
+fn csv_parse(line: &str) -> Vec<String> {
+    let mut fields = Vec::new();
+    let mut cur = String::new();
+    let mut in_quotes = false;
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' if in_quotes && chars.peek() == Some(&'"') => {
+                cur.push('"');
+                chars.next();
+            }
+            '"' => in_quotes = !in_quotes,
+            ',' if !in_quotes => fields.push(std::mem::take(&mut cur)),
+            c => cur.push(c),
+        }
+    }
+    fields.push(cur);
+    fields
+}
+
+/// 追加值到 CSV 字段（不存在时追加，逗号分隔；含逗号/引号值转义存储）。
 fn append_csv(conn: &Connection, id: i64, field: CsvField, value: &str) -> Result<(), Error> {
     let col = field.col(); // 白名单列名："git" / "abs_dir"
     let current: String = conn
@@ -100,10 +131,10 @@ fn append_csv(conn: &Connection, id: i64, field: CsvField, value: &str) -> Resul
     if current.is_empty() {
         conn.execute(
             &format!("UPDATE projects SET {col} = ?2, updated_at = datetime('now') WHERE id = ?1"),
-            params![id, value],
+            params![id, csv_escape(value)],
         )?;
-    } else if !current.split(',').any(|s| s.trim() == value) {
-        let merged = format!("{current},{value}");
+    } else if !csv_parse(current).iter().any(|s| s == value) {
+        let merged = format!("{current},{}", csv_escape(value));
         conn.execute(
             &format!("UPDATE projects SET {col} = ?2, updated_at = datetime('now') WHERE id = ?1"),
             params![id, merged],
@@ -310,5 +341,42 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let id = ensure(&conn, DEFAULT_PROJECT, dir.path()).unwrap();
         assert!(id > 0);
+    }
+
+    /// csv_escape/csv_parse：含逗号/引号值转义后 parse 还原；无逗号值原样。
+    #[test]
+    fn csv_escape_roundtrip() {
+        assert_eq!(csv_escape("plain"), "plain");
+        assert_eq!(csv_escape("/path/with,comma"), "\"/path/with,comma\"");
+        assert_eq!(csv_escape("say \"hi\""), "\"say \"\"hi\"\"\"");
+        for v in ["plain", "/path/with,comma", "say \"hi\"", "a,b,\"c\""] {
+            assert_eq!(csv_parse(&csv_escape(v)), vec![v.to_string()], "{v}");
+        }
+    }
+
+    /// append_csv：含逗号 abs_dir 重复 ensure 不无限追加（转义存储 + CSV 解析去重）。
+    #[test]
+    fn append_csv_comma_value_not_unbounded() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::migrate_for_test(&conn);
+        conn.execute("INSERT INTO projects (name) VALUES ('p')", [])
+            .unwrap();
+        let pid: i64 = conn
+            .query_row("SELECT id FROM projects WHERE name='p'", [], |r| r.get(0))
+            .unwrap();
+        // 多次 append 同值：首次转义存储，之后 CSV 解析去重不再追加。
+        for _ in 0..5 {
+            append_csv(&conn, pid, CsvField::AbsDir, "/path/with,comma").unwrap();
+        }
+        let stored: String = conn
+            .query_row("SELECT abs_dir FROM projects WHERE id=?1", [pid], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            csv_parse(&stored),
+            vec!["/path/with,comma".to_string()],
+            "含逗号值应只存一次: {stored}"
+        );
     }
 }
