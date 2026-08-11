@@ -169,7 +169,7 @@ fn cmd_drop(conn: &Connection, d: &DropArgs) -> Result<(), Error> {
 /// 核心状态转换（支持批量）：逐个复用 `state::apply_transition`（读当前 -> 校验 -> 事务更新）。
 /// 非法转换 / issue 不存在 → 跳过并注明；使用错误（缺 test_cmd/sha）或 db 错误 → 中止。
 /// 末尾汇总 `N transitioned, M skipped`（单 id 时不打汇总，保持原输出）。
-fn transition(
+pub(crate) fn transition(
     conn: &Connection,
     ids: &[i64],
     action: Action,

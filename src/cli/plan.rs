@@ -3,12 +3,13 @@
 use rusqlite::Connection;
 
 use crate::cli::{
-    ContainerGetArgs, PlanCreateArgs, PlanSetArgs, cmd_container_list, cmd_container_show,
-    print_issue_link_json,
+    ContainerGetArgs, PlanCreateArgs, PlanSetArgs, PlanTransArgs, cmd_container_list,
+    cmd_container_show, print_issue_link_json,
 };
 use crate::container::{self, ContainerKind};
 use crate::error::Error;
-use crate::models::Container;
+use crate::models::{Container, Status};
+use crate::state::Action;
 
 /// Plan create：可带 --milestone。
 pub fn cmd_plan_create(conn: &Connection, a: &PlanCreateArgs) -> Result<(), Error> {
@@ -69,6 +70,29 @@ pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
     Ok(())
 }
 
+/// plan 级批量状态转换：`plan plan <id>`（open→planned 排期锁定）/
+/// `plan close <id> --test-cmd`（test→done 统一 close）。复用 issue state 的批量 transition。
+fn cmd_plan_batch(conn: &Connection, a: &PlanTransArgs, action: Action) -> Result<(), Error> {
+    if container::get(conn, ContainerKind::Plan, a.id)?.is_none() {
+        return Err(Error::Other(format!("plan #{} not found", a.id)));
+    }
+    // 目标状态筛选：plan→open（排期）、close→test（统一 close）。
+    let from = match action {
+        Action::Plan => Status::Open,
+        Action::Close => Status::Test,
+        _ => unreachable!("plan 级批量仅支持 plan/close"),
+    };
+    let issues = container::issues_for(conn, ContainerKind::Plan, a.id)?;
+    let ids: Vec<i64> = issues
+        .iter()
+        .filter(|i| i.status == from)
+        .map(|i| i.id)
+        .collect();
+    let test_cmd = a.test_cmd.as_deref().filter(|s| !s.trim().is_empty());
+    crate::cli::issue::state::transition(conn, &ids, action, test_cmd, None, None, a.json)?;
+    Ok(())
+}
+
 /// Plan 命令分发。
 pub fn dispatch(conn: &Connection, project: &str, cmd: &super::PlanCmd) -> Result<(), Error> {
     match cmd {
@@ -85,6 +109,8 @@ pub fn dispatch(conn: &Connection, project: &str, cmd: &super::PlanCmd) -> Resul
         }
         super::PlanCmd::Get(g) => cmd_container_get(conn, ContainerKind::Plan, g),
         super::PlanCmd::Set(s) => cmd_plan_set(conn, s),
+        super::PlanCmd::Plan(a) => cmd_plan_batch(conn, a, Action::Plan),
+        super::PlanCmd::Close(a) => cmd_plan_batch(conn, a, Action::Close),
     }
 }
 

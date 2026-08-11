@@ -214,6 +214,71 @@ fn st_state_batch_skips_invalid() {
     assert_eq!(v["status"], "planned");
 }
 
+/// plan 级批量：plan plan <id> 将 open issue 全部排期（#202）。
+#[test]
+fn st_plan_batch_plan_schedules_all_open() {
+    let (_dir, db) = empty_db();
+    let i1 = add_issue(&db, "a");
+    let i2 = add_issue(&db, "b");
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    run_json(&db, &["plan", "attach", "1", &i1.to_string(), "--json"]);
+    run_json(&db, &["plan", "attach", "1", &i2.to_string(), "--json"]);
+    let out = mint(&db)
+        .args(["plan", "plan", "1"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out);
+    assert!(text.contains("2 transitioned, 0 skipped"), "out: {text}");
+    for id in [i1, i2] {
+        let v = run_json(&db, &["show", &id.to_string(), "--json"]);
+        assert_eq!(v["status"], "planned", "issue {id} 应 planned");
+    }
+}
+
+/// plan 级批量：plan close <id> --test-cmd 统一 close test issue（#202）。
+#[test]
+fn st_plan_batch_close_all_test() {
+    let (_dir, db) = empty_db();
+    let i1 = add_issue(&db, "a");
+    let i2 = add_issue(&db, "b");
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    run_json(&db, &["plan", "attach", "1", &i1.to_string(), "--json"]);
+    run_json(&db, &["plan", "attach", "1", &i2.to_string(), "--json"]);
+    // 推进到 test
+    for id in [i1, i2] {
+        run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
+        run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
+        run_json(
+            &db,
+            &[
+                "issue",
+                "state",
+                "commit",
+                &id.to_string(),
+                "--sha",
+                "abc",
+                "--json",
+            ],
+        );
+    }
+    let out = mint(&db)
+        .args(["plan", "close", "1", "--test-cmd", "cargo test"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out);
+    assert!(text.contains("2 transitioned, 0 skipped"), "out: {text}");
+    for id in [i1, i2] {
+        let v = run_json(&db, &["show", &id.to_string(), "--json"]);
+        assert_eq!(v["status"], "done", "issue {id} 应 done");
+    }
+}
+
 /// add 后 show 能取回 title。
 #[test]
 fn st_add_issue_creates_row() {

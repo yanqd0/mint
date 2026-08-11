@@ -110,6 +110,17 @@ pub struct ContainerGetArgs {
 }
 
 #[derive(clap::Args)]
+pub struct PlanTransArgs {
+    pub id: i64,
+    /// Test command for `plan close` (required)
+    #[arg(long)]
+    pub test_cmd: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Args)]
 pub struct PlanSetArgs {
     pub id: i64,
     /// New title (omit to keep; empty rejected)
@@ -338,6 +349,10 @@ pub enum PlanCmd {
     Get(ContainerGetArgs),
     /// Set fields: --title / --body
     Set(PlanSetArgs),
+    /// Batch-schedule all open issues of this plan (open -> planned)
+    Plan(PlanTransArgs),
+    /// Batch-close all test issues of this plan (test -> done, requires --test-cmd)
+    Close(PlanTransArgs),
 }
 
 #[derive(clap::Args)]
