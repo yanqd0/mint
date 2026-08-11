@@ -1458,6 +1458,23 @@ fn st_empty_db_initialized_v1() {
     assert_eq!(version, 1);
 }
 
+/// get/show 裸值输出净化终端控制字符（防转义注入回归，#196）。
+#[test]
+fn st_bare_value_output_sanitizes_control_chars() {
+    let (_dir, db) = empty_db();
+    let v = run_json(&db, &["issue", "add", "evil\u{1b}[31mred", "--json"]);
+    let id = v["id"].as_i64().unwrap();
+    let out = mint(&db)
+        .args(["issue", "get", &id.to_string(), "title"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!stdout.contains('\u{1b}'), "get 裸值应剔除 ESC: {stdout:?}");
+    assert!(stdout.contains("evil"), "内容保留: {stdout}");
+}
+
 // ── --tui（list 表格浏览）────────────────────────────────────────
 
 /// --tui 非 TTY 降级：单页表格文本输出（表头 + 数据 + 页码 footer）。

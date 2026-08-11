@@ -60,7 +60,7 @@ pub fn cmd_get(conn: &Connection, g: &GetArgs) -> Result<(), Error> {
             }))?
         );
     } else {
-        println!("{value}");
+        println!("{}", crate::output::sanitize_terminal(&value));
     }
     Ok(())
 }

@@ -105,7 +105,7 @@ pub fn cmd_container_get(
             }))?
         );
     } else {
-        println!("{value}");
+        println!("{}", crate::output::sanitize_terminal(&value));
     }
     Ok(())
 }

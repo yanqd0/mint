@@ -98,15 +98,15 @@ pub fn cmd_project_show(conn: &Connection, a: &ProjectIdArgs) -> Result<(), Erro
         );
     } else {
         println!("  id: {}", p.id);
-        println!("  name: {}", p.name);
+        println!("  name: {}", crate::output::sanitize_terminal(&p.name));
         if let Some(d) = &p.description {
-            println!("  description: {d}");
+            println!("  description: {}", crate::output::sanitize_terminal(d));
         }
         if let Some(g) = &p.git {
-            println!("  git: {g}");
+            println!("  git: {}", crate::output::sanitize_terminal(g));
         }
         if let Some(a) = &p.abs_dir {
-            println!("  abs_dir: {a}");
+            println!("  abs_dir: {}", crate::output::sanitize_terminal(a));
         }
         println!("  issues: {issue_count}");
         println!("  created: {}", p.created_at);
@@ -128,7 +128,7 @@ pub fn cmd_project_get(conn: &Connection, g: &ProjectGetArgs) -> Result<(), Erro
             }))?
         );
     } else {
-        println!("{value}");
+        println!("{}", crate::output::sanitize_terminal(&value));
     }
     Ok(())
 }
