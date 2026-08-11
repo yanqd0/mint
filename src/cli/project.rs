@@ -25,7 +25,10 @@ pub fn cmd_project_create(conn: &Connection, a: &ProjectCreateArgs) -> Result<()
                 }))?
             );
         } else {
-            println!("Project '{pname}' already exists (id #{existing})");
+            println!(
+                "Project '{}' already exists (id #{existing})",
+                crate::output::sanitize_terminal(pname)
+            );
         }
         return Ok(());
     }
@@ -44,7 +47,10 @@ pub fn cmd_project_create(conn: &Connection, a: &ProjectCreateArgs) -> Result<()
             }))?
         );
     } else {
-        println!("Created project '{pname}' (#{id})");
+        println!(
+            "Created project '{}' (#{id})",
+            crate::output::sanitize_terminal(pname)
+        );
     }
     Ok(())
 }

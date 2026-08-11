@@ -30,7 +30,10 @@ pub fn cmd_milestone_create(conn: &Connection, a: &MilestoneCreateArgs) -> Resul
             }))?
         );
     } else {
-        println!("Created milestone #{id} ({})", a.title);
+        println!(
+            "Created milestone #{id} ({})",
+            crate::output::sanitize_terminal(&a.title)
+        );
     }
     Ok(())
 }

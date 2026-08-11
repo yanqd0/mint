@@ -38,7 +38,10 @@ pub fn dispatch(conn: &Connection, cmd: &super::DeleteCmd) -> Result<(), Error> 
                     serde_json::json!({ "deleted": a.name, "kind": "label" })
                 );
             } else {
-                println!("Deleted label '{}'", a.name);
+                println!(
+                    "Deleted label '{}'",
+                    crate::output::sanitize_terminal(&a.name)
+                );
             }
             Ok(())
         }
@@ -50,7 +53,10 @@ pub fn dispatch(conn: &Connection, cmd: &super::DeleteCmd) -> Result<(), Error> 
                     serde_json::json!({ "deleted": a.name, "kind": "project" })
                 );
             } else {
-                println!("Deleted project '{}'", a.name);
+                println!(
+                    "Deleted project '{}'",
+                    crate::output::sanitize_terminal(&a.name)
+                );
             }
             Ok(())
         }

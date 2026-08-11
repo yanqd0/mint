@@ -123,9 +123,9 @@ pub(crate) fn labels(items: &[(Label, i64)]) -> (Vec<String>, Vec<Vec<String>>) 
 
 // ── show 详情列矩阵（默认 TSV 输出，单行）────
 
-/// TSV 单元格转义：tab/换行/回车 → 空格（保持 show TSV 单行）。
+/// TSV 单元格转义：先净化终端控制字符（ESC/C1），再 tab/换行/回车 → 空格（保持 show TSV 单行）。
 fn tsv_cell(s: &str) -> String {
-    s.replace(['\t', '\n', '\r'], " ")
+    crate::output::sanitize_terminal(s).replace(['\t', '\n', '\r'], " ")
 }
 
 /// Issue 详情（show）→ (表头, 单行矩阵)。body 末列（含 tab/换行转义）。

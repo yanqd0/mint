@@ -31,7 +31,10 @@ pub fn cmd_plan_create(conn: &Connection, a: &PlanCreateArgs) -> Result<(), Erro
             }))?
         );
     } else {
-        println!("Created plan #{id} ({})", a.title);
+        println!(
+            "Created plan #{id} ({})",
+            crate::output::sanitize_terminal(&a.title)
+        );
     }
     Ok(())
 }

@@ -90,8 +90,9 @@ pub fn cmd_add(
         );
     } else {
         println!(
-            "Created issue #{id} ({}) in project '{project_name}'",
-            a.title.trim()
+            "Created issue #{id} ({}) in project '{}'",
+            crate::output::sanitize_terminal(a.title.trim()),
+            crate::output::sanitize_terminal(project_name),
         );
     }
     Ok(())
@@ -129,7 +130,11 @@ fn print_merge(a: &AddArgs, pname: &str, hit: &dedup::Candidate) -> Result<(), E
             }))?
         );
     } else {
-        println!("Merged into issue #{} ({})", hit.id, hit.title);
+        println!(
+            "Merged into issue #{} ({})",
+            hit.id,
+            crate::output::sanitize_terminal(&hit.title)
+        );
     }
     Ok(())
 }

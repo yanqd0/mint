@@ -110,7 +110,13 @@ fn cmd_link_list(conn: &Connection, a: &LinkListArgs) -> Result<(), Error> {
         println!("{}", serde_json::to_string(&links)?);
     } else {
         for l in &links {
-            println!("#{} {} #{}  ({})", a.id, l.rel, l.other_id, l.other_title);
+            println!(
+                "#{} {} #{}  ({})",
+                a.id,
+                l.rel,
+                l.other_id,
+                crate::output::sanitize_terminal(&l.other_title)
+            );
         }
     }
     Ok(())
