@@ -157,7 +157,20 @@
 - crates.io 发布 `mint-faa`
 - 按需加 npm / PyPI 分发壳
 - CI/CD 补上（GitHub Actions：多平台构建 + 发布）
-- MCP server（可插拔后置）按需排入
+- MCP server → 见 2.0.0 独立 milestone
+
+---
+
+## 2.0.0 — MCP 集成
+
+**目标**：CLI 方案完全做好、1.0 发布后，把 mint 暴露为 MCP server，任意 MCP 客户端（Claude/Codex/其它）直接调用 issue 操作。
+
+**范围**：
+- MCP server 骨架 + tool 定义（issue add/list/state 等）
+- stdio transport + 跨客户端安装配置文档
+- 与 CLI 功能对齐（MCP 是 CLI 的封装面，不替代 CLI）
+
+**前置**：1.0.0 正式发布。
 
 ---
 
