@@ -7,7 +7,7 @@ pub fn sanitize_terminal(s: &str) -> String {
         .filter(|c| {
             let u = *c as u32;
             // 保留 \t(9) \n(10) \r(13)；剔除其余 C0（0-8、11-31、DEL=127）与 C1（128-159）
-            !(u < 32 && !matches!(u, 9 | 10 | 13)) && !(0x7f..=0x9f).contains(&u)
+            (u >= 32 || matches!(u, 9 | 10 | 13)) && !(0x7f..=0x9f).contains(&u)
         })
         .collect()
 }

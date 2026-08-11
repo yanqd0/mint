@@ -74,8 +74,12 @@ pub fn remove(conn: &Connection, from_id: i64, ty: LinkType, to_id: i64) -> Resu
     Ok(())
 }
 
+/// 排序键 + Link：`(is_reverse, created_at, other_id, stored_type, link)`——含存储 type，
+/// 排序与 `links_for` 的 `ORDER BY is_reverse, created_at, other_id, type` 一致。
+type OrderedLink = (bool, String, i64, String, Link);
+
 /// 批量取全部 issue 的链接（一次查询，替代逐 issue `links_for`；dashboard 全量加载用）。
-/// 含出向 + 入向反向派生；每 issue 排序与 `links_for` 一致（出向在前 → created_at → other_id）。
+/// 含出向 + 入向反向派生；每 issue 排序与 `links_for` 一致（出向在前 → created_at → other_id → type）。
 pub fn links_for_many(conn: &Connection) -> Result<HashMap<i64, Vec<Link>>, Error> {
     let mut stmt = conn.prepare(db::ISSUE_LINKS_FOR_ALL)?;
     let rows = stmt.query_map([], |r| {
@@ -88,8 +92,7 @@ pub fn links_for_many(conn: &Connection) -> Result<HashMap<i64, Vec<Link>>, Erro
             r.get::<_, String>(5)?, // to_title
         ))
     })?;
-    // (is_reverse, created_at, other_id, stored_type, link)——排序键含存储 type 与 links_for 一致。
-    let mut out: HashMap<i64, Vec<(bool, String, i64, String, Link)>> = HashMap::new();
+    let mut out: HashMap<i64, Vec<OrderedLink>> = HashMap::new();
     for row in rows {
         let (from_id, to_id, ty, created_at, from_title, to_title) = row?;
         // 出向：from 视角 rel = type，other = to
