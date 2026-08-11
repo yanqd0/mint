@@ -398,8 +398,11 @@ pub fn link_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Resul
     })
 }
 
-/// 解除 milestone 直接挂的 issue。无行静默 no-op。
+/// 解除 milestone 直接挂的 issue。milestone 不存在报错（与 attach 校验对齐）；issue 未挂则无行 no-op。
 pub fn unlink_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Result<(), Error> {
+    if get(conn, ContainerKind::Milestone, milestone_id)?.is_none() {
+        return Err(Error::Other(format!("milestone #{milestone_id} not found")));
+    }
     let (old_plans, old_milestones) = current_affiliations(conn, issue_id)?;
     reassign_container(conn, issue_id, &old_plans, &old_milestones, |conn| {
         conn.execute(db::MILESTONE_DETACH, params![milestone_id, issue_id])?;
@@ -677,6 +680,17 @@ mod tests {
                 .unwrap()
                 .status,
             ContainerStatus::Open
+        );
+    }
+
+    /// detach 不存在的 milestone 报 not found（与 attach 校验对齐）。
+    #[test]
+    fn unlink_direct_missing_milestone_errors() {
+        let (conn, iid) = setup();
+        let err = unlink_direct(&conn, 999, iid).unwrap_err();
+        assert!(
+            err.to_string().contains("milestone #999 not found"),
+            "err: {err}"
         );
     }
 
