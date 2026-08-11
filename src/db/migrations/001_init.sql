@@ -143,7 +143,8 @@ INSERT INTO issues_fts(rowid, title, body)
 SELECT id, title, body FROM issues;
 
 CREATE INDEX idx_issue_links_to ON issue_links(to_id);
-CREATE INDEX idx_milestone_direct_issues_issue ON milestone_direct_issues(issue_id);
+CREATE INDEX idx_milestone_direct_issues_issue
+ON milestone_direct_issues(issue_id);
 
 PRAGMA user_version = 1;
 
