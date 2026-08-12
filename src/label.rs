@@ -61,13 +61,15 @@ pub fn attach(
 }
 
 /// 从 issue 摘除多个 label 关联（幂等：不存在的 label / 无关联跳过；不删 label 本体）。
-pub fn detach(conn: &Connection, issue_id: i64, names: &[&str]) -> Result<(), Error> {
+/// 返回实际解除的关联数。
+pub fn detach(conn: &Connection, issue_id: i64, names: &[&str]) -> Result<usize, Error> {
+    let mut detached = 0;
     for name in names {
         if let Some(label_id) = query_id(conn, name)? {
-            conn.execute(db::ISSUE_LABEL_DELETE, params![issue_id, label_id])?;
+            detached += conn.execute(db::ISSUE_LABELS_DELETE, params![issue_id, label_id])?;
         }
     }
-    Ok(())
+    Ok(detached)
 }
 
 /// 列出所有 label（含关联 issue 数）。

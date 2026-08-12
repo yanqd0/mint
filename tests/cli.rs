@@ -256,30 +256,67 @@ fn st_state_batch_commit_mixed_task_skips() {
     assert_eq!(vt["status"], "test", "task 保持 test（跳过 commit）");
 }
 
-/// issue label attach/detach：增删 label 关联（#226）。
+/// issue label attach/detach：增删 label 关联 + JSON 输出一致性（#226）。
 #[test]
 fn st_issue_label_attach_detach() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "labeled");
-    // attach 两个 label（ui 自动注册）
-    mint(&db)
-        .args(["issue", "label", "attach", &id.to_string(), "ui", "docs"])
-        .assert()
-        .success();
+    // attach：逗号分隔一次挂两个（自动注册），JSON 报解析后实际数
+    let v = run_json(
+        &db,
+        &[
+            "issue",
+            "label",
+            "attach",
+            &id.to_string(),
+            "ui,docs",
+            "--json",
+        ],
+    );
+    assert_eq!(v["attached"], 2, "逗号分隔应挂 2 个: {v}");
+    assert_eq!(
+        v["labels"],
+        serde_json::json!(["ui", "docs"]),
+        "labels 应为解析后名: {v}"
+    );
     let v = run_json(&db, &["issue", "get", &id.to_string(), "labels", "--json"]);
     assert_eq!(v["value"], "docs,ui", "attach 后应含 docs,ui");
-    // detach 摘除 ui（docs 保留）
-    mint(&db)
-        .args(["issue", "label", "detach", &id.to_string(), "ui"])
-        .assert()
-        .success();
+    // detach 摘除 ui（docs 保留），JSON 报实际解除数
+    let v = run_json(
+        &db,
+        &["issue", "label", "detach", &id.to_string(), "ui", "--json"],
+    );
+    assert_eq!(v["detached"], 1, "应实际解除 1 个: {v}");
     let v = run_json(&db, &["issue", "get", &id.to_string(), "labels", "--json"]);
     assert_eq!(v["value"], "docs", "detach 后应只剩 docs");
-    // detach 不存在的 label 幂等成功
-    mint(&db)
-        .args(["issue", "label", "detach", &id.to_string(), "nosuch"])
-        .assert()
-        .success();
+    // detach 未关联/不存在的 label：实际解除 0（幂等）
+    let v = run_json(
+        &db,
+        &[
+            "issue",
+            "label",
+            "detach",
+            &id.to_string(),
+            "nosuch",
+            "--json",
+        ],
+    );
+    assert_eq!(v["detached"], 0, "未关联应解除 0: {v}");
+    // name:desc attach 忽略 desc，只挂 name
+    let v = run_json(
+        &db,
+        &[
+            "issue",
+            "label",
+            "attach",
+            &id.to_string(),
+            "bug:缺陷",
+            "--json",
+        ],
+    );
+    assert_eq!(v["attached"], 1, "name:desc 应挂 1 个: {v}");
+    let v = run_json(&db, &["issue", "get", &id.to_string(), "labels", "--json"]);
+    assert_eq!(v["value"], "bug,docs", "应含 bug,docs: {v}");
 }
 
 /// issue label attach/detach 到不存在的 issue 报 not found。

@@ -39,11 +39,12 @@ pub fn dispatch(conn: &Connection, cmd: &LabelCmd) -> Result<(), Error> {
             ensure_issue(conn, a.id)?;
             let specs = label::parse_specs(&a.names);
             label::attach(conn, a.id, &specs)?;
+            let names: Vec<&str> = specs.iter().map(|(n, _)| n.as_str()).collect();
             if a.json {
                 println!(
                     "{}",
                     serde_json::to_string(&serde_json::json!({
-                        "id": a.id, "labels": &a.names,
+                        "id": a.id, "labels": names, "attached": names.len(),
                     }))?
                 );
             } else {
@@ -53,17 +54,19 @@ pub fn dispatch(conn: &Connection, cmd: &LabelCmd) -> Result<(), Error> {
         }
         LabelCmd::Detach(a) => {
             ensure_issue(conn, a.id)?;
-            let names: Vec<&str> = a.names.iter().map(String::as_str).collect();
-            label::detach(conn, a.id, &names)?;
+            // 与 attach 对称：逗号拆分 + trim，忽略 name:desc 的 desc
+            let specs = label::parse_specs(&a.names);
+            let names: Vec<&str> = specs.iter().map(|(n, _)| n.as_str()).collect();
+            let detached = label::detach(conn, a.id, &names)?;
             if a.json {
                 println!(
                     "{}",
                     serde_json::to_string(&serde_json::json!({
-                        "id": a.id, "labels": &a.names,
+                        "id": a.id, "labels": names, "detached": detached,
                     }))?
                 );
             } else {
-                println!("Detached {} label(s) from issue #{}", a.names.len(), a.id);
+                println!("Detached {detached} label(s) from issue #{}", a.id);
             }
             Ok(())
         }
