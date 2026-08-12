@@ -36,6 +36,7 @@ pub const PROJECT_UPDATE: &str = include_str!("queries/project_update.sql");
 pub const PROJECT_LIST: &str = include_str!("queries/project_list.sql");
 pub const PROJECT_ISSUE_COUNT: &str = include_str!("queries/project_issue_count.sql");
 
+pub const ISSUE_LABEL_DELETE: &str = include_str!("queries/issue_label_delete.sql");
 pub const LABEL_INSERT: &str = include_str!("queries/label_insert.sql");
 pub const LABEL_SELECT_ID: &str = include_str!("queries/label_select_id.sql");
 pub const LABEL_ATTACH: &str = include_str!("queries/label_attach.sql");

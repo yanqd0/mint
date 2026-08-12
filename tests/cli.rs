@@ -256,6 +256,42 @@ fn st_state_batch_commit_mixed_task_skips() {
     assert_eq!(vt["status"], "test", "task 保持 test（跳过 commit）");
 }
 
+/// issue label attach/detach：增删 label 关联（#226）。
+#[test]
+fn st_issue_label_attach_detach() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "labeled");
+    // attach 两个 label（ui 自动注册）
+    mint(&db)
+        .args(["issue", "label", "attach", &id.to_string(), "ui", "docs"])
+        .assert()
+        .success();
+    let v = run_json(&db, &["issue", "get", &id.to_string(), "labels", "--json"]);
+    assert_eq!(v["value"], "docs,ui", "attach 后应含 docs,ui");
+    // detach 摘除 ui（docs 保留）
+    mint(&db)
+        .args(["issue", "label", "detach", &id.to_string(), "ui"])
+        .assert()
+        .success();
+    let v = run_json(&db, &["issue", "get", &id.to_string(), "labels", "--json"]);
+    assert_eq!(v["value"], "docs", "detach 后应只剩 docs");
+    // detach 不存在的 label 幂等成功
+    mint(&db)
+        .args(["issue", "label", "detach", &id.to_string(), "nosuch"])
+        .assert()
+        .success();
+}
+
+/// issue label attach/detach 到不存在的 issue 报 not found。
+#[test]
+fn st_issue_label_missing_issue_errors() {
+    let (_dir, db) = empty_db();
+    let err = run_fail(&db, &["issue", "label", "attach", "999", "ui"]);
+    assert!(err.contains("not found"), "err: {err}");
+    let err = run_fail(&db, &["issue", "label", "detach", "999", "ui"]);
+    assert!(err.contains("not found"), "err: {err}");
+}
+
 /// plan 级批量：plan plan <id> 将 open issue 全部排期（#202）。
 #[test]
 fn st_plan_batch_plan_schedules_all_open() {

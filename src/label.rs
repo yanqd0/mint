@@ -60,6 +60,16 @@ pub fn attach(
     Ok(())
 }
 
+/// 从 issue 摘除多个 label 关联（幂等：不存在的 label / 无关联跳过；不删 label 本体）。
+pub fn detach(conn: &Connection, issue_id: i64, names: &[&str]) -> Result<(), Error> {
+    for name in names {
+        if let Some(label_id) = query_id(conn, name)? {
+            conn.execute(db::ISSUE_LABEL_DELETE, params![issue_id, label_id])?;
+        }
+    }
+    Ok(())
+}
+
 /// 列出所有 label（含关联 issue 数）。
 pub fn list(conn: &Connection) -> Result<Vec<(Label, i64)>, Error> {
     let mut stmt = conn.prepare(db::LABEL_LIST)?;
@@ -174,6 +184,44 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM issue_labels", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    /// detach 从 issue 摘除 label 关联（label 本体保留）。
+    #[test]
+    fn detach_removes_links_keeps_label() {
+        let (conn, iid) = setup();
+        attach(
+            &conn,
+            iid,
+            &[("bug".to_string(), None), ("storage".to_string(), None)],
+        )
+        .unwrap();
+        detach(&conn, iid, &["bug"]).unwrap();
+        let names = names_for_issue(&conn, iid).unwrap();
+        assert_eq!(names, vec!["storage"]);
+        // label 本体仍在（detach 只摘关联，不删 label）
+        let cnt: i64 = conn
+            .query_row("SELECT COUNT(*) FROM labels WHERE name='bug'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(cnt, 1);
+    }
+
+    /// detach 幂等：重复 detach / 不存在 label / 无关联均无副作用。
+    #[test]
+    fn detach_idempotent_and_missing() {
+        let (conn, iid) = setup();
+        attach(&conn, iid, &[("bug".to_string(), None)]).unwrap();
+        detach(&conn, iid, &["bug", "bug", "nosuch"]).unwrap();
+        let names = names_for_issue(&conn, iid).unwrap();
+        assert!(names.is_empty(), "应无剩余 label: {names:?}");
+        let cnt: i64 = conn
+            .query_row("SELECT COUNT(*) FROM labels WHERE name='bug'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(cnt, 1, "label 本体不应被删除");
     }
 
     /// delete 删除 label 及其 issue 关联，关联标签消失。

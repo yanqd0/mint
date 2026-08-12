@@ -10,12 +10,14 @@ use rusqlite::Connection;
 use crate::error::Error;
 
 pub mod add;
+pub mod label;
 pub mod link;
 pub mod list;
 pub mod set_get;
 pub mod state;
 
 use add::AddArgs;
+use label::LabelArgs;
 use link::LinkArgs;
 use list::{ListArgs, ShowArgs};
 use set_get::{GetArgs, SetArgs};
@@ -43,6 +45,8 @@ pub enum IssueCmd {
     State(StateArgs),
     /// Issue-to-issue typed links (create/remove/list)
     Link(LinkArgs),
+    /// Attach/detach labels to/from an issue
+    Label(LabelArgs),
 }
 
 /// Issue 命令分发。
@@ -60,5 +64,6 @@ pub fn dispatch(
         IssueCmd::Set(s) => set_get::cmd_set(conn, s),
         IssueCmd::State(st) => state::dispatch(conn, cwd, &st.command),
         IssueCmd::Link(l) => link::dispatch(conn, &l.command),
+        IssueCmd::Label(l) => label::dispatch(conn, &l.command),
     }
 }
