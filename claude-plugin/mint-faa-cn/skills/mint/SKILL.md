@@ -42,7 +42,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
    - **绝不允许无 plan 直接写代码**：CC plan 必须有对应的 mint plan
 1. **CC plan mode 审批通过后，第一件事不是写代码**：
    - 将 CC plan 对应的 work 挂入 mint plan（step 0 已保证 plan 存在）
-   - 为每个独立 phase 建 issue（kind=requirement，label `<版本>,dev-clean`），`mint plan attach` 挂入
+   - 为每个独立 phase 建 issue（kind=requirement，label `dev-clean`），`mint plan attach` 挂入
    - **挂入即排期锁定**：对该 plan 下全部 open issue `mint plan plan <plan_id>`（或逐个 `mint issue state plan <id>`；CC 退出 plan 模式、进入执行/auto 模式时统一 planned，plan 的 issue 不留 open）
 2. **每完成一个逻辑变更（对应一次或多次 commit）**：
    - `mint issue state plan <id>`（排入计划；同 plan 批量排期见 step 1「挂入即排期锁定」）
@@ -127,3 +127,6 @@ mint plan attach 12 42
 - **link**：被别的修改引入 → `link create <issue> solves <引入它的需求>`。
 - **delete 是危险/不可逆操作**：默认不使用，极窄场景 + 用户显式确认；issue 优先 `state drop`。
 - **验证产物清理**：验证性操作产生的临时 issue/plan/milestone 验证后 `state drop` 清理（附 reason），不残留噪音。
+- **label（attach 时机与命名）**：文档/文档类修改 → `docs`；CI/构建 → `CI`；不同项目对**模块**打不同 label。label **必须英文**（除非用户明确要求打非英文单词）、**最多 3 个**、尽量短（单词/常用简写）、默认全小写（非单词的缩写全大写）；新 label 可补 `description`（尽量自解释、一句话以内）。
+- **版本 label 不新增**：版本经 plan→milestone 表达；存量版本 label（0.2.0-0.7.0）保留不删，后续**禁止新增版本 label**。
+- **不主动清理 label**：不删/不清理 label，除非用户明确要求。

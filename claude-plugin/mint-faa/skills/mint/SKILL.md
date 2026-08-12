@@ -42,7 +42,7 @@ Accepts an optional positional `<description>` argument summarizing intent. When
    - **NEVER write code without a mint plan**: every CC plan must have a corresponding mint plan
 1. **After CC plan mode approval, the first action is NOT writing code**:
    - Attach the work to a mint plan (step 0 guarantees the plan exists)
-   - Create issues for each independent phase (kind=requirement, label `<version>,dev-clean`), attach to mint plan via `mint plan attach`
+   - Create issues for each independent phase (kind=requirement, label `dev-clean`), attach to mint plan via `mint plan attach`
    - **Schedule on attach**: `mint plan plan <plan_id>` for all open issues of that plan (or `mint issue state plan <id>` one by one; when CC leaves plan mode and enters execution/auto mode, all issues are uniformly `planned` — no open issues left under a plan)
 2. **For each logical change (one or more commits)**:
    - `mint issue state plan <id>` (schedule; for a whole plan see step 1 "schedule on attach")
@@ -127,3 +127,6 @@ Follow templates for issue/plan/milestone title & body, **record only what the L
 - **link**: introduced by another change → `link create <issue> solves <introducing-requirement>`.
 - **delete is dangerous/irreversible**: avoid by default, narrow scenarios only + explicit user confirmation; prefer `state drop` for issues.
 - **Clean up verification artifacts**: temporary issues/plans/milestones created during verification should be `state drop`ped (with reason) to avoid noise.
+- **Labels (attach timing & naming)**: documentation/doc changes → `docs`; CI/build → `CI`; different projects tag different **modules**. Labels must be **English** (unless the user explicitly asks for a non-English word), **at most 3**, as short as possible (a word / common abbreviation), lowercase by default (all-caps when it's an abbreviation, not a word); a new label may get a `description` (self-explanatory, one sentence max).
+- **No new version labels**: versions are expressed via plan→milestone; existing version labels (0.2.0-0.7.0) are kept, but **adding version labels is forbidden** going forward.
+- **Don't clean up labels proactively**: don't delete/clean labels unless the user explicitly asks.

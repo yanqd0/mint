@@ -89,7 +89,9 @@ blocked_by ↔ blocks 互逆，库中归一化为 blocks 存储，查询时自�
 ## label
 
 ```bash
-mint label list --all
+mint label list --all               # 列出全部 label（含关联数）
+mint issue label attach 42 docs     # 给 issue 加 label（不存在自动注册）
+mint issue label detach 42 docs     # 从 issue 摘除 label（不删 label 本体）
 ```
 
 ## plan / milestone（sprint / milestone）
