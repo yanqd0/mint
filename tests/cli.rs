@@ -761,7 +761,7 @@ fn st_search_trigger_sync() {
             .len(),
         1
     );
-    // 状态推进（title/body 不变，不触发 FTS update）
+    // 状态推进（003 后 status 列触发 issues_fts_au 重建 FTS 行；仍可搜标题）
     run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
     run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
     assert_eq!(
@@ -1687,16 +1687,16 @@ fn st_delete_milestone_detaches() {
     assert_eq!(v["id"].as_i64().unwrap(), i);
 }
 
-/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=1（已合并 001-005）。
+/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=3（001+002+003）。
 #[test]
-fn st_empty_db_initialized_v2() {
+fn st_empty_db_initialized_v3() {
     let (_dir, db) = empty_db();
     run_json(&db, &["list", "--json"]); // 首次运行触发 migrate
     let conn = mint_faa::db::open(std::path::Path::new(&db)).unwrap();
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
 }
 
 /// get/show 裸值输出净化终端控制字符（防转义注入回归，#196）。
@@ -2129,4 +2129,175 @@ fn st_milestone_list_search_filters() {
     let s = String::from_utf8_lossy(&out);
     assert!(s.contains("alpha ms"), "应含命中行: {s}");
     assert!(!s.contains("beta ms"), "不应含未命中行: {s}");
+}
+
+/// mint search 补全字段：kind/status/label 可搜（003 FTS 扩展）。
+#[test]
+fn st_search_matches_kind_status_label() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "alpha");
+    run_json(
+        &db,
+        &[
+            "issue",
+            "label",
+            "attach",
+            &id.to_string(),
+            "backend",
+            "--json",
+        ],
+    );
+    // kind=problem
+    assert_eq!(
+        run_json(&db, &["search", "problem", "--json"])["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "kind=problem 可搜"
+    );
+    // status=open
+    assert_eq!(
+        run_json(&db, &["search", "open", "--json"])["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "status=open 可搜"
+    );
+    // label=backend（≥3 字符，FTS MATCH 命中）
+    assert_eq!(
+        run_json(&db, &["search", "backend", "--json"])["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "label=backend 可搜"
+    );
+}
+
+/// label attach/detach 同步 FTS labels（issues_fts_labels_ai/ad 触发器）。
+#[test]
+fn st_search_label_sync() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "labeled item");
+    // attach 前不可搜
+    assert_eq!(
+        run_json(&db, &["search", "devops", "--json"])["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    run_json(
+        &db,
+        &[
+            "issue",
+            "label",
+            "attach",
+            &id.to_string(),
+            "devops",
+            "--json",
+        ],
+    );
+    // attach 后可搜
+    assert_eq!(
+        run_json(&db, &["search", "devops", "--json"])["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "attach 后 label 可搜"
+    );
+    run_json(
+        &db,
+        &[
+            "issue",
+            "label",
+            "detach",
+            &id.to_string(),
+            "devops",
+            "--json",
+        ],
+    );
+    // detach 后不可搜
+    assert_eq!(
+        run_json(&db, &["search", "devops", "--json"])["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0,
+        "detach 后 label 不可搜"
+    );
+}
+
+/// 状态推进后 status 可搜，且已有关联 label 不被 au 触发器抹掉。
+#[test]
+fn st_search_status_sync_keeps_labels() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "status test");
+    run_json(
+        &db,
+        &[
+            "issue",
+            "label",
+            "attach",
+            &id.to_string(),
+            "critical",
+            "--json",
+        ],
+    );
+    run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
+    run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
+    // status=dev 可搜（au 触发器扩列后）
+    assert_eq!(
+        run_json(&db, &["search", "dev", "--json"])["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "状态推进后 status=dev 可搜"
+    );
+    // label 未被 au 抹掉
+    assert_eq!(
+        run_json(&db, &["search", "critical", "--json"])["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "au 触发器保留 labels"
+    );
+}
+
+/// priority 与短 label（≤2 字符）走 LIKE 兜底（trigram 不索引 <3 字符）。
+#[test]
+fn st_search_priority_short_label_like() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "priority 2");
+    run_json(
+        &db,
+        &["issue", "set", &id.to_string(), "--priority", "2", "--json"],
+    );
+    // priority=2（1 字符，LIKE 兜底）
+    assert_eq!(
+        run_json(&db, &["search", "2", "--json"])["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "priority=2 经 LIKE 可搜"
+    );
+    // 短 label
+    run_json(
+        &db,
+        &["issue", "label", "attach", &id.to_string(), "ui", "--json"],
+    );
+    assert_eq!(
+        run_json(&db, &["search", "ui", "--json"])["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "短 label 'ui' 经 LIKE 可搜"
+    );
 }

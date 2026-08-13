@@ -1,5 +1,6 @@
 -- 全文搜索：issues_fts MATCH + 过滤参数（NULL=不过滤），按相关度 rank 排序。
--- 输出 15 列与 issue_list.sql 列序一致（复用 Issue 行映射）。
+-- MATCH 默认覆盖全部 6 列（title/body/kind/status/priority/labels）。
+-- 输出 17 列与 issue_list.sql 列序一致（复用 Issue 行映射）。
 -- ≤2 字符查询由 issue_search_like.sql LIKE 兜底。
 -- ?1: FTS5 MATCH 查询串（trigram tokenizer，需 ≥3 字符）
 -- ?2: project 名过滤（NULL=不过滤）

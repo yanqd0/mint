@@ -10,12 +10,12 @@ pub mod sql;
 
 /// 有序迁移：每项 (目标版本, 迁移 SQL)。从当前 user_version 逐级升到最新。
 /// 每个迁移 SQL 自带 BEGIN/COMMIT，末尾 `PRAGMA user_version = <目标版本>`，失败整体回滚。
-const MIGRATIONS: &[(i32, &str)] = &[(1, MIGRATION_001), (2, MIGRATION_002)];
+const MIGRATIONS: &[(i32, &str)] = &[(1, MIGRATION_001), (2, MIGRATION_002), (3, MIGRATION_003)];
 
 /// 数据库当前 schema 版本（须与 MIGRATIONS 最后一个目标版本一致）。
 /// 开发期默认写增量 migration（002/003…每逻辑变更独立）；发布前夕合并回 001 后重定基线，
 /// 见 src/db/CLAUDE.md 迁移哲学。
-const CURRENT_VERSION: i32 = 2;
+const CURRENT_VERSION: i32 = 3;
 
 /// 打开（必要时创建）SQLite 数据库并迁移到最新版本。
 /// 父目录不存在时自动创建（首次运行的真实场景）。
@@ -143,7 +143,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
 
         let tables: Vec<String> = conn
             .prepare(
@@ -186,9 +186,9 @@ mod tests {
         assert!(cols.iter().any(|c| c == "uid"), "missing uid");
     }
 
-    /// 既有 v1 库升级：migrate 从 user_version=1 自动跑 002（machines/列/color），不崩溃（#1 回归）。
+    /// 既有 v1 库升级：migrate 从 user_version=1 自动跑 002/003（machines/列/color/FTS 扩展），不崩溃（#1 回归）。
     #[test]
-    fn migrate_upgrades_v1_to_v2() {
+    fn migrate_upgrades_v1_to_v3() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         // 仅建 v1 schema（001）
         conn.execute_batch(MIGRATION_001).unwrap();
@@ -197,7 +197,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2, "v1 库应升级到 v2");
+        assert_eq!(version, 3, "v1 库应升级到 v3");
 
         let tables: Vec<String> = conn
             .prepare(
@@ -237,6 +237,66 @@ mod tests {
             lcols.iter().any(|c| c == "color"),
             "升级后 labels 应有 color"
         );
+
+        // FTS 扩展：虚表含六列。
+        let fcols: Vec<String> = conn
+            .prepare("PRAGMA table_info(issues_fts)")
+            .unwrap()
+            .query_map([], |r| r.get(1))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        for col in ["kind", "status", "priority", "labels"] {
+            assert!(
+                fcols.iter().any(|c| c == col),
+                "升级后 issues_fts 应有 {col}"
+            );
+        }
+    }
+
+    /// 既有 v2 库升级：migrate 从 user_version=2 自动跑 003（FTS 扩展），存量数据回填。
+    #[test]
+    fn migrate_upgrades_v2_to_v3() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        // 建 v2 schema（001 + 002）
+        conn.execute_batch(MIGRATION_001).unwrap();
+        conn.execute_batch(MIGRATION_002).unwrap();
+        // 造数据：issue + label + 关联。
+        conn.execute("INSERT INTO projects (name) VALUES ('p')", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO issues (title, project_id) VALUES ('needle', 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO labels (name) VALUES ('backend')", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO issue_labels (issue_id, label_id) VALUES (1, 1)",
+            [],
+        )
+        .unwrap();
+        // v2 回填（001 已建 FTS，需手动回填标题）。
+        conn.execute(
+            "INSERT INTO issues_fts(rowid, title, body) SELECT id, title, body FROM issues",
+            [],
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+
+        let version: i32 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 3, "v2 库应升级到 v3");
+        // 存量 labels 可搜（回填子查询聚合）。
+        let hit: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM issues_fts WHERE issues_fts MATCH 'backend'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hit, 1, "存量 label 可被 FTS 搜到");
     }
 
     /// 目录 0700 + 文件 0600：DB 权限收敛（敏感开发数据仅本用户可读）。

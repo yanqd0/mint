@@ -5,6 +5,7 @@
 
 pub const MIGRATION_001: &str = include_str!("migrations/001_init.sql");
 pub const MIGRATION_002: &str = include_str!("migrations/002_multi_field.sql");
+pub const MIGRATION_003: &str = include_str!("migrations/003_fts_multi_field.sql");
 
 pub const ISSUE_INSERT: &str = include_str!("queries/issue_insert.sql");
 pub const ISSUE_LIST: &str = include_str!("queries/issue_list.sql");
