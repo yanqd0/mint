@@ -130,6 +130,9 @@ pub struct PlanSetArgs {
     /// New body (omit to keep; empty string clears)
     #[arg(long)]
     pub body: Option<String>,
+    /// New milestone to move this plan to (recomputes both milestones' status)
+    #[arg(long)]
+    pub milestone: Option<i64>,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -368,7 +371,7 @@ pub enum PlanCmd {
     Detach(PlanIssueArgs),
     /// Get a single field's value (bare output; --json for structured)
     Get(ContainerGetArgs),
-    /// Set fields: --title / --body
+    /// Set fields: --title / --body / --milestone
     Set(PlanSetArgs),
     /// Batch-schedule all open issues of this plan (open -> planned)
     Plan(PlanTransArgs),

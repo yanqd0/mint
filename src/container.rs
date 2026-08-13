@@ -257,6 +257,47 @@ pub fn delete_plan(conn: &Connection, id: i64) -> Result<(), Error> {
     })
 }
 
+/// 移动 plan 到另一 milestone：更新 milestone_id + 两侧 milestone 派生状态重算，同一事务内原子。
+/// 旧侧不再含该 plan（派生回落），新侧纳入该 plan（派生推进）。拒绝嵌套事务（同 delete_txn）。
+pub fn move_plan(conn: &Connection, id: i64, new_milestone_id: i64) -> Result<(), Error> {
+    let plan = get(conn, ContainerKind::Plan, id)?
+        .ok_or_else(|| Error::Other(format!("plan #{id} not found")))?;
+    // 校验新 milestone 存在（FK 下不存在会报原始约束错；显式校验给友好报错，对齐 link_direct）。
+    if get(conn, ContainerKind::Milestone, new_milestone_id)?.is_none() {
+        return Err(Error::Other(format!(
+            "milestone #{new_milestone_id} not found"
+        )));
+    }
+    let old = plan.milestone_id;
+    if old == Some(new_milestone_id) {
+        return Ok(()); // 同 milestone 迁移：no-op
+    }
+    if !conn.is_autocommit() {
+        return Err(Error::Other(
+            "plan move must not run inside another transaction".to_string(),
+        ));
+    }
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let result = (|| {
+        conn.execute(db::PLAN_SET_MILESTONE, params![new_milestone_id, id])?;
+        if let Some(rid) = old {
+            sync_milestone(conn, rid)?; // 旧侧重算（回落）
+        }
+        sync_milestone(conn, new_milestone_id)?; // 新侧重算（推进）
+        Ok(())
+    })();
+    match result {
+        Ok(()) => {
+            conn.execute_batch("COMMIT")?;
+            Ok(())
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
 /// 删除 milestone：关联操作（清直接挂载 + 解绑其下 plan 的 milestone_id + 删 milestone）在同一事务。
 pub fn delete_milestone(conn: &Connection, id: i64) -> Result<(), Error> {
     if get(conn, ContainerKind::Milestone, id)?.is_none() {
@@ -888,6 +929,160 @@ mod tests {
         delete_plan(&conn, pid).unwrap();
         assert_eq!(
             get(&conn, ContainerKind::Milestone, rid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open
+        );
+    }
+
+    /// 移动 plan 到另一 milestone：两侧派生状态重算（旧侧回落、新侧推进），同一事务内原子。
+    #[test]
+    fn move_plan_syncs_both_milestones() {
+        let (conn, iid) = setup();
+        let aid = create(
+            &conn,
+            ContainerKind::Milestone,
+            "a",
+            Some("0.1.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let bid = create(
+            &conn,
+            ContainerKind::Milestone,
+            "b",
+            Some("0.2.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, Some(aid)).unwrap();
+        set_issue_plan(&conn, iid, pid).unwrap();
+        set_status(&conn, iid, "done");
+        sync_container_status(&conn, iid).unwrap();
+        // plan 在 a 下且含 done issue → a 为 Running。
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, aid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Running
+        );
+        // 移到 b → a 回落 Open、b 推进 Running、plan 归属更新。
+        move_plan(&conn, pid, bid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, aid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open
+        );
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, bid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Running
+        );
+        assert_eq!(
+            get(&conn, ContainerKind::Plan, pid)
+                .unwrap()
+                .unwrap()
+                .milestone_id,
+            Some(bid)
+        );
+    }
+
+    /// 移到空 milestone：新侧无子项 → Open。
+    #[test]
+    fn move_plan_to_empty_milestone() {
+        let (conn, _) = setup();
+        let aid = create(
+            &conn,
+            ContainerKind::Milestone,
+            "a",
+            Some("0.1.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let bid = create(
+            &conn,
+            ContainerKind::Milestone,
+            "b",
+            Some("0.2.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, Some(aid)).unwrap();
+        move_plan(&conn, pid, bid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, bid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open
+        );
+    }
+
+    /// plan 不存在 → 报错。
+    #[test]
+    fn move_plan_not_found() {
+        let (conn, _) = setup();
+        let bid = create(
+            &conn,
+            ContainerKind::Milestone,
+            "b",
+            Some("0.2.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let err = move_plan(&conn, 999, bid).unwrap_err();
+        assert!(err.to_string().contains("plan #999 not found"), "{err}");
+    }
+
+    /// 目标 milestone 不存在 → 报错。
+    #[test]
+    fn move_plan_missing_milestone() {
+        let (conn, _) = setup();
+        let aid = create(
+            &conn,
+            ContainerKind::Milestone,
+            "a",
+            Some("0.1.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, Some(aid)).unwrap();
+        let err = move_plan(&conn, pid, 999).unwrap_err();
+        assert!(
+            err.to_string().contains("milestone #999 not found"),
+            "{err}"
+        );
+    }
+
+    /// 同 milestone 迁移：no-op，状态不变。
+    #[test]
+    fn move_plan_same_milestone_noop() {
+        let (conn, _) = setup();
+        let aid = create(
+            &conn,
+            ContainerKind::Milestone,
+            "a",
+            Some("0.1.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, Some(aid)).unwrap();
+        move_plan(&conn, pid, aid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, aid)
                 .unwrap()
                 .unwrap()
                 .status,

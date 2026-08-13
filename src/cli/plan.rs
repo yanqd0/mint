@@ -40,17 +40,27 @@ pub fn cmd_plan_create(conn: &Connection, a: &PlanCreateArgs) -> Result<(), Erro
     Ok(())
 }
 
-/// Plan set：更新 title/body。
+/// Plan set：更新 title/body/milestone（milestone 移动会级联重算两侧状态）。
 pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
     let title = s.title.as_deref().map(str::trim);
     let body = s.body.as_deref();
-    if title.is_none() && body.is_none() {
-        return Err(Error::Other("set requires --title or --body".to_string()));
+    let milestone = s.milestone;
+    if title.is_none() && body.is_none() && milestone.is_none() {
+        return Err(Error::Other(
+            "set requires --title, --body, or --milestone".to_string(),
+        ));
     }
     if title.is_some_and(|t| t.is_empty()) {
         return Err(Error::Other("title must not be empty".to_string()));
     }
-    container::update_plan(conn, s.id, title, body)?;
+    // title/body 元数据更新（仅在提供时，避免纯移动被无谓刷新覆盖）。
+    if title.is_some() || body.is_some() {
+        container::update_plan(conn, s.id, title, body)?;
+    }
+    // milestone 移动（级联派生两侧）。
+    if let Some(mid) = milestone {
+        container::move_plan(conn, s.id, mid)?;
+    }
     if s.json {
         let mut obj = serde_json::Map::new();
         obj.insert("id".into(), serde_json::Value::from(s.id));
@@ -59,6 +69,9 @@ pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
         }
         if let Some(b) = body {
             obj.insert("body".into(), serde_json::Value::from(b));
+        }
+        if let Some(m) = milestone {
+            obj.insert("milestone_id".into(), serde_json::Value::from(m));
         }
         println!(
             "{}",

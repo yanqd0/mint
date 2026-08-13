@@ -1904,3 +1904,68 @@ fn st_tui_in_help() {
         .clone();
     assert!(String::from_utf8_lossy(&out).contains("tui"));
 }
+
+/// plan set --milestone：移动 plan 到另一 milestone，两侧 milestone 派生状态重算。
+#[test]
+fn st_plan_set_milestone_moves_and_syncs() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["milestone", "create", "a", "--version", "0.1.0", "--json"],
+    );
+    run_json(
+        &db,
+        &["milestone", "create", "b", "--version", "0.2.0", "--json"],
+    );
+    run_json(&db, &["plan", "create", "p", "--milestone", "1", "--json"]);
+    let iid = add_issue(&db, "x");
+    run_json(&db, &["plan", "attach", "1", &iid.to_string(), "--json"]);
+    advance_to_done(&db, iid);
+    // plan 在 ms1 下含 done issue → ms1 running。
+    let v = run_json(&db, &["milestone", "show", "1", "--json"]);
+    assert_eq!(v["status"], "running");
+    // 移到 ms2 → plan.milestone_id=2、ms1 回落 open、ms2 推进 running。
+    let v = run_json(&db, &["plan", "set", "1", "--milestone", "2", "--json"]);
+    assert_eq!(v["milestone_id"], 2);
+    let v = run_json(&db, &["plan", "show", "1", "--json"]);
+    assert_eq!(v["milestone_id"], 2);
+    let v = run_json(&db, &["milestone", "show", "1", "--json"]);
+    assert_eq!(v["status"], "open", "旧侧回落");
+    let v = run_json(&db, &["milestone", "show", "2", "--json"]);
+    assert_eq!(v["status"], "running", "新侧推进");
+}
+
+/// plan set --milestone 目标不存在 → 报错。
+#[test]
+fn st_plan_set_milestone_missing_errors() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    let out = mint(&db)
+        .args(["plan", "set", "1", "--milestone", "999"])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let msg = String::from_utf8_lossy(&out);
+    assert!(msg.contains("milestone #999 not found"), "{msg}");
+}
+
+/// plan set 无任何字段 → 报错。
+#[test]
+fn st_plan_set_requires_field() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    let out = mint(&db)
+        .args(["plan", "set", "1"])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let msg = String::from_utf8_lossy(&out);
+    assert!(
+        msg.contains("set requires --title, --body, or --milestone"),
+        "{msg}"
+    );
+}

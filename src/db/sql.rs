@@ -69,6 +69,7 @@ pub const PLAN_SELECT: &str = include_str!("queries/plan_select.sql");
 pub const PLAN_ISSUES_FOR: &str = include_str!("queries/plan_issues_for.sql");
 pub const PLAN_UPDATE_STATUS: &str = include_str!("queries/plan_update_status.sql");
 pub const PLAN_UPDATE: &str = include_str!("queries/plan_update.sql");
+pub const PLAN_SET_MILESTONE: &str = include_str!("queries/plan_set_milestone.sql");
 pub const PLAN_DELETE: &str = include_str!("queries/plan_delete.sql");
 
 pub const PLAN_ISSUE_STATUSES: &str = include_str!("queries/plan_issue_statuses.sql");
