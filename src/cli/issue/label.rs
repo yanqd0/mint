@@ -39,7 +39,7 @@ pub fn dispatch(conn: &Connection, cmd: &LabelCmd) -> Result<(), Error> {
             ensure_issue(conn, a.id)?;
             let specs = label::parse_specs(&a.names);
             label::attach(conn, a.id, &specs)?;
-            let names: Vec<&str> = specs.iter().map(|(n, _)| n.as_str()).collect();
+            let names: Vec<&str> = specs.iter().map(|(n, _, _)| n.as_str()).collect();
             if a.json {
                 println!(
                     "{}",
@@ -56,7 +56,7 @@ pub fn dispatch(conn: &Connection, cmd: &LabelCmd) -> Result<(), Error> {
             ensure_issue(conn, a.id)?;
             // 与 attach 对称：逗号拆分 + trim，忽略 name:desc 的 desc
             let specs = label::parse_specs(&a.names);
-            let names: Vec<&str> = specs.iter().map(|(n, _)| n.as_str()).collect();
+            let names: Vec<&str> = specs.iter().map(|(n, _, _)| n.as_str()).collect();
             let detached = label::detach(conn, a.id, &names)?;
             if a.json {
                 println!(

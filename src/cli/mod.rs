@@ -253,6 +253,21 @@ pub struct ListLabelsArgs {
     pub json: bool,
 }
 
+#[derive(clap::Args)]
+pub struct LabelSetArgs {
+    /// Label name
+    pub name: String,
+    /// Color hex (e.g. #0075ff)
+    #[arg(long)]
+    pub color: Option<String>,
+    /// Description (empty clears)
+    #[arg(long)]
+    pub description: Option<String>,
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
 // ── 顶层 Cli 与 Commands ─────────────────────────────────────────
 
 /// 全局 SQLite issue 系统：mint-faa（命令 `mint`）。
@@ -305,6 +320,8 @@ pub struct LabelArgs {
 pub enum LabelCmd {
     /// List all labels (with issue counts)
     List(ListLabelsArgs),
+    /// Set label fields: --color / --description
+    Set(LabelSetArgs),
 }
 
 #[derive(clap::Args)]
@@ -405,6 +422,7 @@ impl Cli {
             Commands::Search(s) => issue::list::cmd_search(&conn, &project, s),
             Commands::Label(t) => match &t.command {
                 LabelCmd::List(l) => cmd_label_list(&conn, l),
+                LabelCmd::Set(s) => cmd_label_set(&conn, s),
             },
             Commands::Project(p) => project::dispatch(&conn, &p.command),
             Commands::Milestone(r) => milestone::dispatch(&conn, &project, &r.command),
@@ -575,7 +593,7 @@ fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
             .map(|(t, count)| {
                 serde_json::json!({
                     "id": t.id, "name": t.name, "description": t.description,
-                    "issue_count": count,
+                    "color": t.color, "issue_count": count,
                     "created_at": t.created_at, "updated_at": t.updated_at,
                 })
             })
@@ -585,6 +603,29 @@ fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
         let (headers, rows) = crate::cli::list_common::labels(&labels);
         print!("{}", crate::output::format_tsv(&headers, &rows));
         print_page_footer(page, l.page_size, total);
+    }
+    Ok(())
+}
+
+/// label set：更新 label 本体（--color / --description）。
+fn cmd_label_set(conn: &Connection, s: &LabelSetArgs) -> Result<(), Error> {
+    let color = s.color.as_deref().map(str::trim).filter(|c| !c.is_empty());
+    let desc = s.description.as_deref();
+    if color.is_none() && desc.is_none() {
+        return Err(Error::Other(
+            "label set requires --color or --description".to_string(),
+        ));
+    }
+    crate::label::set(conn, &s.name, color, desc)?;
+    if s.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "name": s.name, "color": color, "description": desc,
+            }))?
+        );
+    } else {
+        println!("Updated label '{}'", s.name);
     }
     Ok(())
 }

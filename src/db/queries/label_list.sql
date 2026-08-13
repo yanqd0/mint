@@ -4,6 +4,7 @@ SELECT
     t.id,
     t.name,
     t.description,
+    t.color,
     datetime(t.created_at, 'localtime') AS created_at,
     datetime(t.updated_at, 'localtime') AS updated_at,
     (SELECT count(*) FROM issue_labels it WHERE it.label_id = t.id)

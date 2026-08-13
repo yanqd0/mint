@@ -104,7 +104,7 @@ pub(crate) fn containers(items: &[(Container, i64)]) -> (Vec<String>, Vec<Vec<St
 
 /// Label 列表（含关联 issue 计数）→ (表头, 行矩阵)。
 pub(crate) fn labels(items: &[(Label, i64)]) -> (Vec<String>, Vec<Vec<String>>) {
-    let headers: Vec<String> = ["Name", "Issues", "Description"]
+    let headers: Vec<String> = ["Name", "Issues", "Color", "Description"]
         .into_iter()
         .map(String::from)
         .collect();
@@ -114,6 +114,7 @@ pub(crate) fn labels(items: &[(Label, i64)]) -> (Vec<String>, Vec<Vec<String>>) 
             vec![
                 t.name.clone(),
                 count.to_string(),
+                t.color.clone().unwrap_or_default(),
                 t.description.clone().unwrap_or_default(),
             ]
         })
@@ -273,6 +274,7 @@ mod tests {
             id,
             name: name.into(),
             description: desc.map(Into::into),
+            color: None,
             created_at: "t".into(),
             updated_at: "t".into(),
         }
@@ -310,9 +312,9 @@ mod tests {
             (mk_label(6, "urgent", Some("high")), 3),
         ];
         let (headers, rows) = labels(&items);
-        assert_eq!(headers.join(","), "Name,Issues,Description");
-        assert_eq!(rows[0].join(","), "dev,0,");
-        assert_eq!(rows[1].join(","), "urgent,3,high");
+        assert_eq!(headers.join(","), "Name,Issues,Color,Description");
+        assert_eq!(rows[0].join(","), "dev,0,,");
+        assert_eq!(rows[1].join(","), "urgent,3,,high");
     }
 
     #[test]

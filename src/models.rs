@@ -218,6 +218,7 @@ pub struct Label {
     pub id: i64,
     pub name: String,
     pub description: Option<String>,
+    pub color: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
