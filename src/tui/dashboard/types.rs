@@ -49,6 +49,17 @@ pub struct IssueFilter {
     pub priority: Option<i64>,
 }
 
+/// 搜索态（瞬时 UI 态，不入 history；视图切换清输入缓冲，per-tab filter 保留）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchState {
+    /// 输入态激活（footer 显示 /text█）。
+    pub active: bool,
+    /// 输入缓冲 / 生效筛选（空 = 不过滤）。
+    pub text: String,
+    /// 打开搜索前的 (page, selected)，Esc 取消时恢复。
+    pub revert: (usize, usize),
+}
+
 /// 跳转目标视图。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JumpTarget {

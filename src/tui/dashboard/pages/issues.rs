@@ -8,7 +8,8 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    flash_style, flex_col_width, kind_abbrev, status_abbrev, status_dot, status_text_style,
+    flash_style, flex_col_width, footer_line, kind_abbrev, status_abbrev, status_dot,
+    status_text_style,
 };
 use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
 use crate::tui::dashboard::types::JumpKind;
@@ -90,7 +91,10 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
         })
         .collect();
 
-    let footer = "j/k row · ←/→ page · 1/2/3 tab · Enter detail · p plan · m milestone · q quit";
+    let footer = footer_line(
+        m,
+        "j/k row · ←/→ page · 1/2/3 tab · Enter detail · / search · q quit",
+    );
     // 翻页信息移入列表 panel 标题（需求：不放 help 栏）。
     let list_title = format!("─{} · page {}/{}", panel_title(), m.page + 1, m.pages());
     render_panel(frame, chunks[0], "progress", prog_lines);
@@ -100,7 +104,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
             .padding(Padding::horizontal(1)),
     );
     frame.render_widget(table, chunks[1]);
-    frame.render_widget(Paragraph::new(Line::from(footer)), chunks[2]);
+    frame.render_widget(Paragraph::new(footer), chunks[2]);
 }
 
 #[cfg(test)]
@@ -210,5 +214,34 @@ mod tests {
         assert!(text.contains("issues · page"), "列表标题: {text}");
         assert!(text.contains("in plan"), "应含 plan issue: {text}");
         assert!(!text.contains("outside"), "不应含外部 issue: {text}");
+    }
+
+    /// 搜索激活时 footer 显示 /query█（输入光标占位）。
+    #[test]
+    fn footer_shows_query_when_search_active() {
+        let mut m = model_with(vec![mk_issue(1, "a", Status::Open, None)]);
+        m.search = Some(crate::tui::dashboard::types::SearchState {
+            active: true,
+            text: "foo".into(),
+            revert: (0, 0),
+        });
+        let mut terminal = test_backend(60, 10);
+        terminal
+            .draw(|f| draw_issues_panel(f, &mut m, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("/foo█"), "搜索激活 footer 显 /foo█: {text}");
+    }
+
+    /// 无搜索时 footer 含 / search 提示。
+    #[test]
+    fn help_footer_mentions_search() {
+        let mut m = model_with(vec![mk_issue(1, "a", Status::Open, None)]);
+        let mut terminal = test_backend(60, 10);
+        terminal
+            .draw(|f| draw_issues_panel(f, &mut m, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("/ search"), "help footer 含 / search: {text}");
     }
 }

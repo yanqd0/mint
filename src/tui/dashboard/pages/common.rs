@@ -10,6 +10,15 @@ use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::panel_title;
 
+/// footer 行：搜索输入态 → `/text█`（光标占位）；搜索提交 → `/text`；否则 help。
+pub fn footer_line(m: &DashboardModel, help: &str) -> Line<'static> {
+    match &m.search {
+        Some(s) if s.active => Line::from(format!("/{}█", s.text)),
+        Some(s) => Line::from(format!("/{}", s.text)),
+        None => Line::from(help.to_string()),
+    }
+}
+
 /// 闪烁样式：目标（id+kind）在 `m.flash` 中 → SLOW_BLINK（列表行闪烁标记，变化内容提示）。
 pub fn flash_style(m: &DashboardModel, id: i64, kind: JumpKind) -> Option<Style> {
     m.flash

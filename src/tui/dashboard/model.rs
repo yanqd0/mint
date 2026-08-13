@@ -9,7 +9,7 @@ use crate::models::{Container, Issue};
 use crate::tui::TuiKey;
 use crate::tui::dashboard::diff::{DashboardSnapshot, diff_snapshots};
 use crate::tui::dashboard::types::{
-    FlashItem, IssueFilter, JumpRequest, MAX_FEED, RawJump, ViewSwitch,
+    FlashItem, IssueFilter, JumpRequest, MAX_FEED, RawJump, SearchState, ViewSwitch,
 };
 
 pub use crate::tui::dashboard::types::{FeedItem, KeyAction, RefreshResult, View};
@@ -51,6 +51,11 @@ pub struct DashboardModel {
     /// 三大 list tab 各保存手动离开时的 (page, selected)，返回恢复；自动跳转清空。
     /// 索引：Issues=0, Plans=1, Milestones=2（详情归其 tab）。
     pub(crate) saved_cursor: [(usize, usize); 3],
+    /// 各 list tab 的搜索 filter（提交后持久，切 tab 保留；自动跳转清空）。
+    /// 索引同 saved_cursor。None = 无搜索。
+    pub(crate) tab_search: [Option<String>; 3],
+    /// 瞬时搜索输入态（/ 唤出；视图切换清输入缓冲）。
+    pub search: Option<SearchState>,
     /// queue1：原始跳转请求（事件驱动，合并器每 tick 读空）。
     pub(crate) pending: VecDeque<RawJump>,
     /// queue2：就绪复合请求（每 5s 执行队首，容量 JUMP_QUEUE_LIMIT）。
@@ -93,6 +98,8 @@ impl DashboardModel {
             user_idle: 0,
             auto_last: 0,
             saved_cursor: [(0, 0); 3],
+            tab_search: [None, None, None],
+            search: None,
             pending: VecDeque::new(),
             ready: VecDeque::new(),
             merge_delay: 0,
@@ -133,6 +140,8 @@ impl DashboardModel {
         self.user_idle = 0;
         self.auto_last = 0;
         self.saved_cursor = [(0, 0); 3];
+        self.tab_search = [None, None, None];
+        self.search = None;
         self.pending.clear();
         self.ready.clear();
         self.merge_delay = 0;
@@ -186,8 +195,12 @@ impl DashboardModel {
 
     /// 处理按键：退出 dashboard 返回 Quit（q 或 Ctrl+C）；视图内导航返回 None。TUI 纯只读，无写操作。
     pub fn handle_key(&mut self, key: TuiKey) -> KeyAction {
-        // 任何按键 → 用户活跃，重置空闲计时（自动切换前置失效）。
+        // 任何按键 → 用户活跃，重置空闲计时（自动切换前置失效）。含搜索输入，天然满足"输入算用户操作"。
         self.user_idle = 0;
+        // 搜索输入态优先：全拦截，避免 Backspace=q/Enter/Esc/导航冲突。
+        if self.search.as_ref().is_some_and(|s| s.active) {
+            return self.handle_search_key(key);
+        }
         if key.code == KeyCode::Char('q') || (key.code == KeyCode::Char('c') && key.ctrl) {
             return KeyAction::Quit;
         }
@@ -197,6 +210,63 @@ impl DashboardModel {
             _ => self.handle_nav(key.code),
         }
         KeyAction::None
+    }
+
+    /// 搜索输入态按键：字符 append、退格删字、Enter 提交、Esc 取消恢复、Ctrl+C 逃生口。
+    fn handle_search_key(&mut self, key: TuiKey) -> KeyAction {
+        match key.code {
+            KeyCode::Char('c') if key.ctrl => return KeyAction::Quit,
+            KeyCode::Char(c) => {
+                if let Some(s) = &mut self.search {
+                    s.text.push(c);
+                }
+                self.search_reset_position();
+            }
+            KeyCode::Backspace => {
+                if let Some(s) = &mut self.search {
+                    s.text.pop();
+                }
+                self.search_reset_position();
+            }
+            KeyCode::Enter => {
+                let text = self.search.as_ref().map(|s| s.text.clone());
+                if let Some(t) = text {
+                    // 提交：关闭输入态，filter 写入当前 tab（per-tab 持久）。
+                    let idx = self.tab_index();
+                    self.tab_search[idx] = Some(t);
+                }
+                if let Some(s) = &mut self.search {
+                    s.active = false;
+                }
+            }
+            KeyCode::Esc => {
+                if let Some(s) = &self.search {
+                    self.page = s.revert.0;
+                    self.selected = s.revert.1;
+                }
+                self.search = None;
+                self.clamp_page();
+                self.clamp_selected();
+            }
+            _ => {}
+        }
+        KeyAction::None
+    }
+
+    /// 文本变更后重置位置（新列表无意义位置）。
+    fn search_reset_position(&mut self) {
+        self.page = 0;
+        self.selected = 0;
+    }
+
+    /// / 唤出搜索（仅三大 list tab 生效）；预填该 tab 上次 filter。
+    fn start_search(&mut self) {
+        let idx = self.tab_index();
+        self.search = Some(SearchState {
+            active: true,
+            text: self.tab_search[idx].clone().unwrap_or_default(),
+            revert: (self.page, self.selected),
+        });
     }
 
     /// 选中条目的 0-indexed 行号（selected 0 = 无选中，返回 None）。
@@ -217,6 +287,11 @@ impl DashboardModel {
                     _ => View::Issues,
                 };
                 self.navigate(next);
+            }
+            KeyCode::Char('/') => {
+                if Self::is_list_tab(self.view) {
+                    self.start_search();
+                }
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 let len = self.current_page_len();
@@ -330,14 +405,17 @@ impl DashboardModel {
         if mode == ViewSwitch::Manual && Self::is_list_tab(self.view) {
             self.save_cursor();
         }
+        // 视图切换清瞬时搜索输入态（per-tab filter 在 tab_search 保留）。
+        self.search = None;
         self.view = v;
         self.page = 0;
         self.plans_page = 0;
         self.issues_page = 0;
         self.selected = 0;
-        // 自动跳转：清空全部手动光标记录（用户要求"一旦开始自动跳转，记录全部归零"）。
+        // 自动跳转：清空全部手动光标记录 + 全部 tab 搜索 filter（用户要求"记录全部归零"）。
         if mode == ViewSwitch::Auto {
             self.saved_cursor = [(0, 0); 3];
+            self.tab_search = [None, None, None];
         }
         // 进入后：手动且目标是 list tab → 恢复光标，clamp 兜底。
         if mode == ViewSwitch::Manual && Self::is_list_tab(v) {

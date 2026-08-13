@@ -10,6 +10,38 @@ pub struct PlanGroup<'a> {
     pub plans: Vec<&'a (Container, i64)>,
 }
 
+/// 当前 tab 的搜索 filter（tab_search[tab_index]）。None = 无搜索。
+fn current_search(m: &DashboardModel) -> Option<&str> {
+    let idx = match m.active_tab() {
+        View::Issues => 0,
+        View::Plans => 1,
+        _ => 2,
+    };
+    m.tab_search[idx].as_deref().filter(|q| !q.is_empty())
+}
+
+/// issue 匹配搜索：title/body/status/id(#N 或裸数)/kind/label 任一，大小写不敏感子串。
+fn issue_matches_search(i: &Issue, q: &str) -> bool {
+    let q = q.to_lowercase();
+    let contains = |hay: &str| hay.to_lowercase().contains(&q);
+    contains(&i.title)
+        || i.body.as_deref().is_some_and(contains)
+        || i.status.as_str().contains(&q)
+        || format!("#{}", i.id).contains(&q)
+        || i.kind.as_str().contains(&q)
+        || i.labels.iter().any(|l| contains(l))
+}
+
+/// 容器（plan/milestone）匹配搜索：title/body/status/#id，大小写不敏感子串。
+fn container_matches_search(c: &Container, q: &str) -> bool {
+    let q = q.to_lowercase();
+    let contains = |hay: &str| hay.to_lowercase().contains(&q);
+    contains(&c.title)
+        || c.body.as_deref().is_some_and(contains)
+        || format!("#{}", c.id).contains(&q)
+        || c.status.as_str().contains(&q)
+}
+
 impl DashboardModel {
     /// 当前视图作用域内的 issue（**不应用**显示筛选）。进度统计用（done/dropped 计入，
     /// 不受 list 默认只显活跃影响）。Issues tab = 全部；PlanDetail = 该 plan；
@@ -71,6 +103,10 @@ impl DashboardModel {
                 true
             });
         }
+        // 搜索谓词（当前 tab per-tab filter）AND 叠加。
+        if let Some(q) = current_search(self) {
+            v.retain(|i| issue_matches_search(i, q));
+        }
         v
     }
 
@@ -84,6 +120,9 @@ impl DashboardModel {
             ps.retain(|(c, _)| c.status != ContainerStatus::Done);
         }
         ps.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at));
+        if let Some(q) = current_search(self) {
+            ps.retain(|(c, _)| container_matches_search(c, q));
+        }
         ps
     }
 
@@ -183,6 +222,9 @@ impl DashboardModel {
             ms.retain(|(c, _)| c.status != ContainerStatus::Done);
         }
         ms.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at));
+        if let Some(q) = current_search(self) {
+            ms.retain(|(c, _)| container_matches_search(c, q));
+        }
         ms
     }
 

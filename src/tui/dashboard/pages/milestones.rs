@@ -7,7 +7,9 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{container_status_color, flash_style, flex_col_width};
+use crate::tui::dashboard::pages::common::{
+    container_status_color, flash_style, flex_col_width, footer_line,
+};
 use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::stack;
 use crate::tui::text::truncate;
@@ -79,11 +81,7 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
             row
         })
         .collect();
-    let footer = format!(
-        "j/k ↑↓ row · ←/→ page · 1/2/3 tab · Enter detail · q quit · Page {}/{}",
-        m.page + 1,
-        m.pages()
-    );
+    let footer = footer_line(m, "j/k ↑↓ row · ←/→ page · 1/2/3 tab · / search · q quit");
     let title = format!("─milestones · page {}/{}", m.page + 1, m.pages());
     let mut rows = rows;
     if rows.is_empty() {
@@ -95,7 +93,7 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
             .padding(Padding::horizontal(1)),
     );
     frame.render_widget(table, chunks[0]);
-    frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
+    frame.render_widget(Paragraph::new(footer), chunks[1]);
 }
 
 #[cfg(test)]

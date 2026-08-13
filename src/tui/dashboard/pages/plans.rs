@@ -8,7 +8,9 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
 use crate::models::Issue;
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{container_status_color, flash_style, flex_col_width};
+use crate::tui::dashboard::pages::common::{
+    container_status_color, flash_style, flex_col_width, footer_line,
+};
 use crate::tui::dashboard::pages::progress::progress_bar;
 use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::stack;
@@ -81,11 +83,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
         rows.push(Row::new(vec![Cell::from("(no plans)")]));
     }
 
-    let footer = format!(
-        "j/k ↑↓ plan · ←/→ page · 1/2/3 tab · Enter detail · q quit · Page {}/{}",
-        m.page + 1,
-        m.pages()
-    );
+    let footer = footer_line(m, "j/k ↑↓ plan · ←/→ page · 1/2/3 tab · / search · q quit");
     let title = format!("─plans · page {}/{}", m.page + 1, m.pages());
     let table = Table::new(rows, widths).header(header).block(
         Block::bordered()
@@ -93,7 +91,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
             .padding(Padding::horizontal(1)),
     );
     frame.render_widget(table, chunks[0]);
-    frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
+    frame.render_widget(Paragraph::new(footer), chunks[1]);
 }
 
 #[cfg(test)]
