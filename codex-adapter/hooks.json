@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CODEX_ADAPTER_ROOT}/hooks/inject_context.sh",
+            "timeout": 100
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|MCP",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CODEX_ADAPTER_ROOT}/hooks/inject_signal.py",
+            "timeout": 100
+          },
+          {
+            "type": "command",
+            "command": "${CODEX_ADAPTER_ROOT}/hooks/inject_commit_reminder.sh",
+            "timeout": 50
+          }
+        ]
+      }
+    ]
+  }
+}

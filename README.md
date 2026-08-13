@@ -29,6 +29,23 @@ claude plugin install mint-faa@mint
 # restart the session for hooks to take effect
 ```
 
+## Install the Codex adapter
+
+```sh
+# One-liner (global): installs hooks into ~/.codex + skill into ~/.agents/skills
+./codex-adapter/install.sh
+
+# Or project-scoped:
+./codex-adapter/install.sh --project
+
+# Uninstall:
+./codex-adapter/install.sh --uninstall
+
+# restart Codex for hooks to take effect; non-managed hooks need /hooks trust
+```
+
+The adapter injects failure signals (`mint: tool X failed — <cmd>`) and issue context (`mint list`) into Codex sessions, and ships `AGENTS.md` + a `.agents/skills/mint` symlink to the shared skill. Full flow lives in `.agents/skills/mint/SKILL.md`.
+
 Data lives in a single global SQLite database at `$XDG_DATA_HOME/mint/mint.db` (`MINT_DB_PATH` overrides).
 
 ## Usage
