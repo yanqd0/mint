@@ -344,6 +344,24 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D30. OpenCode 适配形态定案（opencode-adapter + marker 宿主识别）
+
+**背景**：plan #38 落地。OpenCode 有真实 TS/JS 插件系统（区别于 Codex 无 plugin 机制）；`OPENCODE_*` env 是配置输入，不会导出到模型环境，plan #39 路由表的 `env OPENCODE_*` 信号不可靠。
+
+**决策**：
+- **落地形态**：新建 `opencode-adapter/`（平行 codex-adapter/）：`plugin.ts`（核心插件）+ `test-harness.ts`（node mock 验证）+ `install.sh`；仓库根 `.opencode/plugins/mint.ts` 软链接 → `opencode-adapter/plugin.ts`（单一源）。
+- **skill 接入**：**复用 `.agents/skills/mint` 软链接**（OpenCode 读 `.agents/skills/`，官方文档确认），不建 `.opencode/skills/`。
+- **宿主识别修正**：OpenCode 行改为「会话上下文含插件注入 `mint-adapter: opencode` 标记，或 env OPENCODE_* 且无 AskUserQuestion」——marker 由插件 session.created 时注入上下文首行。
+- **事件映射**：`session.created`（上下文注入，SessionStart 等价物）+ `message.part.updated`（ToolPart `state.status=error` 失败信号）+ `tool.execute.after`（commit 提醒）+ `session.idle`（批次边界批量注入，不打断模型流式）。
+- **上下文注入**：`client.session.prompt({ path:{id}, body:{noReply:true, parts:[{type:'text',text}]}})` 是 **SDK client 方法**（D24 的 `session.prompt(noReply)` 缩写成立）。
+- **运行时**：生产在 OpenCode 内嵌 Bun（`$` API）；本地 dev/test 用 node v24 原生 type-stripping（零安装、零 package.json/tsconfig）。**插件零运行时 import**（`import type` 运行期擦除）。
+- **信号契约沿用**：`mint: tool X failed — cmd` + 上下文 `mint list` TSV（跨 agent 标准）；idle 批量注入的**能力差异**（同 turn 内模型原生可见工具报错，插件信号用于契约标准化 + 跨 turn 兜底）写入 opencode.md。
+- **MCP 后置 2.0.0**；mint CLI 零改动（D24）。
+
+**理由**：OpenCode 插件自动加载 `.opencode/plugins/`（opencode.json `plugin` 数组只收 npm 包），故源码放平行目录 + 软链接安装产物（对照 codex/`.agents/skills/mint` 先例）；marker 修正 env 信号的不可靠性；node type-stripping 让首个 JS/TS 设施保持最轻形态。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前

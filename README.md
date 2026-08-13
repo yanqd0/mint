@@ -46,6 +46,23 @@ claude plugin install mint-faa@mint
 
 The adapter injects failure signals (`mint: tool X failed — <cmd>`) and issue context (`mint list`) into Codex sessions, and ships `AGENTS.md` + a `.agents/skills/mint` symlink to the shared skill. Full flow lives in `.agents/skills/mint/SKILL.md`.
 
+## Install the OpenCode plugin
+
+```sh
+# One-liner (global): plugin into ~/.config/opencode/plugins + skill into ~/.config/opencode/skills
+./opencode-adapter/install.sh
+
+# Or project-scoped (plugin symlink into .opencode/plugins; skill already at .agents/skills/mint):
+./opencode-adapter/install.sh --project
+
+# Uninstall:
+./opencode-adapter/install.sh --uninstall
+
+# restart OpenCode for the plugin to load
+```
+
+The plugin injects failure signals (`mint: tool X failed — <cmd>`), issue context (`mint list`), and commit reminders into OpenCode sessions, and marks the host (`mint-adapter: opencode`) so the shared skill routes to its OpenCode rules. Full flow lives in `.agents/skills/mint/SKILL.md`.
+
 Data lives in a single global SQLite database at `$XDG_DATA_HOME/mint/mint.db` (`MINT_DB_PATH` overrides).
 
 ## Usage

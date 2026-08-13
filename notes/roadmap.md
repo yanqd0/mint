@@ -100,7 +100,7 @@
 
 **范围**：
 - **Codex**：AGENTS.md 指令 + hooks（PostToolUse 失败启发式）（#50）——**已完成（plan #37）**：codex-adapter/ + 仓库根三件套，失败启发式保守策略见 D29
-- **OpenCode**：TS 插件事件流转发信号 → LLM 判断 → `mint add`（#51；D24 已收敛 capture→add）
+- **OpenCode**：TS 插件事件流转发信号 → LLM 判断 → `mint add`（#51；D24 已收敛 capture→add）——**已完成（plan #38）**：opencode-adapter/ 插件 + marker 宿主识别，见 D30
 - 无事件 hooks 时降级为"指令驱动的主动登记"
 - adapter 抽象（plan #39）：单一 skill 源 + 宿主识别路由，agent 专属在 `references/agent/`，新增 agent 只需加适配层
 - **发布准备**：GitHub Actions 流水线（test/clippy 门禁 + release build + crates.io publish 准备，独立 plan #36）
