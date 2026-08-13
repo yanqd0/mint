@@ -9,7 +9,7 @@ use ratatui::widgets::Paragraph;
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    body_lines_capped, container_status_color, kv_lines, mini_bar, panel_wrap, status_dot,
+    body_lines_capped, container_status_color, kv_lines, panel_wrap, status_dot,
 };
 use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
 use crate::tui::panel::{render_panel, stack};
@@ -88,23 +88,47 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, milestone_id: i64,
     }
     for (i, (plan, _)) in plans.iter().enumerate() {
         let (pdone, ptotal) = m.plan_progress(plan.id);
-        let bar = mini_bar(pdone, ptotal, 20);
         let sel = m.selected_idx() == Some(i); // plans 段：selected 1..=n
         let style = if sel {
             Style::new().add_modifier(Modifier::REVERSED)
         } else {
             Style::new()
         };
+        // 进度条复用 progress_bar（彩色 4 色分组 + dropped 红段），与 plans 面板一致；
+        // 选中行 bar 补 REVERSED（保持配色 + 高亮），对齐 plans 面板行级 REVERSED。
+        let plan_issues: Vec<&Issue> = m
+            .issues
+            .iter()
+            .filter(|i| i.plan_id == Some(plan.id))
+            .collect();
+        let mut bar = progress_bar(&plan_issues, 20);
+        if sel {
+            for sp in bar.spans.iter_mut() {
+                sp.style = sp.style.add_modifier(Modifier::REVERSED);
+            }
+        }
         // 前缀（状态点+id+bar+进度）宽度固定，title 按面板内容宽 − 前缀宽截断（右侧省略），避免溢出。
         let dot = container_status_color(plan.status);
-        let prefix = format!("#{:<3}{bar} {pdone}/{ptotal}  ", plan.id);
+        let id_part = format!("#{:<3}", plan.id);
+        let tail = format!("  {pdone}/{ptotal}  "); // bar 后空格 + 进度文本
         let avail = area.width.saturating_sub(4) as usize; // render_panel 内容宽（border 2 + padding 2）
-        let pw = unicode_width::UnicodeWidthStr::width(prefix.as_str()) + 2; // + ● 空格
-        plan_lines.push(Line::from(vec![
+        let pw = 2
+            + unicode_width::UnicodeWidthStr::width(id_part.as_str())
+            + 1
+            + 20
+            + unicode_width::UnicodeWidthStr::width(tail.as_str()); // ●空格 + id + bar前空格 + bar + tail
+        let mut spans: Vec<Span> = vec![
             Span::styled("● ", Style::new().fg(dot)),
-            Span::styled(prefix, style),
-            Span::styled(truncate(&plan.title, avail.saturating_sub(pw)), style),
-        ]));
+            Span::styled(id_part, style),
+            Span::styled(" ", style), // bar 前空格
+        ];
+        spans.extend(bar.spans);
+        spans.push(Span::styled(tail, style));
+        spans.push(Span::styled(
+            truncate(&plan.title, avail.saturating_sub(pw)),
+            style,
+        ));
+        plan_lines.push(Line::from(spans));
     }
     // plans 面板内容定高后，issues 填满剩余、按该高度分页。
     let plans_panel_h = plan_lines.len() as u16 + 2;
@@ -365,6 +389,36 @@ mod tests {
         assert!(
             text.contains("no issues in this milestone"),
             "无任何 issue 时 issues panel 显示空提示: {text}"
+        );
+    }
+
+    /// #240：plan 行进度条复用 progress_bar——含 dropped issue 时出现红色 dropped 段。
+    #[test]
+    fn plan_row_progress_bar_shows_dropped_red_segment() {
+        // plan 7 含 1 done + 1 dropped → 行内进度条应有红色 dropped 段（非无色 mini_bar）。
+        let mut m = model_full(
+            vec![
+                mk_issue(1, "done in plan", Status::Done, Some(7)),
+                mk_issue(2, "dropped in plan", Status::Dropped, Some(7)),
+            ],
+            vec![(mk_container(7, "tui plan", None, Some(4)), 0)],
+            vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
+        );
+        m.view = View::MilestoneDetail { milestone_id: 4 };
+        let mut terminal = test_backend(80, 20);
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 4, f.area()))
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        let lines = buffer_text(buf);
+        let y = lines
+            .iter()
+            .position(|l| l.contains("#7"))
+            .expect("plan 行");
+        let has_red = (0..buf.area.width).any(|x| buf[(x, y as u16)].fg == Color::Red);
+        assert!(
+            has_red,
+            "plan 行进度条应含 dropped 红色段（复用 progress_bar）"
         );
     }
 }

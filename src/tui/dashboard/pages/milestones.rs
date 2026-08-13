@@ -7,11 +7,9 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::pages::common::{
-    container_status_color, flash_style, flex_col_width, mini_bar,
-};
+use crate::tui::dashboard::pages::common::{container_status_color, flash_style, flex_col_width};
 use crate::tui::dashboard::types::JumpKind;
-use crate::tui::panel::{render_panel, stack};
+use crate::tui::panel::stack;
 use crate::tui::text::truncate;
 
 /// 某 milestone 下 issue 数：返回 (总数, 直属数)。总数 = plan 聚合 issue + 直属 issue。
@@ -100,54 +98,11 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
     frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
 }
 
-/// MilestoneDetail：milestone 自身标题 + 其下 plan 行列表（每行迷你进度 + done/total）。
-pub fn draw_milestone_detail(frame: &mut Frame, m: &DashboardModel, milestone_id: i64, area: Rect) {
-    let title = m
-        .milestones
-        .iter()
-        .find(|(c, _)| c.id == milestone_id)
-        .map(|(c, _)| match &c.version {
-            Some(v) => format!("{} ({v})", c.title),
-            None => c.title.clone(),
-        })
-        .unwrap_or_else(|| format!("#{milestone_id}"));
-
-    let mut lines: Vec<Line> = Vec::new();
-    for (idx, (plan, _)) in m.page_plans().iter().enumerate() {
-        let (done, total) = m.plan_progress(plan.id);
-        let selected = m.selected_idx() == Some(idx);
-        let style = if selected {
-            Style::new().add_modifier(Modifier::REVERSED)
-        } else {
-            Style::new()
-        };
-        let bar = mini_bar(done, total, 20);
-        lines.push(Line::from(vec![
-            Span::styled(format!("#{:<3}", plan.id), style),
-            Span::styled(bar, style),
-            Span::styled(format!(" {done}/{total}  {}", plan.title), style),
-        ]));
-    }
-    if lines.is_empty() {
-        lines.push(Line::from("(no plans in this milestone)"));
-    }
-
-    let footer = format!(
-        "j/k ↑↓ plan · ←/→ page · 1/2/3 tab · Esc back · q quit · Page {}/{}",
-        m.page + 1,
-        m.pages()
-    );
-    let chunks = stack(area, &[Constraint::Min(0), Constraint::Length(1)]);
-    render_panel(frame, chunks[0], &format!("milestone {title}"), lines);
-    frame.render_widget(Paragraph::new(Line::from(footer)), chunks[1]);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::Status;
     use crate::tui::dashboard::pages::tests_common::{
-        buffer_text, cell_fg, mk_container, mk_issue, model_full, test_backend,
+        buffer_text, cell_fg, mk_container, model_full, test_backend,
     };
     use crate::tui::dashboard::types::View;
     use ratatui::style::Color;
@@ -204,26 +159,5 @@ mod tests {
             .find(|l| l.contains("#4"))
             .expect("milestone 行");
         assert!(row.contains('…'), "长 milestone 标题应右侧省略: {row}");
-    }
-
-    #[test]
-    fn draw_milestone_detail_shows_plan_rows_with_progress() {
-        let mut m = model_full(
-            vec![
-                mk_issue(1, "done one", Status::Done, Some(7)),
-                mk_issue(2, "open one", Status::Open, Some(7)),
-            ],
-            vec![(mk_container(7, "tui plan", None, Some(4)), 0)],
-            vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
-        );
-        m.view = View::MilestoneDetail { milestone_id: 4 };
-        let mut terminal = test_backend(70, 10);
-        terminal
-            .draw(|f| draw_milestone_detail(f, &m, 4, f.area()))
-            .unwrap();
-        let text = buffer_text(terminal.backend().buffer()).join("\n");
-        assert!(text.contains("milestone TUI (0.4.0)"), "标题: {text}");
-        assert!(text.contains("tui plan"), "plan 标题: {text}");
-        assert!(text.contains("1/2"), "进度: {text}");
     }
 }

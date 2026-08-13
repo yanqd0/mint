@@ -83,17 +83,6 @@ pub fn kind_abbrev(kind: crate::models::Kind) -> &'static str {
     }
 }
 
-/// 迷你进度条：固定宽度，█ 填充完成比例（milestone/plan 面板每行用），前后 padding。
-pub fn mini_bar(done: usize, total: usize, width: usize) -> String {
-    let body = if total == 0 {
-        "░".repeat(width)
-    } else {
-        let filled = done.saturating_mul(width).checked_div(total).unwrap_or(0);
-        "█".repeat(filled) + &"░".repeat(width - filled)
-    };
-    format!(" {body} ")
-}
-
 /// 计算 Table 弹性列（如 TITLE 的 Min/Fill）实际宽：区内宽 − 边框/内边距(4) − 列间距 − 定宽列合计。
 /// 页面对该列内容预截断（右侧省略），避免长文本溢出/换行。
 pub fn flex_col_width(area: Rect, widths: &[Constraint]) -> u16 {
@@ -376,14 +365,6 @@ mod tests {
         let lines = body_lines_capped(body, 10, 5);
         assert_eq!(lines.len(), 5, "窄宽 wrap 后仍封顶");
         assert!(lines[4].ends_with('…'), "末行应带省略号");
-    }
-
-    #[test]
-    fn mini_bar_fills_by_ratio_with_padding() {
-        assert_eq!(mini_bar(0, 0, 4), " ░░░░ ");
-        assert_eq!(mini_bar(1, 2, 4), " ██░░ ");
-        assert_eq!(mini_bar(2, 2, 4), " ████ ");
-        assert_eq!(mini_bar(0, 2, 4), " ░░░░ ");
     }
 
     #[test]
