@@ -48,6 +48,14 @@ claude-plugin/
 - 超时：≤10s（避免阻塞主流程）
 - `${CLAUDE_PLUGIN_ROOT}` 引用 plugin 根目录（适配任意安装路径）
 
+#### 跨 agent 信号格式契约（plan #39 定案）
+
+- **失败信号标准格式**：`mint: tool <tool> failed — <cmd>`（参考 `inject_signal.py`）。
+  所有 agent 的 hook/插件注入的失败信号必须用此格式，LLM 据此判断是否 `mint add`。
+- **信号只做确定性注入**：是否记录、怎么写标题/正文由主 LLM 用 skill 判断（模糊部分归 LLM）。
+- **上下文注入标准**：`mint list` TSV（表头 + 活跃 top N）——SessionStart 类事件注入此输出。
+- Codex（hooks）与 OpenCode（TS 插件事件流）适配时沿用同一契约，见 roadmap 0.7.0 前置调研。
+
 ### Agent 规范
 
 - Plugin 内不定义 agent（agent 定义放项目 `.claude/agents/`）
