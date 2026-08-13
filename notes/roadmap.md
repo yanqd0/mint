@@ -65,7 +65,7 @@
   - 状态机提示词写入 skill（跳过测试也走 stage、test_cmd 填 `not-tested`）
   - 安装：`claude plugin marketplace add <claude-plugin>` → `claude plugin install mint-faa@mint`（二选一）
 
-> **早期实验**：0.1.0 后已落地 `.claude/skills/mint-dogfood`（项目级 skill）。0.3.0 定案（D24）：不新增 capture/context 命令（用 add/list 替代）；mint-dogfood 本体迁入 `mint-faa-cn` skill，项目级保留软链接；`references/state-machine.md` 即"状态机提示词"先行交付，已复用。
+> **早期实验**：0.1.0 后已落地 `.claude/skills/mint-dogfood`（项目级 skill）。0.3.0 定案（D24）：不新增 capture/context 命令（用 add/list 替代）；mint-dogfood 本体迁入 `mint-faa-cn` skill（项目级软链接后已清理，现以 plugin 形态交付）；`references/state-machine.md` 即"状态机提示词"先行交付，已复用。
 
 > **0.7.0 前置调研**（D24）：Codex = 全局 hooks（PostToolUse 失败启发式 + notify）+ `.agents/skills/` SKILL.md + AGENTS.md + MCP；OpenCode = TS 插件事件流（`message.part.updated` ToolStateError）+ `session.prompt(noReply)` + `$` 调 mint + `.opencode/skills/`（兼容 `.claude/skills/`）。两 agent 的 hook/插件转发信号给 LLM，LLM 用 skill 判断后调 `mint add`——与 Claude 同构。
 
@@ -99,10 +99,10 @@
 **目标**：覆盖 Claude Code 之外的 AI 编程开发者（Codex/OpenCode）；准备 crates.io 正式发布流水线。
 
 **范围**：
-- **Codex**：AGENTS.md 指令 + MCP 接入（#50）
-- **OpenCode**：TS 插件 hooks 转发到 `mint capture`（#51）
+- **Codex**：AGENTS.md 指令 + hooks（PostToolUse 失败启发式）（#50）
+- **OpenCode**：TS 插件事件流转发信号 → LLM 判断 → `mint add`（#51；D24 已收敛 capture→add）
 - 无事件 hooks 时降级为"指令驱动的主动登记"
-- adapter 抽象不变：`capture`/`context` 通用入口
+- adapter 抽象（plan #39）：单一 skill 源 + 宿主识别路由，agent 专属在 `references/agent/`，新增 agent 只需加适配层
 - **发布准备**：GitHub Actions 流水线（test/clippy 门禁 + release build + crates.io publish 准备，独立 plan #36）
 
 **验收**：Codex/OpenCode 会话中可主动 add/list issue；发布流水线就绪。

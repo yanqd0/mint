@@ -159,7 +159,7 @@ hook 事件的统一入口：接收 agent 传来的信号并登记。**0.3.0 定
 
 ### adapter（适配器）
 
-每种 agent 一个适配器，把该 agent 的扩展机制（hooks/指令文件/MCP）接到 mint 通用命令上（add/search/list，均 `--json` 友好）。**0.3.0 定案（D24）**：Claude 以 plugin 形态交付（`claude-plugin/` 私有市场：`mint-faa` en + `mint-faa-cn` 中文，skill 名统一 `mint-faa`，二选一安装；hooks 随 plugin 自动合并）；`.claude/skills/mint-dogfood` 软链接保留中文 skill。Codex（hooks PostToolUse 启发式 + `.agents/skills/` + AGENTS.md）与 OpenCode（TS 插件事件流 + `.opencode/skills/`）调研结论见 roadmap 0.7.0 前置。
+每种 agent 一个适配器，把该 agent 的扩展机制（hooks/指令文件/MCP）接到 mint 通用命令上（add/search/list，均 `--json` 友好）。**0.3.0 定案（D24）**：Claude 以 plugin 形态交付（`claude-plugin/` 私有市场：`mint-faa` en + `mint-faa-cn` 中文，skill 名统一 `mint-faa`，二选一安装；hooks 随 plugin 自动合并）。**0.5.0 多 agent 化（plan #39）**：单一 skill 源 + 索引级分流——SKILL.md 宿主识别路由，agent 专属提示词在 `references/agent/{claude,codex,opencode}.md` 按需读取，共享层（state-machine/flow/templates）agent 无关。Codex（hooks PostToolUse 启发式 + `.agents/skills/` + AGENTS.md）与 OpenCode（TS 插件事件流 + `.opencode/skills/`）接入机制见 roadmap 0.7.0 前置调研。
 
 ### dedup（去重）
 
