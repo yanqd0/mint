@@ -69,10 +69,13 @@ pub fn cmd_add(
             status,
             pid,
             test_cmd,
-            a.priority
+            a.priority,
+            crate::db::machine_id(),
         ],
     )?;
     let id = tx.last_insert_rowid();
+    // 补 uid：machine_id:local_id（跨机合并幂等键）
+    tx.execute(db::ISSUE_SET_UID, rusqlite::params![id])?;
 
     let specs = label::parse_specs(&a.label);
     if !specs.is_empty() {

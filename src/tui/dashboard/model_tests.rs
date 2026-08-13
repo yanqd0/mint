@@ -24,6 +24,8 @@ fn mk_issue(id: i64, status: Status, plan_id: Option<i64>, updated: &str) -> Iss
         dropped_reason: None,
         last_commit_id: None,
         plan_id,
+        machine_id: None,
+        uid: None,
         hit_count: 0,
         labels: vec![],
         links: vec![],

@@ -49,6 +49,14 @@ created_at  TEXT NOT NULL DEFAULT (datetime('now')),
 updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE machines (
+machine_id  TEXT PRIMARY KEY,
+hostname    TEXT NOT NULL,
+user        TEXT NOT NULL,
+created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE issues (
 id          INTEGER PRIMARY KEY AUTOINCREMENT,
 title       TEXT NOT NULL,
@@ -64,6 +72,8 @@ test_cmd    TEXT,
 dropped_reason TEXT,
 last_commit_id TEXT,
 plan_id     INTEGER REFERENCES plans(id),
+machine_id  TEXT REFERENCES machines(machine_id),
+uid         TEXT,
 created_at  TEXT NOT NULL DEFAULT (datetime('now')),
 updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );

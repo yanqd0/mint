@@ -20,6 +20,7 @@ pub const ISSUE_EDIT: &str = include_str!("queries/issue_edit.sql");
 pub const ISSUE_EXISTS: &str = include_str!("queries/issue_exists.sql");
 pub const ISSUE_SELECT_PLAN_ID: &str = include_str!("queries/issue_select_plan_id.sql");
 pub const ISSUE_SET_PLAN: &str = include_str!("queries/issue_set_plan.sql");
+pub const ISSUE_SET_UID: &str = include_str!("queries/issue_set_uid.sql");
 pub const ISSUE_UNSET_PLAN: &str = include_str!("queries/issue_unset_plan.sql");
 
 pub const ISSUE_LINK_EXISTS: &str = include_str!("queries/issue_link_exists.sql");
@@ -29,6 +30,7 @@ pub const ISSUE_LINKS_FOR: &str = include_str!("queries/issue_links_for.sql");
 pub const ISSUE_LINKS_FOR_ALL: &str = include_str!("queries/issue_links_for_all.sql");
 pub const ISSUE_LABELS_FOR_ALL: &str = include_str!("queries/issue_labels_for_all.sql");
 
+pub const MACHINE_UPSERT: &str = include_str!("queries/machine_upsert.sql");
 pub const PROJECT_INSERT: &str = include_str!("queries/project_insert.sql");
 pub const PROJECT_SELECT_ID: &str = include_str!("queries/project_select_id.sql");
 pub const PROJECT_SELECT: &str = include_str!("queries/project_select.sql");

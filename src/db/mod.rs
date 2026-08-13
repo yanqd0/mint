@@ -44,7 +44,36 @@ pub fn open(path: &Path) -> Result<rusqlite::Connection, Error> {
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
     migrate(&conn)?;
+    register_machine(&conn)?;
     Ok(conn)
+}
+
+/// 本机 machine_id：MINT_MACHINE_ID env 优先，否则 hostname+user 哈希（mach-<hex>）。
+/// DefaultHasher 固定 key（确定性），同 hostname+user 得同 id；改 hostname 会变
+/// （接受；CI/容器用 MINT_MACHINE_ID 显式固定）。
+pub fn machine_id() -> String {
+    if let Some(mid) = std::env::var("MINT_MACHINE_ID")
+        .ok()
+        .filter(|m| !m.trim().is_empty())
+    {
+        return mid.trim().to_string();
+    }
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    let hostname = whoami::fallible::hostname().unwrap_or_default();
+    format!("{hostname}|{}", whoami::username()).hash(&mut h);
+    format!("mach-{:06x}", h.finish() & 0xff_ffff)
+}
+
+/// 注册本机 machine 行（如实记录 hostname/user；已存在则更新反映当前）。
+fn register_machine(conn: &rusqlite::Connection) -> Result<(), Error> {
+    let hostname = whoami::fallible::hostname().unwrap_or_default();
+    conn.execute(
+        MACHINE_UPSERT,
+        rusqlite::params![machine_id(), hostname, whoami::username()],
+    )?;
+    Ok(())
 }
 
 /// 测试辅助：对内存连接执行迁移。
@@ -109,7 +138,7 @@ mod tests {
             .unwrap()
             .map(|r| r.unwrap())
             .collect();
-        assert_eq!(tables.len(), 9);
+        assert_eq!(tables.len(), 10);
         for t in [
             "projects",
             "issues",
@@ -117,6 +146,7 @@ mod tests {
             "issue_labels",
             "milestones",
             "plans",
+            "machines",
             "milestone_direct_issues",
             "issue_links",
             "issues_fts",
@@ -216,5 +246,40 @@ mod tests {
             )
             .unwrap_err();
         assert!(err.to_string().contains("invalid kind"), "{err}");
+    }
+
+    /// machine_id：同环境多次一致；MINT_MACHINE_ID env 覆盖。
+    #[test]
+    fn machine_id_stable_and_env_override() {
+        let a = super::machine_id();
+        let b = super::machine_id();
+        assert_eq!(a, b, "同环境应稳定");
+        // edition 2024：set_var/remove_var 为 unsafe
+        unsafe { std::env::set_var("MINT_MACHINE_ID", "mach-test") };
+        assert_eq!(super::machine_id(), "mach-test");
+        unsafe { std::env::remove_var("MINT_MACHINE_ID") };
+        assert_eq!(super::machine_id(), a, "移除 env 后回退机器特征");
+    }
+
+    /// open/register 后 machines 表注册本机行（hostname/user 如实记录）。
+    #[test]
+    fn register_machine_upserts_row() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        register_machine(&conn).unwrap();
+        let (mid, host, user): (String, String, String) = conn
+            .query_row("SELECT machine_id, hostname, user FROM machines", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .unwrap();
+        assert_eq!(mid, machine_id());
+        assert!(!host.is_empty(), "hostname 应如实记录");
+        assert!(!user.is_empty(), "user 应如实记录");
+        // 幂等：再次注册不新增行
+        register_machine(&conn).unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM machines", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1, "machines 应只有本机一行");
     }
 }

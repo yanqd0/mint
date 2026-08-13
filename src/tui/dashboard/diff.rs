@@ -213,6 +213,8 @@ mod tests {
             dropped_reason: None,
             last_commit_id: None,
             plan_id: None,
+            machine_id: None,
+            uid: None,
             hit_count: 0,
             labels: vec![],
             links: vec![],

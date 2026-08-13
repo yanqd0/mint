@@ -1263,7 +1263,8 @@ fn st_list_on_seeded_db_perf() {
                     "open",
                     pid,
                     None::<String>,
-                    3i64
+                    3i64,
+                    mint_faa::db::machine_id(),
                 ],
             )
             .unwrap();

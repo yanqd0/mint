@@ -131,11 +131,13 @@ pub(crate) fn issue_from_row(r: &rusqlite::Row) -> rusqlite::Result<Issue> {
         dropped_reason: r.get(9)?,
         last_commit_id: r.get(10)?,
         plan_id: r.get(11)?,
-        hit_count: r.get(12)?,
+        machine_id: r.get(12)?,
+        uid: r.get(13)?,
+        hit_count: r.get(14)?,
         labels: Vec::new(),
         links: Vec::new(),
-        created_at: r.get(13)?,
-        updated_at: r.get(14)?,
+        created_at: r.get(15)?,
+        updated_at: r.get(16)?,
     })
 }
 

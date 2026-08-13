@@ -127,6 +127,8 @@ pub struct Issue {
     pub dropped_reason: Option<String>,
     pub last_commit_id: Option<String>,
     pub plan_id: Option<i64>,
+    pub machine_id: Option<String>,
+    pub uid: Option<String>,
     pub hit_count: i64,
     pub labels: Vec<String>,
     pub links: Vec<Link>,
