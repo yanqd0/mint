@@ -38,6 +38,7 @@ claude-plugin/
   - `allowed-tools`：精准声明所需工具权限
 - 正文：Markdown 格式，含执行流程、接管模式、常用命令示例、约束
 - 详细流程拆到 `references/` 下，SKILL.md 只保留引用映射表
+- **共享 vs agent 专属判定**：所有 agent 通用 → 共享层 `references/`；仅某 agent 适用 → `references/agent/<name>.md`（SKILL.md 宿主识别表路由）。内容不漂移回共享层；CN/EN 双版同步纪律沿用
 
 ### Hook 规范
 

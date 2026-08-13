@@ -2,7 +2,7 @@
 
 > 标题/body 模板：`title-templates/issue.md + body-templates/5.md`
 
-触发：收到 code-reviewer / security-auditor / tester 报告。
+触发：收到审查/审计/测试报告（Claude Code 为 code-reviewer / security-auditor / tester）。
 
 ## 步骤
 

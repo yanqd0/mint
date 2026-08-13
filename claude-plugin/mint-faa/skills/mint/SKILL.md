@@ -6,12 +6,23 @@ description: >-
   plans (milestone/milestone/sprint). When called without arguments, takes over
   the session and recommends next steps. Trigger words: issue bug problem
   requirement todo leftover review plan milestone milestone sprint.
-allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
+allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
 ---
 
 Manage development issues with the mint CLI: **parse intent → select flow (reference) → execute mint command sequence → verify**.
 
-Accepts an optional positional `<description>` argument summarizing intent. When called without arguments, enters **takeover mode** (recommends next development steps). Use `AskUserQuestion` when the intent is ambiguous.
+Accepts an optional positional `<description>` argument summarizing intent. When called without arguments, enters **takeover mode** (recommends next development steps). Use **interactive clarification** when the intent is ambiguous (Claude Code: see `references/agent/claude.md`).
+
+## Host Identification (first step, do once)
+
+Before any flow, determine the current host agent and `Read` **only** the matching dedicated file:
+
+| Host | Identification signal (probe in order) | Dedicated file |
+|---|---|---|
+| Claude Code | `AskUserQuestion` tool present, or env `CLAUDE_PLUGIN_ROOT` | `references/agent/claude.md` |
+| Codex | env `CODEX_*` and no AskUserQuestion | `references/agent/codex.md` |
+| OpenCode | env `OPENCODE_*` and no AskUserQuestion | `references/agent/opencode.md` |
+| Unknown | none of the above | default `references/agent/claude.md` |
 
 ## Execution Flow
 
@@ -34,16 +45,16 @@ Accepts an optional positional `<description>` argument summarizing intent. When
 
 ## During Implementation (MANDATORY — must execute for every code change)
 
-> The rules below MUST NOT be skipped due to CC plan mode or any other workflow step. Skipping means "not taken over" — the next session MUST backfill.
+> The rules below MUST NOT be skipped due to the host plan mechanism or any other workflow step. Skipping means "not taken over" — the next session MUST backfill.
 
-0. **After CC plan mode approval, determine whether this work belongs to an existing mint plan**:
+0. **After host plan mechanism approval, determine whether this work belongs to an existing mint plan**:
    - **Belongs** to an existing plan → `mint plan attach <plan_id> <issue_id>`
    - **Does NOT belong** to any existing plan → first action MUST be `mint plan create` (under a milestone), then create issues and attach
-   - **NEVER write code without a mint plan**: every CC plan must have a corresponding mint plan
-1. **After CC plan mode approval, the first action is NOT writing code**:
+   - **NEVER write code without a mint plan**: the host plan mechanism must have a corresponding mint plan
+1. **After host plan mechanism approval, the first action is NOT writing code**:
    - Attach the work to a mint plan (step 0 guarantees the plan exists)
    - Create issues for each independent phase (kind=requirement, label `dev-clean`), attach to mint plan via `mint plan attach`
-   - **Schedule on attach**: `mint plan plan <plan_id>` for all open issues of that plan (or `mint issue state plan <id>` one by one; when CC leaves plan mode and enters execution/auto mode, all issues are uniformly `planned` — no open issues left under a plan)
+   - **Schedule on attach**: `mint plan plan <plan_id>` for all open issues of that plan (or `mint issue state plan <id>` one by one; when the host leaves plan mode and enters execution/auto mode, all issues are uniformly `planned` — no open issues left under a plan)
 2. **For each logical change (one or more commits)**:
    - `mint issue state plan <id>` (schedule; for a whole plan see step 1 "schedule on attach")
    - **Pre-edit gate (mandatory)**: before editing code for an issue, you MUST `mint issue state start <id>` (planned → dev); the issue must stay `dev` while its code is being changed (editing while open/planned = workflow violation)
@@ -120,13 +131,13 @@ Follow templates for issue/plan/milestone title & body, **record only what the L
 ## Constraints
 
 - **Dedup built-in**: `add` performs same-project normalized-title fuzzy matching; duplicates auto-merge (bumping `hit_count+1`).
-- **mint manages issues (actionable todos), mem-lite manages memories (facts/lessons)** — do not mix; `issue#N` ↔ `memory#N` linkage: see `references/mem-lite.md`.
+- **Memory division of labor**: mint manages issues (actionable todos); the memory layer (facts/lessons) is optionally integrated per host — Claude Code integrates mem-lite, contract in `references/agent/claude.md`; other hosts may ignore the memory layer.
 - **Completion requires `state commit <id> --sha <SHA>`** (defaults to HEAD); `close` requires `--test-cmd` (use `not-tested` if tests were skipped).
 - **Plan vs. single-item**: cross-module/multi-step → create a plan/sprint + split issues; single small fix/review finding → just record an issue.
 - **Mount rules** (`references/flow-conditions.md`): associate with plan → no plan? mount milestone → neither (standalone); issue is either-or (can't directly mount a milestone after belonging to a plan).
 - **link**: introduced by another change → `link create <issue> solves <introducing-requirement>`.
 - **delete is dangerous/irreversible**: avoid by default, narrow scenarios only + explicit user confirmation; prefer `state drop` for issues.
 - **Clean up verification artifacts**: temporary issues/plans/milestones created during verification should be `state drop`ped (with reason) to avoid noise.
-- **Labels (attach timing & naming)**: documentation/doc changes → `docs`; CI/build → `CI`; different projects tag different **modules**; **participants** (who created/resolved/engaged, agent or person) → `agent:xxx` prefix (e.g. `agent:claude`, filter via `--label`). Labels must be **English** (unless the user explicitly asks for a non-English word), **at most 5 (regardless of type — participants and category labels count together)**, as short as possible (a word / common abbreviation), lowercase by default (all-caps when it's an abbreviation, not a word); a new label may get a `description` (self-explanatory, one sentence max); **color is auto-generated** (max contrast vs existing), no need to specify manually.
+- **Labels (attach timing & naming)**: documentation/doc changes → `docs`; CI/build → `CI`; different projects tag different **modules**; **participants** (who created/resolved/engaged, agent or person) → `agent:xxx` prefix (e.g. `agent:<your-host>`, filter via `--label`). Labels must be **English** (unless the user explicitly asks for a non-English word), **at most 5 (regardless of type — participants and category labels count together)**, as short as possible (a word / common abbreviation), lowercase by default (all-caps when it's an abbreviation, not a word); a new label may get a `description` (self-explanatory, one sentence max); **color is auto-generated** (max contrast vs existing), no need to specify manually.
 - **No new version labels**: versions are expressed via plan→milestone; existing version labels (0.2.0-0.7.0) are kept, but **adding version labels is forbidden** going forward.
 - **Don't clean up labels proactively**: don't delete/clean labels unless the user explicitly asks.

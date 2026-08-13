@@ -17,5 +17,5 @@
    - 同层按 priority 升序（P0→P3）；
    - 未排期且未关闭的 bug（problem）优先；
    - 当前版本 milestone 下未完成的核心项。
-   用 AskUserQuestion 或直接陈述建议，供用户确认下一步。
+   用交互式澄清工具或直接陈述建议，供用户确认下一步。
 5. **声明接管**：后续 session 直接描述意图即可，skill 自动走 mint 流程。

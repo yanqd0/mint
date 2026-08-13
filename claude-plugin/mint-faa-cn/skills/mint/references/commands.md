@@ -91,10 +91,10 @@ blocked_by ↔ blocks 互逆，库中归一化为 blocks 存储，查询时自�
 ```bash
 mint label list --all                     # 列出全部 label（含关联数 + 颜色）
 mint issue label attach 42 docs           # 给 issue 加 label（不存在自动注册 + 自动配色）
-mint issue label attach 42 agent:claude   # 参与者：agent: 前缀（--label 过滤可查参与者）
+mint issue label attach 42 agent:<宿主>   # 参与者：agent: 前缀（--label 过滤可查参与者）
 mint issue label detach 42 docs           # 从 issue 摘除 label（不删 label 本体）
 mint label set docs --color "#aabbcc"     # 指定/调整颜色（默认自动配色，按需才用）
-mint list --label agent:claude            # 查某参与者相关的 issue
+mint list --label agent:<宿主>            # 查某参与者相关的 issue
 ```
 
 ## plan / milestone（sprint / milestone）

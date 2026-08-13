@@ -5,13 +5,24 @@ description: >-
   审查发现/计划/里程碑/milestone/sprint 等值得记录的内容时自动触发；无参数调用时
   接管 session，推测下一步开发计划。触发词：issue bug problem requirement todo
   leftover review plan milestone milestone sprint 登记 记录 排期 修复 需求 问题 遗留 审查 计划 里程碑 下一步。
-allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
+allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
 ---
 
 用 mint 管理开发 issue 与流程：**解析意图（描述）→ 选择流程（reference）→ 执行 mint 命令序列 → 验证**。
 
 可接收位置参数 `<description>`：一句话描述意图。未传参时进入**接管模式**（推测下一步开发计划）。
-描述不明确时用 `AskUserQuestion` 澄清。
+描述不明确时用**交互式澄清**（Claude Code 见 `references/agent/claude.md`）。
+
+## 宿主识别（第一步，只做一次）
+
+执行任何流程前，先确定当前宿主 agent，`Read` **且只读**命中行的专属文件：
+
+| 宿主 | 识别信号（按序探测） | 专属文件 |
+|---|---|---|
+| Claude Code | 存在 `AskUserQuestion` 工具，或 env `CLAUDE_PLUGIN_ROOT` | `references/agent/claude.md` |
+| Codex | env `CODEX_*` 且无 AskUserQuestion | `references/agent/codex.md` |
+| OpenCode | env `OPENCODE_*` 且无 AskUserQuestion | `references/agent/opencode.md` |
+| 未知 | 以上皆否 | 默认 `references/agent/claude.md` |
 
 ## 执行流程
 
@@ -34,16 +45,16 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read AskUserQuestion
 
 ## 实现中（强制性——每次修改代码必须执行）
 
-> 以下规则不因 CC plan mode / 任何其他流程步骤而跳过。违反视为"未接管"，下次 session 必须补登记。
+> 以下规则不因宿主 plan 机制 / 任何其他流程步骤而跳过。违反视为"未接管"，下次 session 必须补登记。
 
-0. **CC plan mode 审批通过后，判断该工作是否属于已有 mint plan**：
+0. **宿主 plan 机制审批通过后，判断该工作是否属于已有 mint plan**：
    - **属于**已有 plan → `mint plan attach <plan_id> <issue_id>` 挂入
    - **不属于**任何已有 plan → 第一步必须是 `mint plan create` 新建 plan（挂 milestone），再建 issue 并 attach
-   - **绝不允许无 plan 直接写代码**：CC plan 必须有对应的 mint plan
-1. **CC plan mode 审批通过后，第一件事不是写代码**：
-   - 将 CC plan 对应的 work 挂入 mint plan（step 0 已保证 plan 存在）
+   - **绝不允许无 plan 直接写代码**：宿主 plan 机制必须有对应的 mint plan
+1. **宿主 plan 机制审批通过后，第一件事不是写代码**：
+   - 将宿主 plan 对应的 work 挂入 mint plan（step 0 已保证 plan 存在）
    - 为每个独立 phase 建 issue（kind=requirement，label `dev-clean`），`mint plan attach` 挂入
-   - **挂入即排期锁定**：对该 plan 下全部 open issue `mint plan plan <plan_id>`（或逐个 `mint issue state plan <id>`；CC 退出 plan 模式、进入执行/auto 模式时统一 planned，plan 的 issue 不留 open）
+   - **挂入即排期锁定**：对该 plan 下全部 open issue `mint plan plan <plan_id>`（或逐个 `mint issue state plan <id>`；宿主退出 plan 模式、进入执行/auto 模式时统一 planned，plan 的 issue 不留 open）
 2. **每完成一个逻辑变更（对应一次或多次 commit）**：
    - `mint issue state plan <id>`（排入计划；同 plan 批量排期见 step 1「挂入即排期锁定」）
    - **改码前门禁（强制）**：修改某 issue 对应代码前必须先 `mint issue state start <id>`（planned → dev）；改动期间该 issue 必须处于 `dev`（open/planned 直接改码 = 流程违反）
@@ -120,13 +131,13 @@ mint plan attach 12 42
 ## 约束
 
 - **去重已内置**：`add` 对同项目非终态 issue 做标题归一化+模糊匹配，重复自动合并（`hit_count+1`）。
-- **mint 管 issue（可执行待办），mem-lite 管记忆（事实/教训）**——不混；`issue#N` ↔ `memory#N` 关联见 `references/mem-lite.md`。
+- **记忆分工**：mint 管 issue（可执行待办）；记忆层（事实/教训）按宿主可选接入——Claude Code 集成 mem-lite，契约见 `references/agent/claude.md`；其它宿主可忽略记忆层。
 - **开发完成必须 `state commit <id> --sha <SHA>`**（默认读 HEAD）；`close` 必填 `--test-cmd`（无测试填 `not-tested`）。
 - **方案 vs 单点区分**：跨模块/多步骤方案 → 建 plan/sprint + 拆 issues；单点小改动/审查发现/观察项 → 只记 issue。
 - **挂载规则**（`references/flow-conditions.md`）：关联 plan → 无 plan 挂 milestone → 不挂（独立）；issue 二选一（属 plan 后不能直接挂 milestone）。
 - **link**：被别的修改引入 → `link create <issue> solves <引入它的需求>`。
 - **delete 是危险/不可逆操作**：默认不使用，极窄场景 + 用户显式确认；issue 优先 `state drop`。
 - **验证产物清理**：验证性操作产生的临时 issue/plan/milestone 验证后 `state drop` 清理（附 reason），不残留噪音。
-- **label（attach 时机与命名）**：文档/文档类修改 → `docs`；CI/构建 → `CI`；不同项目对**模块**打不同 label；**参与者**（谁创建/解决/参与，agent 或人）→ `agent:xxx` 前缀（如 `agent:claude`，`--label` 过滤可查参与者）。label **必须英文**（除非用户明确要求打非英文单词）、**上限 5 个（不区分种类，参与者与分类一并计入）**、尽量短（单词/常用简写）、默认全小写（非单词的缩写全大写）；新 label 可补 `description`（尽量自解释、一句话以内）；**颜色自动生成**（与既有色差大），无需手动指定。
+- **label（attach 时机与命名）**：文档/文档类修改 → `docs`；CI/构建 → `CI`；不同项目对**模块**打不同 label；**参与者**（谁创建/解决/参与，agent 或人）→ `agent:xxx` 前缀（如 `agent:<你的宿主名>`，`--label` 过滤可查参与者）。label **必须英文**（除非用户明确要求打非英文单词）、**上限 5 个（不区分种类，参与者与分类一并计入）**、尽量短（单词/常用简写）、默认全小写（非单词的缩写全大写）；新 label 可补 `description`（尽量自解释、一句话以内）；**颜色自动生成**（与既有色差大），无需手动指定。
 - **版本 label 不新增**：版本经 plan→milestone 表达；存量版本 label（0.2.0-0.7.0）保留不删，后续**禁止新增版本 label**。
 - **不主动清理 label**：不删/不清理 label，除非用户明确要求。

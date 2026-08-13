@@ -19,5 +19,5 @@ Goal: let the user know immediately what to develop next — mint replaces initi
    - Same level by priority ascending (P0→P3);
    - Unclosed bugs with no schedule (problem) prioritized;
    - Core items under the current version milestone that are incomplete.
-   Use AskUserQuestion or state recommendations directly for user confirmation.
+   Use an interactive clarification tool or state recommendations directly for user confirmation.
 5. **Declare takeover**: inform that subsequent sessions can describe intent directly; the skill auto-follows the mint flow.

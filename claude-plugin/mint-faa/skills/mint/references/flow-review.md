@@ -2,7 +2,7 @@
 
 > Title/body templates: `title-templates/issue.md + body-templates/5.md`
 
-Trigger: receiving a report from code-reviewer / security-auditor / tester.
+Trigger: receiving a review/audit/test report (Claude Code: code-reviewer / security-auditor / tester).
 
 ## Steps
 
