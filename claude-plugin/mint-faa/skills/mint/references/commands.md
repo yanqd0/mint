@@ -89,9 +89,12 @@ blocked_by ↔ blocks are reciprocal; stored as `blocks` internally, reverse-der
 ## label
 
 ```bash
-mint label list --all               # list all labels (with issue counts)
-mint issue label attach 42 docs     # attach a label to an issue (auto-registers new)
-mint issue label detach 42 docs     # detach a label from an issue (keeps the label)
+mint label list --all                     # list all labels (with issue counts + color)
+mint issue label attach 42 docs           # attach a label (auto-registers + auto-color)
+mint issue label attach 42 agent:claude   # participant: agent: prefix (filter via --label)
+mint issue label detach 42 docs           # detach a label (keeps the label itself)
+mint label set docs --color "#aabbcc"     # set/adjust color (auto by default; on demand)
+mint list --label agent:claude            # list issues involving a participant
 ```
 
 ## plan / milestone (sprint / milestone)

@@ -127,6 +127,6 @@ mint plan attach 12 42
 - **link**：被别的修改引入 → `link create <issue> solves <引入它的需求>`。
 - **delete 是危险/不可逆操作**：默认不使用，极窄场景 + 用户显式确认；issue 优先 `state drop`。
 - **验证产物清理**：验证性操作产生的临时 issue/plan/milestone 验证后 `state drop` 清理（附 reason），不残留噪音。
-- **label（attach 时机与命名）**：文档/文档类修改 → `docs`；CI/构建 → `CI`；不同项目对**模块**打不同 label。label **必须英文**（除非用户明确要求打非英文单词）、**最多 3 个**、尽量短（单词/常用简写）、默认全小写（非单词的缩写全大写）；新 label 可补 `description`（尽量自解释、一句话以内）。
+- **label（attach 时机与命名）**：文档/文档类修改 → `docs`；CI/构建 → `CI`；不同项目对**模块**打不同 label；**参与者**（谁创建/解决/参与，agent 或人）→ `agent:xxx` 前缀（如 `agent:claude`，`--label` 过滤可查参与者）。label **必须英文**（除非用户明确要求打非英文单词）、**上限 5 个（不区分种类，参与者与分类一并计入）**、尽量短（单词/常用简写）、默认全小写（非单词的缩写全大写）；新 label 可补 `description`（尽量自解释、一句话以内）；**颜色自动生成**（与既有色差大），无需手动指定。
 - **版本 label 不新增**：版本经 plan→milestone 表达；存量版本 label（0.2.0-0.7.0）保留不删，后续**禁止新增版本 label**。
 - **不主动清理 label**：不删/不清理 label，除非用户明确要求。
