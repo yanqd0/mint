@@ -1,0 +1,1 @@
+../../opencode-adapter/plugin.ts
