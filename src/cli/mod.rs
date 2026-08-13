@@ -7,7 +7,7 @@ use rusqlite::Connection;
 
 use crate::container::{self, ContainerKind};
 use crate::error::Error;
-use crate::models::ContainerStatus;
+use crate::models::{Container, ContainerStatus};
 use crate::output;
 use list_common::{containers, paged_json, paginate, print_page_footer};
 
@@ -28,6 +28,9 @@ pub struct ListContainersArgs {
     /// Show all statuses (including done)
     #[arg(long = "all-states", short = 'a')]
     pub all: bool,
+    /// Filter by text (title/body/status/#id, case-insensitive substring)
+    #[arg(long)]
+    pub search: Option<String>,
     /// Page number (1-based)
     #[arg(long)]
     pub page: Option<u32>,
@@ -467,6 +470,16 @@ impl Cli {
 
 // ── 共享 helpers（plan/milestone 共用）───────────────────────────────
 
+/// 容器（plan/milestone）匹配 --search：title/body/status/#id，大小写不敏感子串。
+fn container_matches_search(c: &Container, q: &str) -> bool {
+    let q = q.to_lowercase();
+    let contains = |hay: &str| hay.to_lowercase().contains(&q);
+    contains(&c.title)
+        || c.body.as_deref().is_some_and(contains)
+        || format!("#{}", c.id).contains(&q)
+        || c.status.as_str().contains(&q)
+}
+
 /// 容器 list：默认只显非 done，--all/-a 全列。
 pub(crate) fn cmd_container_list(
     conn: &Connection,
@@ -474,7 +487,7 @@ pub(crate) fn cmd_container_list(
     kind: ContainerKind,
     a: &ListContainersArgs,
 ) -> Result<(), Error> {
-    let items = container::list(conn, kind, a.all)?;
+    let mut items = container::list(conn, kind, a.all)?;
     if a.tui {
         // list --tui 归一：复用 dashboard 列表页（带 --all-states 筛选）。
         let filter = crate::tui::dashboard::types::IssueFilter {
@@ -488,6 +501,10 @@ pub(crate) fn cmd_container_list(
             ContainerKind::Plan => crate::tui::dashboard::types::View::Plans,
         };
         return crate::tui::run_dashboard_view(conn, project, view, Some(filter));
+    }
+    // --search 文本过滤（title/body/status/#id，大小写不敏感子串）。
+    if let Some(q) = a.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
+        items.retain(|(c, _)| container_matches_search(c, q));
     }
     let (items, total, page) = paginate(items, a.page, a.page_size);
     if a.json {

@@ -2027,3 +2027,106 @@ fn st_issue_list_search_matches_status_kind() {
     let s2 = String::from_utf8_lossy(&out2);
     assert!(s2.contains("open"), "status=open 命中: {s2}");
 }
+
+/// plan list --search：按 title 过滤。
+#[test]
+fn st_plan_list_search_filters_title() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["plan", "create", "alpha target", "--json"]);
+    run_json(&db, &["plan", "create", "beta other", "--json"]);
+    let out = mint(&db)
+        .args(["plan", "list", "--search", "target"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("alpha target"), "应含命中行: {s}");
+    assert!(!s.contains("beta other"), "不应含未命中行: {s}");
+}
+
+/// plan list --search 按 status/#id 匹配。
+#[test]
+fn st_plan_list_search_matches_status_id() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["milestone", "create", "m", "--version", "0.1.0", "--json"],
+    );
+    run_json(&db, &["plan", "create", "p", "--milestone", "1", "--json"]);
+    // status=running（空 plan 默认 open；attach issue 后推进）
+    let iid = add_issue(&db, "x");
+    run_json(&db, &["plan", "attach", "1", &iid.to_string(), "--json"]);
+    run_json(&db, &["issue", "state", "plan", &iid.to_string(), "--json"]);
+    // status=running（issue planned → plan running）
+    let out = mint(&db)
+        .args(["plan", "list", "--search", "running"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("p"), "status=running 命中: {s}");
+    // #id
+    let out2 = mint(&db)
+        .args(["plan", "list", "--search", "#1"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s2 = String::from_utf8_lossy(&out2);
+    assert!(s2.contains("p"), "#1 命中: {s2}");
+}
+
+/// plan list --search --json 与 TSV 内容一致。
+#[test]
+fn st_plan_list_search_json_same_content() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["plan", "create", "alpha target", "--json"]);
+    run_json(&db, &["plan", "create", "beta other", "--json"]);
+    let v = run_json(&db, &["plan", "list", "--search", "target", "--json"]);
+    let items = v["items"].as_array().expect("items 数组");
+    assert_eq!(items.len(), 1, "json 过滤 1 条");
+    assert_eq!(items[0]["title"], "alpha target");
+}
+
+/// milestone list --search：同样支持。
+#[test]
+fn st_milestone_list_search_filters() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &[
+            "milestone",
+            "create",
+            "alpha ms",
+            "--version",
+            "0.1.0",
+            "--json",
+        ],
+    );
+    run_json(
+        &db,
+        &[
+            "milestone",
+            "create",
+            "beta ms",
+            "--version",
+            "0.2.0",
+            "--json",
+        ],
+    );
+    let out = mint(&db)
+        .args(["milestone", "list", "--search", "alpha"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("alpha ms"), "应含命中行: {s}");
+    assert!(!s.contains("beta ms"), "不应含未命中行: {s}");
+}
