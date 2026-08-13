@@ -697,7 +697,11 @@ fn milestone_detail_plans_segment_clamps_on_shorter_new_page() {
     assert_eq!(m.plans_page, 1);
     assert_eq!(m.selected, 2, "plans 段按新页长夹取，不流入 issues 段");
     m.handle_key(k(KeyCode::Enter));
-    assert_eq!(m.view, View::PlanDetail { plan_id: 12 }, "仍停 plans 段，Enter 进 plan");
+    assert_eq!(
+        m.view,
+        View::PlanDetail { plan_id: 12 },
+        "仍停 plans 段，Enter 进 plan"
+    );
 }
 
 /// #242：issues 段翻页保持相对行；翻回保持。
