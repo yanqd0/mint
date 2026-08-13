@@ -256,6 +256,17 @@ fn st_state_batch_commit_mixed_task_skips() {
     assert_eq!(vt["status"], "test", "task 保持 test（跳过 commit）");
 }
 
+/// add 后 issue 自动生成 uid = machine_id:local_id（#232）。
+#[test]
+fn st_issue_uid_generated() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "uid test");
+    let v = run_json(&db, &["show", &id.to_string(), "--json"]);
+    let uid = v["uid"].as_str().unwrap_or_default();
+    assert!(uid.starts_with("mach-"), "uid 应 mach- 前缀: {uid}");
+    assert!(uid.ends_with(&format!(":{id}")), "uid 应含本地 id: {uid}");
+}
+
 /// issue label attach/detach：增删 label 关联 + JSON 输出一致性（#226）。
 #[test]
 fn st_issue_label_attach_detach() {
@@ -1678,14 +1689,14 @@ fn st_delete_milestone_detaches() {
 
 /// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=1（已合并 001-005）。
 #[test]
-fn st_empty_db_initialized_v1() {
+fn st_empty_db_initialized_v2() {
     let (_dir, db) = empty_db();
     run_json(&db, &["list", "--json"]); // 首次运行触发 migrate
     let conn = mint_faa::db::open(std::path::Path::new(&db)).unwrap();
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 1);
+    assert_eq!(version, 2);
 }
 
 /// get/show 裸值输出净化终端控制字符（防转义注入回归，#196）。

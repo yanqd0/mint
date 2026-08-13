@@ -4,6 +4,7 @@
 //! 动态查询用参数化模板（`?N IS NULL OR ...`），禁止字符串拼接 WHERE。
 
 pub const MIGRATION_001: &str = include_str!("migrations/001_init.sql");
+pub const MIGRATION_002: &str = include_str!("migrations/002_multi_field.sql");
 
 pub const ISSUE_INSERT: &str = include_str!("queries/issue_insert.sql");
 pub const ISSUE_LIST: &str = include_str!("queries/issue_list.sql");
@@ -31,6 +32,7 @@ pub const ISSUE_LINKS_FOR_ALL: &str = include_str!("queries/issue_links_for_all.
 pub const ISSUE_LABELS_FOR_ALL: &str = include_str!("queries/issue_labels_for_all.sql");
 
 pub const MACHINE_UPSERT: &str = include_str!("queries/machine_upsert.sql");
+pub const MACHINE_BACKFILL_UID: &str = include_str!("queries/machine_backfill_uid.sql");
 pub const PROJECT_INSERT: &str = include_str!("queries/project_insert.sql");
 pub const PROJECT_SELECT_ID: &str = include_str!("queries/project_select_id.sql");
 pub const PROJECT_SELECT: &str = include_str!("queries/project_select.sql");

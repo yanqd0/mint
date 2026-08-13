@@ -25,11 +25,16 @@ pub fn parse_specs(raw: &[String]) -> Vec<(String, Option<String>, Option<String
                 [name, desc, color]
                     if !name.is_empty() && !desc.is_empty() && !color.is_empty() =>
                 {
-                    Some((
-                        (*name).to_string(),
-                        Some((*desc).to_string()),
-                        Some((*color).to_string()),
-                    ))
+                    if is_hex_color(color) {
+                        Some((
+                            (*name).to_string(),
+                            Some((*desc).to_string()),
+                            Some((*color).to_string()),
+                        ))
+                    } else {
+                        // 描述含冒号（如 needs:testing）：非 hex 的第三段并入 desc，不误当 color
+                        Some(((*name).to_string(), Some(format!("{desc}:{color}")), None))
+                    }
                 }
                 _ => None,
             }
@@ -164,6 +169,12 @@ fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
     )
 }
 
+/// hex 颜色（`#rrggbb` 或 `rrggbb`）：是否合法 6 位十六进制（parse_specs 三段判色用）。
+fn is_hex_color(s: &str) -> bool {
+    let h = s.trim_start_matches('#');
+    h.len() == 6 && h.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 /// 解析 hex（`#rrggbb` 或 `rrggbb`）为 RGB 浮点。
 fn parse_hex(hex: &str) -> Option<(f64, f64, f64)> {
     let h = hex.trim_start_matches('#');
@@ -265,6 +276,7 @@ mod tests {
     #[case::name_only(vec!["ui".to_string()], vec![("ui".to_string(), None, None)])]
     #[case::name_with_desc(vec!["bug:缺陷".to_string()], vec![("bug".to_string(), Some("缺陷".to_string()), None)])]
     #[case::name_desc_color(vec!["bug:缺陷:#d73a4a".to_string()], vec![("bug".to_string(), Some("缺陷".to_string()), Some("#d73a4a".to_string()))])]
+    #[case::desc_with_colon(vec!["bug:needs:testing".to_string()], vec![("bug".to_string(), Some("needs:testing".to_string()), None)])]
     #[case::multiple(vec!["storage".to_string(), "bug:缺陷".to_string(), "ui".to_string()],
         vec![
             ("storage".to_string(), None, None),
@@ -437,13 +449,39 @@ mod tests {
         assert_ne!(colors[0], colors[1], "连续创建色应不同");
     }
 
-    /// next_color：无既有返回调色板首色；新增色与既有颜色最小距离最大化。
+    /// next_color：无既有返回调色板首色；新增色到既有色的最小距离 ≥ 其余所有候选（max-min 属性）。
     #[test]
     fn next_color_maximizes_min_distance() {
         let first = next_color(&[]);
         assert_eq!(first, palette()[0]);
-        let c = next_color(&["#ff0000".to_string(), "#00ff00".to_string()]);
-        assert!(c != "#ff0000" && c != "#00ff00", "新色应避开既有: {c}");
+
+        let existing = ["#ff0000".to_string(), "#00ff00".to_string()];
+        let chosen = next_color(&existing);
+        let min_dist = |hex: &str| {
+            let cr = parse_hex(hex).unwrap();
+            existing
+                .iter()
+                .map(|e| {
+                    let er = parse_hex(e).unwrap();
+                    (cr.0 - er.0).powi(2) + (cr.1 - er.1).powi(2) + (cr.2 - er.2).powi(2)
+                })
+                .fold(f64::INFINITY, f64::min)
+        };
+        let chosen_min = min_dist(&chosen);
+        for cand in palette() {
+            if cand == chosen {
+                continue;
+            }
+            let cand_min = min_dist(&cand);
+            assert!(
+                chosen_min >= cand_min - 0.001,
+                "chosen {chosen} min {chosen_min} < cand {cand} min {cand_min}"
+            );
+        }
+        assert!(
+            chosen != "#ff0000" && chosen != "#00ff00",
+            "新色应避开既有: {chosen}"
+        );
     }
 
     /// set 更新 color/description（COALESCE 保留未提供字段）。
