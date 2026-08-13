@@ -229,7 +229,8 @@ impl DashboardModel {
                     self.milestone_detail_page_prev(milestone_id);
                 } else if self.page > 0 {
                     self.page -= 1;
-                    self.selected = 0;
+                    // 翻页保持相对行；新页更短时夹到新页长；无选中（0）保持 0。
+                    self.clamp_selected();
                 }
             }
             KeyCode::Char('l') | KeyCode::Right | KeyCode::PageDown => {
@@ -237,7 +238,8 @@ impl DashboardModel {
                     self.milestone_detail_page_next(milestone_id);
                 } else if self.page + 1 < self.pages() {
                     self.page += 1;
-                    self.selected = 0;
+                    // 同上：保持相对行并夹取。
+                    self.clamp_selected();
                 }
             }
             KeyCode::Char('p') => {
@@ -368,11 +370,15 @@ impl DashboardModel {
         if self.selected <= np {
             if self.plans_page > 0 {
                 self.plans_page -= 1;
-                self.selected = 0;
+                // 保持相对行；按段独立夹取（新 plans 页更短时钳到其行数，防光标流入 issues 段）。
+                let n2 = self.page_milestone_plans(milestone_id).len();
+                self.selected = self.selected.min(n2);
             }
         } else if self.issues_page > 0 {
             self.issues_page -= 1;
-            self.selected = 0;
+            // issues 段：np 不变，钳到 np + 新 issues 页行数（恒 > np，不流入 plans 段）。
+            let n2 = self.page_milestone_issues(milestone_id).len();
+            self.selected = self.selected.min(np + n2);
         }
     }
 
@@ -385,11 +391,15 @@ impl DashboardModel {
         if self.selected <= np {
             if self.plans_page + 1 < self.milestone_plans_pages(milestone_id) {
                 self.plans_page += 1;
-                self.selected = 0;
+                // 保持相对行；按段独立夹取（防光标流入 issues 段）。
+                let n2 = self.page_milestone_plans(milestone_id).len();
+                self.selected = self.selected.min(n2);
             }
         } else if self.issues_page + 1 < self.milestone_issues_pages(milestone_id) {
             self.issues_page += 1;
-            self.selected = 0;
+            // issues 段：np 不变，钳到 np + 新 issues 页行数。
+            let n2 = self.page_milestone_issues(milestone_id).len();
+            self.selected = self.selected.min(np + n2);
         }
     }
 }
