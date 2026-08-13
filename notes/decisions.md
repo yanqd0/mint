@@ -327,6 +327,23 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D29. Codex 适配形态定案（codex-adapter + 失败启发式）
+
+**背景**：plan #37 落地。Claude 靠 plugin.json 自动合并 hooks，Codex 无 plugin 概念；且 Codex 无 PostToolUseFailure 事件，需 PostToolUse 失败启发式。前置 plan #39（skill 多 agent 化）已就位宿主识别路由 + 信号契约。
+
+**决策**：
+- **落地形态**：新建 `codex-adapter/`（平行 claude-plugin/）+ 仓库根三件套（AGENTS.md + `.agents/skills/mint` 软链接 + `.codex/hooks.json` 项目级 hooks）。
+- **skill 接入**：软链接指向 CN 主版（`claude-plugin/mint-faa-cn/skills/mint`），单一源原则；实测 symlink 可被跟随（未跟随则改薄 SKILL.md + include）。
+- **失败启发式**：Codex 无 `error` 字段，从 `tool_response` 检测确定性失败（`Exit code`/`exit status`/`[stderr]` 首行错误词），**保守策略：宁可漏报不误报**（误报噪音比漏报更伤）。
+- **hooks schema**：输入 snake_case JSON、输出必须包 `hookSpecificOutput`、严格 schema 验证（多余字段致输出无效）；启用需 config.toml `[features] hooks = true`。
+- **信号契约沿用**：`mint: tool X failed — cmd`（跨 agent 标准）+ 上下文 `mint list` TSV（plan #39 已定案）。
+- **安装**：`install.sh`（--global/--project/--copy/--uninstall），hooks 合并 + skill 软链接 + feature flag；项目根 README.md 增「Install the Codex adapter」章节。
+- **MCP 后置 2.0.0**（CLI 完全做好后）；mint CLI 零改动（D24）。
+
+**理由**：Codex 无 plugin 机制，交付物需自含安装路径；失败判定从事件层（无 PostToolUseFailure）下沉到脚本层（tool_response 启发式），保持契约跨 agent 统一；软链接保单一源避免 skill 双份漂移。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
