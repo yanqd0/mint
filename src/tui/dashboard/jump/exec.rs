@@ -4,7 +4,8 @@ use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::types::{FLASH_TICKS, FlashItem, JumpTarget, View};
 
 /// 自动切换前置：用户空闲至少这么多 tick（1 tick = 1s）才允许自动跳转。
-const AUTO_SWITCH_IDLE: u32 = 5;
+/// 10s：人类操作（含搜索输入）后 5s 太短，易在思考间隙被自动跳转打断。
+const AUTO_SWITCH_IDLE: u32 = 10;
 /// 两次自动跳转的最小间隔（tick）。
 const AUTO_SWITCH_GAP: u32 = 5;
 
@@ -16,7 +17,7 @@ impl DashboardModel {
         }
         let req = self.ready.pop_front()?;
         let target = req.target;
-        self.navigate(view_from_target(target));
+        self.navigate_auto(view_from_target(target));
         self.flash = req
             .flash
             .into_iter()
@@ -76,8 +77,8 @@ mod tests {
             flash: vec![],
         });
         assert_eq!(m.execute_jump(), None); // 空闲不足
-        m.user_idle = 5;
-        m.auto_last = 5;
+        m.user_idle = AUTO_SWITCH_IDLE; // 临界值 10
+        m.auto_last = AUTO_SWITCH_GAP;
         assert_eq!(m.execute_jump(), Some(JumpTarget::Plans));
         assert_eq!(m.view, View::Plans);
     }
@@ -86,8 +87,8 @@ mod tests {
     fn execute_sets_flash_with_ticks() {
         let mut m = DashboardModel::new();
         m.init(snap());
-        m.user_idle = 5;
-        m.auto_last = 5;
+        m.user_idle = AUTO_SWITCH_IDLE;
+        m.auto_last = AUTO_SWITCH_GAP;
         m.ready.push_back(JumpRequest {
             target: JumpTarget::Plans,
             flash: vec![(7, JumpKind::Plan)],

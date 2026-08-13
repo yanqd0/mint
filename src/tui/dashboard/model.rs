@@ -8,7 +8,9 @@ use crossterm::event::KeyCode;
 use crate::models::{Container, Issue};
 use crate::tui::TuiKey;
 use crate::tui::dashboard::diff::{DashboardSnapshot, diff_snapshots};
-use crate::tui::dashboard::types::{FlashItem, IssueFilter, JumpRequest, MAX_FEED, RawJump};
+use crate::tui::dashboard::types::{
+    FlashItem, IssueFilter, JumpRequest, MAX_FEED, RawJump, ViewSwitch,
+};
 
 pub use crate::tui::dashboard::types::{FeedItem, KeyAction, RefreshResult, View};
 
@@ -46,6 +48,9 @@ pub struct DashboardModel {
     pub(crate) user_idle: u32,
     /// 距上次自动切换的 tick；两次自动切换间隔 ≥ AUTO_SWITCH_GAP。
     pub(crate) auto_last: u32,
+    /// 三大 list tab 各保存手动离开时的 (page, selected)，返回恢复；自动跳转清空。
+    /// 索引：Issues=0, Plans=1, Milestones=2（详情归其 tab）。
+    pub(crate) saved_cursor: [(usize, usize); 3],
     /// queue1：原始跳转请求（事件驱动，合并器每 tick 读空）。
     pub(crate) pending: VecDeque<RawJump>,
     /// queue2：就绪复合请求（每 5s 执行队首，容量 JUMP_QUEUE_LIMIT）。
@@ -87,6 +92,7 @@ impl DashboardModel {
             issues_page_size: 10,
             user_idle: 0,
             auto_last: 0,
+            saved_cursor: [(0, 0); 3],
             pending: VecDeque::new(),
             ready: VecDeque::new(),
             merge_delay: 0,
@@ -126,6 +132,7 @@ impl DashboardModel {
         self.issues_page = 0;
         self.user_idle = 0;
         self.auto_last = 0;
+        self.saved_cursor = [(0, 0); 3];
         self.pending.clear();
         self.ready.clear();
         self.merge_delay = 0;
@@ -302,9 +309,9 @@ impl DashboardModel {
                 _ => {}
             },
             KeyCode::Esc => match self.view {
-                View::IssueDetail { .. } => self.switch_tab(View::Issues),
-                View::PlanDetail { .. } => self.switch_tab(View::Plans),
-                View::MilestoneDetail { .. } => self.switch_tab(View::Milestones),
+                View::IssueDetail { .. } => self.switch_tab_manual(View::Issues),
+                View::PlanDetail { .. } => self.switch_tab_manual(View::Plans),
+                View::MilestoneDetail { .. } => self.switch_tab_manual(View::Milestones),
                 _ => {}
             },
             _ => {}
@@ -312,12 +319,63 @@ impl DashboardModel {
     }
 
     /// 统一切视图 + 清空行状态（page/selected/plans_page/issues_page）。不记历史。
+    /// 系统冷切换（prune/home_timeout/reset）：不保存不恢复。
     pub(crate) fn apply_view_state(&mut self, v: View) {
+        self.apply_view_state_mode(v, ViewSwitch::System);
+    }
+
+    /// 带切换类别的视图状态应用：手动保存/恢复光标、自动清空全部保存。
+    pub(crate) fn apply_view_state_mode(&mut self, v: View, mode: ViewSwitch) {
+        // 离开前：手动且当前是 list tab → 保存光标。
+        if mode == ViewSwitch::Manual && Self::is_list_tab(self.view) {
+            self.save_cursor();
+        }
         self.view = v;
         self.page = 0;
         self.plans_page = 0;
         self.issues_page = 0;
         self.selected = 0;
+        // 自动跳转：清空全部手动光标记录（用户要求"一旦开始自动跳转，记录全部归零"）。
+        if mode == ViewSwitch::Auto {
+            self.saved_cursor = [(0, 0); 3];
+        }
+        // 进入后：手动且目标是 list tab → 恢复光标，clamp 兜底。
+        if mode == ViewSwitch::Manual && Self::is_list_tab(v) {
+            self.restore_cursor();
+        }
+    }
+
+    /// 是否三大 list tab（详情页内部小列表不做光标记忆）。
+    fn is_list_tab(v: View) -> bool {
+        matches!(v, View::Issues | View::Plans | View::Milestones)
+    }
+
+    /// 当前视图所属 tab 索引（Issues=0/Plans=1/Milestones=2）。
+    fn tab_index(&self) -> usize {
+        match self.active_tab() {
+            View::Issues => 0,
+            View::Plans => 1,
+            _ => 2,
+        }
+    }
+
+    /// 保存当前 list tab 的 (page, selected)。
+    fn save_cursor(&mut self) {
+        if Self::is_list_tab(self.view) {
+            self.saved_cursor[self.tab_index()] = (self.page, self.selected);
+        }
+    }
+
+    /// 恢复目标 list tab 的 (page, selected) 并 clamp 兜底（列表收缩/搜索收窄）。
+    fn restore_cursor(&mut self) {
+        if !Self::is_list_tab(self.view) {
+            return;
+        }
+        let (page, selected) = self.saved_cursor[self.tab_index()];
+        self.page = page;
+        self.selected = selected;
+        self.clamp_page();
+        self.clamp_selected();
     }
 
     /// 渲染器写回 page_size（按列表面板可见高度），并夹取 page/selected 防越界。
@@ -327,36 +385,49 @@ impl DashboardModel {
         self.clamp_selected();
     }
 
-    /// 用户/自动导航：记录历史（链式截断前进段）；与当前相同则仅重置状态（去重）。
+    /// 手动导航：记录历史（链式截断前进段）；与当前相同则仅重置状态（去重）。
     pub(crate) fn navigate(&mut self, v: View) {
+        self.navigate_mode(v, ViewSwitch::Manual);
+    }
+
+    /// 自动导航（execute_jump）：记录历史（同手动），但清空全部保存光标。
+    pub(crate) fn navigate_auto(&mut self, v: View) {
+        self.navigate_mode(v, ViewSwitch::Auto);
+    }
+
+    fn navigate_mode(&mut self, v: View, mode: ViewSwitch) {
         if self.history.get(self.history_pos) != Some(&v) {
             self.history.truncate(self.history_pos + 1);
             self.history.push(v);
             self.history_pos = self.history.len() - 1;
+            self.apply_view_state_mode(v, mode);
+        } else {
+            // 同视图去重：冷重置（不保存不恢复，维持"按当前数字键回顶"）。
+            self.apply_view_state(v);
         }
-        self.apply_view_state(v);
     }
 
     /// 重置历史链（show --tui 从详情启动时，历史从该视图开始）。
     pub(crate) fn reset_history(&mut self, v: View) {
         self.history = vec![v];
         self.history_pos = 0;
+        self.saved_cursor = [(0, 0); 3];
         self.apply_view_state(v);
     }
 
-    /// Backspace：回退到上一个视图（历史链首则 no-op）。
+    /// Backspace：回退到上一个视图（历史链首则 no-op）。手动恢复光标。
     fn history_back(&mut self) {
         if self.history_pos > 0 {
             self.history_pos -= 1;
-            self.apply_view_state(self.history[self.history_pos]);
+            self.apply_view_state_mode(self.history[self.history_pos], ViewSwitch::Manual);
         }
     }
 
-    /// Shift+Backspace：前进到下一个视图（链尾则 no-op）。
+    /// Shift+Backspace：前进到下一个视图（链尾则 no-op）。手动恢复光标。
     fn history_forward(&mut self) {
         if self.history_pos + 1 < self.history.len() {
             self.history_pos += 1;
-            self.apply_view_state(self.history[self.history_pos]);
+            self.apply_view_state_mode(self.history[self.history_pos], ViewSwitch::Manual);
         }
     }
 

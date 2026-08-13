@@ -21,6 +21,15 @@ pub enum View {
     MilestoneDetail { milestone_id: i64 },
 }
 
+/// 视图切换类别：手动（用户导航，离开保存光标/进入恢复）、
+/// 自动（execute_jump，清空所有 tab 的保存光标 + 搜索）、系统（prune/home_timeout/reset，冷切换）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ViewSwitch {
+    Manual,
+    Auto,
+    System,
+}
+
 /// 键盘处理结果：run_loop 据此退出或继续。TUI 纯只读，无状态写操作。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyAction {

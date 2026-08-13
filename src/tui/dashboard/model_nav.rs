@@ -2,7 +2,7 @@
 //! 自动跳转（双 queue）见 `jump/` 子模块。
 
 use crate::tui::dashboard::model::DashboardModel;
-use crate::tui::dashboard::types::View;
+use crate::tui::dashboard::types::{View, ViewSwitch};
 
 impl DashboardModel {
     /// 详情指向的实体已不存在 → 回对应 tab。
@@ -28,9 +28,14 @@ impl DashboardModel {
         }
     }
 
-    /// 切到 tab 页（清空行状态）。系统纠正用（Esc 回 tab / prune / home_timeout），不入历史。
+    /// 切到 tab 页（清空行状态）。系统纠正用（prune / home_timeout），不入历史，不恢复光标。
     pub(crate) fn switch_tab(&mut self, tab: View) {
         self.apply_view_state(tab);
+    }
+
+    /// 手动返回 tab（Esc 从详情回），恢复该 tab 保存的光标。不入历史。
+    pub(crate) fn switch_tab_manual(&mut self, tab: View) {
+        self.apply_view_state_mode(tab, ViewSwitch::Manual);
     }
 
     /// 当前所属 tab（详情页归其 tab）。
