@@ -21,7 +21,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
 |---|---|---|
 | Claude Code | 存在 `AskUserQuestion` 工具，或 env `CLAUDE_PLUGIN_ROOT` | `references/agent/claude.md` |
 | Codex | env `CODEX_*` 且无 AskUserQuestion | `references/agent/codex.md` |
-| OpenCode | env `OPENCODE_*` 且无 AskUserQuestion | `references/agent/opencode.md` |
+| OpenCode | 会话上下文含插件注入 `mint-adapter: opencode` 标记，或 env `OPENCODE_*` 且无 AskUserQuestion | `references/agent/opencode.md` |
 | 未知 | 以上皆否 | 默认 `references/agent/claude.md` |
 
 ## 执行流程
