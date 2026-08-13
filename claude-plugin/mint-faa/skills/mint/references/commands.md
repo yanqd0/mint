@@ -24,6 +24,8 @@ mint list                                    # active issues
 mint list --all                              # include done/dropped
 mint list --status open --priority 0         # filter by priority
 mint list --label 0.4.0 --project mint       # filter by label + project
+mint list --search "login"                   # text filter (title/body/status/id/kind/label substring, case-insensitive)
+mint issue list --search running --json      # containers/issues both support --search; same semantics as TUI / search
 ```
 
 ## show
@@ -52,6 +54,14 @@ mint issue get 42 body --json # structured {"id","field","value"}
 mint search "login" --project mint            # ≤2 chars falls back to LIKE
 mint search "priority dependency" --status open
 mint search "keyword" --label bug --priority 0
+```
+
+Container (plan/milestone) text filtering uses list `--search` (title/body/status/#id substring):
+
+```bash
+mint plan list --search "0.5.0"              # plan titles containing 0.5.0
+mint milestone list --search running         # milestone status=running
+mint plan list --search "#7" --json          # filter by id (#7)
 ```
 
 ## state

@@ -24,6 +24,8 @@ mint list                                    # 活跃 issue
 mint list --all                              # 含 done/dropped
 mint list --status open --priority 0         # 按优先级筛选
 mint list --label 0.4.0 --project mint       # 按 label + 项目筛选
+mint list --search "登录"                    # 文本过滤（title/body/status/id/kind/label 子串，大小写不敏感）
+mint issue list --search running --json      # 容器/issue 均可 --search；与 TUI / 搜索同语义
 ```
 
 ## show
@@ -53,6 +55,15 @@ mint search "登录" --project mint            # ≤2 字符走 LIKE 兜底
 mint search "priority dependency" --status open
 mint search "keyword" --label bug --priority 0
 ```
+
+容器（plan/milestone）文本过滤用 list 的 `--search`（title/body/status/#id 子串）：
+
+```bash
+mint plan list --search "0.5.0"              # plan 标题含 0.5.0
+mint milestone list --search running         # milestone status=running
+mint plan list --search "#7" --json          # 按 id 过滤（#7）
+```
+
 
 ## state
 
