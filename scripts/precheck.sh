@@ -84,7 +84,7 @@ fi
 
 say ""
 if [ "$FAIL" = "0" ]; then
-  say "🎉 precheck 全部通过（$VERSION）"
+  say "🎉 precheck 全部通过（${VERSION}）"
   exit 0
 else
   say "precheck 失败：请修复上述错误后重试。"
