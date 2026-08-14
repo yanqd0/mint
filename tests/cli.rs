@@ -2301,3 +2301,388 @@ fn st_search_priority_short_label_like() {
         "短 label 'ui' 经 LIKE 可搜"
     );
 }
+
+// ── project 子命令（cli/project.rs 补覆盖）────────────────────────
+
+/// project create：空名拒绝、正常创建（json/非 json）、幂等已存在。
+/// 注：空库首次运行 `resolve_project` 会把当前 git 仓库自动注册为 #1，
+/// 故手动 create 的 project id 从 2 起；list --json 返回裸数组。
+#[test]
+fn st_project_crud_create() {
+    let (_dir, db) = empty_db();
+
+    let stderr = run_fail(&db, &["project", "create", "  "]);
+    assert!(stderr.contains("must not be empty"), "stderr: {stderr}");
+
+    // 非 json：TSV/裸文本。
+    let out = mint(&db)
+        .args(["project", "create", "alpha"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("Created project"), "text: {text}");
+
+    // json。
+    let v = run_json(
+        &db,
+        &["project", "create", "beta", "--description", "d", "--json"],
+    );
+    let beta_id = v["id"].as_i64().unwrap();
+    assert!(beta_id >= 2, "自动注册占 #1，beta 应 ≥2: {beta_id}");
+    assert_eq!(v["name"], "beta");
+    assert_eq!(v["status"], "created");
+
+    // 幂等：已存在不重复创建，返回 exists:true。
+    let v = run_json(&db, &["project", "create", "beta", "--json"]);
+    assert_eq!(v["exists"], true);
+    let v = run_json(&db, &["project", "list", "--json"]);
+    let names: Vec<String> = v
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|x| x["name"].as_str().map(String::from))
+        .collect();
+    assert!(names.contains(&"alpha".to_string()), "缺 alpha: {names:?}");
+    assert!(names.contains(&"beta".to_string()), "缺 beta: {names:?}");
+}
+
+/// project list：TSV 默认 + json（裸数组）。
+#[test]
+fn st_project_list_tsv_and_json() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["project", "create", "alpha", "--json"]);
+    run_json(
+        &db,
+        &[
+            "project",
+            "create",
+            "beta",
+            "--description",
+            "desc",
+            "--json",
+        ],
+    );
+
+    let out = mint(&db)
+        .args(["project", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("ID\tName\tDescription"), "TSV 表头: {text}");
+    assert!(text.contains("alpha"), "缺 alpha: {text}");
+    assert!(text.contains("desc"), "缺 desc: {text}");
+
+    let v = run_json(&db, &["project", "list", "--json"]);
+    let items = v.as_array().unwrap();
+    let names: Vec<String> = items
+        .iter()
+        .filter_map(|x| x["name"].as_str().map(String::from))
+        .collect();
+    assert!(names.contains(&"alpha".to_string()), "缺 alpha: {names:?}");
+    assert!(names.contains(&"beta".to_string()), "缺 beta: {names:?}");
+}
+
+/// project show：json 全字段 + 非 json 键值 + 不存在报错。
+/// 注：create 返回真实 id（自动注册占 #1，手动 project 从 #2 起）。
+#[test]
+fn st_project_show() {
+    let (_dir, db) = empty_db();
+    let v = run_json(&db, &["project", "create", "alpha", "--json"]);
+    let id = v["id"].as_i64().unwrap();
+    let id_s = id.to_string();
+
+    let v = run_json(&db, &["project", "show", &id_s, "--json"]);
+    assert_eq!(v["name"], "alpha");
+    assert_eq!(v["issue_count"], 0);
+
+    let stderr = run_fail(&db, &["project", "show", "999"]);
+    assert!(
+        stderr.contains("project #999 not found"),
+        "stderr: {stderr}"
+    );
+
+    // 非 json：show 键值。
+    let out = mint(&db)
+        .args(["project", "show", &id_s])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains(&format!("id: {id}")), "text: {text}");
+    assert!(text.contains("name: alpha"), "text: {text}");
+}
+
+/// project get：各字段裸值 + 未知字段 + 不存在。
+#[test]
+fn st_project_get_fields() {
+    let (_dir, db) = empty_db();
+    let v = run_json(
+        &db,
+        &[
+            "project",
+            "create",
+            "alpha",
+            "--description",
+            "hello",
+            "--git",
+            "https://x/repo.git",
+            "--abs-dir",
+            "/tmp/x",
+            "--json",
+        ],
+    );
+    let id = v["id"].as_i64().unwrap().to_string();
+
+    for (field, expect) in [
+        ("name", "alpha"),
+        ("description", "hello"),
+        ("git", "https://x/repo.git"),
+        ("abs_dir", "/tmp/x"),
+    ] {
+        let out = mint(&db)
+            .args(["project", "get", &id, field])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        assert_eq!(
+            String::from_utf8_lossy(&out).trim(),
+            expect,
+            "field {field}"
+        );
+    }
+
+    let stderr = run_fail(&db, &["project", "get", &id, "bogus"]);
+    assert!(stderr.contains("unknown field: bogus"), "stderr: {stderr}");
+    let stderr = run_fail(&db, &["project", "get", "999", "name"]);
+    assert!(
+        stderr.contains("project #999 not found"),
+        "stderr: {stderr}"
+    );
+}
+
+/// project set：空参数拒绝、空名拒绝、字段更新、不存在报错。
+#[test]
+fn st_project_set() {
+    let (_dir, db) = empty_db();
+    let v = run_json(&db, &["project", "create", "alpha", "--json"]);
+    let id = v["id"].as_i64().unwrap().to_string();
+
+    let stderr = run_fail(&db, &["project", "set", &id]);
+    assert!(
+        stderr.contains("set requires --name, --description, --git, or --abs-dir"),
+        "stderr: {stderr}"
+    );
+    let stderr = run_fail(&db, &["project", "set", &id, "--name", "  "]);
+    assert!(
+        stderr.contains("name must not be empty"),
+        "stderr: {stderr}"
+    );
+
+    // 更新 name + description。
+    let v = run_json(
+        &db,
+        &[
+            "project",
+            "set",
+            &id,
+            "--name",
+            "renamed",
+            "--description",
+            "d2",
+            "--json",
+        ],
+    );
+    assert_eq!(v["name"], "renamed");
+    assert_eq!(v["description"], "d2");
+    // get 裸值走非 json 分支；这里用 get 的 --json 结构。
+    let v = run_json(&db, &["project", "get", &id, "name", "--json"]);
+    assert_eq!(v["value"], "renamed");
+
+    let stderr = run_fail(&db, &["project", "set", "999", "--name", "x"]);
+    assert!(
+        stderr.contains("project #999 not found"),
+        "stderr: {stderr}"
+    );
+}
+
+// ── milestone/plan set/get + delete 补充（cli/milestone.rs、cli/plan.rs、cli/delete.rs）──
+
+/// milestone set：title/version/body 更新 + 手动 status + 错误分支。
+#[test]
+fn st_milestone_set_fields_and_status() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["milestone", "create", "r1", "--version", "0.1.0", "--json"],
+    );
+
+    let stderr = run_fail(&db, &["milestone", "set", "1"]);
+    assert!(
+        stderr.contains("set requires --title, --version, --body, or --status"),
+        "stderr: {stderr}"
+    );
+    let stderr = run_fail(&db, &["milestone", "set", "1", "--title", " "]);
+    assert!(
+        stderr.contains("title must not be empty"),
+        "stderr: {stderr}"
+    );
+
+    let v = run_json(
+        &db,
+        &[
+            "milestone",
+            "set",
+            "1",
+            "--title",
+            "r1b",
+            "--version",
+            "0.1.1",
+            "--body",
+            "b",
+            "--json",
+        ],
+    );
+    assert_eq!(v["title"], "r1b");
+    assert_eq!(v["version"], "0.1.1");
+    assert_eq!(v["body"], "b");
+
+    // 手动 status：done（发布完成，终态派生不覆盖）。
+    let v = run_json(
+        &db,
+        &["milestone", "set", "1", "--status", "done", "--json"],
+    );
+    assert_eq!(v["status"], "done");
+    let v = run_json(&db, &["milestone", "show", "1", "--json"]);
+    assert_eq!(v["status"], "done");
+}
+
+/// milestone get：各字段裸值 + 未知字段 + 不存在。
+#[test]
+fn st_milestone_get_fields() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &[
+            "milestone",
+            "create",
+            "r1",
+            "--version",
+            "0.1.0",
+            "--body",
+            "goal",
+            "--json",
+        ],
+    );
+    for (field, expect) in [("title", "r1"), ("version", "0.1.0"), ("body", "goal")] {
+        let v = run_json(&db, &["milestone", "get", "1", field, "--json"]);
+        assert_eq!(v["value"], expect, "field {field}");
+    }
+    let stderr = run_fail(&db, &["milestone", "get", "1", "bogus"]);
+    assert!(stderr.contains("unknown field: bogus"), "stderr: {stderr}");
+    let stderr = run_fail(&db, &["milestone", "get", "999", "title"]);
+    assert!(
+        stderr.contains("milestone #999 not found"),
+        "stderr: {stderr}"
+    );
+}
+
+/// plan detach + get：detach 清 plan_id；get 各字段。
+#[test]
+fn st_plan_detach_and_get() {
+    let (_dir, db) = empty_db();
+    let iid = add_issue(&db, "x");
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    run_json(&db, &["plan", "attach", "1", &iid.to_string(), "--json"]);
+
+    let v = run_json(&db, &["plan", "show", "1", "--json"]);
+    assert_eq!(v["issues"].as_array().unwrap().len(), 1);
+
+    run_json(&db, &["plan", "detach", "1", &iid.to_string(), "--json"]);
+    let v = run_json(&db, &["plan", "show", "1", "--json"]);
+    assert_eq!(v["issues"].as_array().unwrap().len(), 0);
+    // 非 json detach 分支。
+    mint(&db)
+        .args(["plan", "detach", "1", &iid.to_string()])
+        .assert()
+        .success();
+
+    // get 字段。
+    run_json(&db, &["plan", "create", "p2", "--body", "bb", "--json"]);
+    let v = run_json(&db, &["plan", "get", "2", "title", "--json"]);
+    assert_eq!(v["value"], "p2");
+    let v = run_json(&db, &["plan", "get", "2", "body", "--json"]);
+    assert_eq!(v["value"], "bb");
+    let stderr = run_fail(&db, &["plan", "get", "999", "title"]);
+    assert!(stderr.contains("plan #999 not found"), "stderr: {stderr}");
+}
+
+/// plan set：空参数拒绝 + 纯 title 更新。
+#[test]
+fn st_plan_set_title_only() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    let v = run_json(&db, &["plan", "set", "1", "--title", "p1", "--json"]);
+    assert_eq!(v["title"], "p1");
+}
+
+/// delete：project 无 issue 删除 / 有 issue 拒绝；label 删除。
+#[test]
+fn st_delete_project_and_label() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["project", "create", "alpha", "--json"]);
+
+    // 有 issue 时拒绝删除 project。
+    add_issue(&db, "x");
+    // 注意：add 默认 project 可能不是 alpha，先绑定到 alpha。
+    run_json(
+        &db,
+        &[
+            "--project",
+            "alpha",
+            "issue",
+            "add",
+            "under-alpha",
+            "--json",
+        ],
+    );
+    let stderr = run_fail(&db, &["delete", "project", "alpha"]);
+    assert!(stderr.contains("has 1 issue"), "stderr: {stderr}");
+
+    // 清空 issue 后删除 project 成功（json + 非 json）。
+    let stderr = run_fail(&db, &["delete", "project", "nonexistent"]);
+    assert!(stderr.contains("not found"), "stderr: {stderr}");
+
+    // label 删除。
+    run_json(
+        &db,
+        &[
+            "--project",
+            "alpha",
+            "issue",
+            "add",
+            "with-label",
+            "--label",
+            "ui",
+            "--json",
+        ],
+    );
+    run_json(&db, &["delete", "label", "ui", "--json"]);
+    let v = run_json(&db, &["label", "list", "--json"]);
+    let names: Vec<&str> = v["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|x| x["name"].as_str())
+        .collect();
+    assert!(!names.contains(&"ui"), "label 应已删除: {names:?}");
+}

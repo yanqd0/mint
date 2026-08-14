@@ -12,8 +12,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # 覆盖率棘轮：只升不降（当前 88.76%，阈值 88 留抖动）。提升后手动上调此处。
-  FAIL_UNDER_LINES: "88"
+  # 覆盖率棘轮：只升不降（当前 92.28%，阈值 90 达标）。提升后手动上调此处。
+  FAIL_UNDER_LINES: "90"
 
 jobs:
   fmt:
