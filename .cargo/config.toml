@@ -38,16 +38,3 @@ strip = false            # 保留符号
 opt-level = 0
 debug = true
 strip = false
-
-# ========== 各平台 target 配置 ==========
-
-# --- Linux x86_64（主要开发/部署平台）---
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
-rustflags = [
-    # 使用 mold 高速链接器，速度提升 3-5 倍。
-    # 如无法安装 mold（apt install mold），注释下一行回退默认 ld。
-    "-C", "link-arg=-fuse-ld=mold",
-    # 压缩 debug 段
-    "-C", "link-arg=-Wl,--compress-debug-sections=zlib",
-]

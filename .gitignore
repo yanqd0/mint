@@ -3,6 +3,8 @@
 *.profraw
 *.pdb
 *.rs.bk
+# 本地 Cargo 配置（glibc clang+mold 仅本地，不随仓库分发）
+.cargo/config.local.toml
 
 ### Vim ###
 [._]*.s[a-v][a-z]

@@ -7,7 +7,7 @@ Thanks for your interest in contributing!
 
 - **Rust toolchain** — edition 2024, stable `rustc >= 1.94` recommended.
 - **A C compiler** — required by `rusqlite`'s `bundled` feature (compiles SQLite from source). Install `build-essential` on Debian/Ubuntu, Xcode Command Line Tools on macOS.
-- **clang + mold** — the project's `.cargo/config.toml` configures `clang` as linker with `mold` (`-fuse-ld=mold`) on Linux x86_64. Both must be installed (`apt install clang mold`), or the build will fail at link time.
+- **clang + mold** — local development uses `clang` as linker with `mold` (`-fuse-ld=mold`) on Linux x86_64. The config lives in `.cargo/config.local.toml` (git-ignored, local-only); `cargo` merges it automatically. Both must be installed (`apt install clang mold`), or the build will fail at link time. **Release builds use musl** (`x86_64-unknown-linux-musl`, static linking) — see `docs/RELEASING.md`.
 - **git** — used for project name detection (`git remote get-url origin`).
 
 ## Setup
