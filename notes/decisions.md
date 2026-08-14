@@ -362,6 +362,24 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D31. CI 发布架构定案（tag 激活 + musl 发布）
+
+**背景**：plan #36 落地。搭建 crates.io / PyPI / npm 三端发布流水线 + CI 门禁。
+
+**决策**：
+- **三端统一包名 `mint-faa`**（crates.io/PyPI/npm 均空闲），bin 名 `mint` 不变；author = "Yan QiDong"。
+- **受 tag 激活**：发布链 `push: tags: ['v*']` 触发；普通 push/merge 只跑门禁 CI。tag 由用户手动打 = 符合"远程发布仅用户手动"硬约束；crates.io/PyPI 再加受保护 environment 人工审批（双手动闸）。
+- **npm 走 cargo-dist**（GitHub Release + npm 安装器）；**crates.io/PyPI 走独立 workflow**（cargo-dist 无这两端）。GitHub Releases = 二进制事实来源，npm 壳从 Releases 拉二进制。
+- **发布走 musl libc**（`x86_64-unknown-linux-musl` 静态链接，单文件免依赖）；**glibc 仅本地开发**（clang+mold 在 gitignore 的 `.cargo/config.local.toml`）——修好 `cargo install --git` 对无 mold 用户不可用。
+- **Cargo.toml include 白名单**：只打包 Cargo.toml/Cargo.lock/LICENSE/README/src/**（防 adapter/plugin/notes 打进 crate）。
+- **覆盖率**：codecov + 基线棘轮（`--fail-under-lines 88`，当前 88.76%，只升不降）。
+- **预发布跳过**：gate 读 Cargo.toml version 与 tag 比对，`-alpha/-beta/-rc/-dev` → is_stable=false，crates.io/PyPI 绿色跳过；npm/GitHub Release 仅 prerelease。
+- **PyPI 壳**：maturin `bindings="bin"`，Linux wheel 用 musl；**发布指南** `docs/RELEASING.md`（secrets 配置 + 发布流程）。
+
+**理由**：tag 手动打 = 唯一远程手势，契合"远程发布手动"；musl 是单文件免依赖发布目标的最优解；cargo-dist 只擅 GitHub/npm，crates.io/PyPI 独立 workflow 零耦合；include 白名单是发布前置硬前提。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
