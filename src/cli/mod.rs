@@ -12,6 +12,7 @@ use crate::output;
 use list_common::{containers, paged_json, paginate, print_page_footer};
 
 pub mod delete;
+pub mod export;
 pub mod issue;
 mod list_common;
 pub mod milestone;
@@ -312,6 +313,8 @@ pub enum Commands {
     Plan(PlanArgs),
     /// Live dashboard: auto-refreshing issue/plan activity feed (TTY) or snapshot (non-TTY)
     Tui,
+    /// Export all data (issues with labels/links + plans + milestones + labels) for backup/migration
+    Export(ExportArgs),
     /// Delete data (DANGEROUS: permanent). Prefer `issue state drop` for issues
     Delete(DeleteArgs),
 }
@@ -411,6 +414,20 @@ pub struct DeleteLabelArgs {
     pub json: bool,
 }
 
+#[derive(clap::Args)]
+pub struct ExportArgs {
+    /// Output format: json (default) or tsv
+    #[arg(long, value_enum, default_value = "json")]
+    pub format: ExportFormat,
+}
+
+/// export 输出格式。
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+pub enum ExportFormat {
+    Json,
+    Tsv,
+}
+
 // ── Cli::run ──────────────────────────────────────────────────────
 
 impl Cli {
@@ -435,6 +452,7 @@ impl Cli {
             Commands::Plan(p) => plan::dispatch(&conn, &project, &p.command),
             Commands::Delete(d) => delete::dispatch(&conn, &d.command),
             Commands::Tui => crate::tui::run_dashboard(&conn, &project),
+            Commands::Export(a) => export::cmd_export(&conn, a),
         }
     }
 
