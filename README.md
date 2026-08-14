@@ -1,16 +1,22 @@
 # mint: Minimal Issue & Needs Tracker
 
+[![crates.io](https://img.shields.io/crates/v/mint-faa.svg)](https://crates.io/crates/mint-faa)
+[![CI](https://github.com/yanqd0/mint/actions/workflows/ci.yml/badge.svg)](https://github.com/yanqd0/mint/actions)
+[![codecov](https://codecov.io/gh/yanqd0/mint/graph/badge.svg)](https://codecov.io/gh/yanqd0/mint)
+
 This is a global, single-machine, SQLite-backed issue system CLI for AI agents.
 
 ## Install the CLI
 
-```sh
-cargo install --git https://github.com/yanqd0/mint.git   # binary: `mint`
-# It may be published on crates.io one day.
+The `mint` binary is published to three registries (package name `mint-faa`, command `mint`):
 
-# Or build from source:
-cargo install --path .
+```sh
+cargo install mint-faa        # crates.io
+pip install mint-faa          # PyPI
+npm install -g mint-faa       # npm (downloads platform binary from GitHub Releases)
 ```
+
+Or build from source: `cargo install --path .`
 
 ## Install the Claude Code plugin
 

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "mint-faa"
+description = "Minimal Issue & Needs Tracker — global SQLite issue system for AI agents"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+keywords = ["issue-tracker", "cli", "sqlite", "ai-agents"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+]
+
+[project.urls]
+Repository = "https://github.com/yanqd0/mint"
+
+[tool.maturin]
+bindings = "bin"
+# 不写 [project].version —— maturin 自动从 Cargo.toml version 派生（版本权威保留在 Cargo.toml）
