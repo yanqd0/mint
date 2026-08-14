@@ -6,6 +6,17 @@
 
 This is a global, single-machine, SQLite-backed issue system CLI for AI agents.
 
+## Features
+
+- **Single global database** at `$XDG_DATA_HOME/mint/mint.db` (`MINT_DB_PATH` overrides) — no per-project install, cross-project shared via refs
+- **6-state state machine** (`open/planned/dev/test/done/dropped`) with mandatory `test_cmd` on close
+- **Containers**: milestones (versioned releases) + plans (agent execution plans) with 5-state derived status
+- **Built-in dedup** (normalized-title fuzzy match) + full-text search (FTS5)
+- **`mint export`**: full JSON/TSV dump (issues with labels/links + plans + milestones + labels) for backup/migration
+- **Agent adapters**: Claude Code plugin, Codex hooks, OpenCode plugin — failure signals + issue context injected automatically
+- **TUI** (`mint tui`): live dashboard, ratatui-based, non-TTY falls back to text snapshot
+- Lightweight single binary (~1.7 MB), no daemon, millisecond startup
+
 ## Install the CLI
 
 The `mint` binary is published to three registries (package name `mint-faa`, command `mint`):
@@ -33,6 +44,15 @@ claude plugin marketplace add ./claude-plugin
 claude plugin install mint-faa@mint
 
 # restart the session for hooks to take effect
+
+# Upgrade (two levels: marketplace source + plugin version):
+claude plugin marketplace update mint
+claude plugin update mint-faa@mint        # or mint-faa-cn@mint
+# restart the session (hooks snapshot on startup)
+
+# Uninstall:
+claude plugin uninstall mint-faa@mint
+claude plugin marketplace remove mint     # optional
 ```
 
 ## Install the Codex adapter
