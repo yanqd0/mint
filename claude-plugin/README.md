@@ -16,21 +16,43 @@ mint（Minimal Issue & Needs Tracker）的 Claude Code 适配。两个 plugin，
 ## 安装（二选一）
 
 ```sh
-# 1. 添加私有市场（本仓库 claude-plugin/ 目录）
+# 方式 A：git 远程安装（推荐，免本地克隆，marketplace 从仓库根 .claude-plugin/marketplace.json 发现）
+claude plugin marketplace add https://github.com/yanqd0/mint.git
+# 或 SSH：claude plugin marketplace add git@github.com:yanqd0/mint.git
+
+# 方式 B：本地目录安装（本仓库 claude-plugin/ 目录）
 claude plugin marketplace add /path/to/mint/claude-plugin
 
-# 2. 安装其中一个 plugin
+# 安装其中一个 plugin
 claude plugin install mint-faa@mint       # English
 # 或
 claude plugin install mint-faa-cn@mint    # 中文
 
-# 3. 重启会话（hooks 在启动时快照）
+# 重启会话（hooks 在启动时快照）
 ```
+
+## 升级
+
+marketplace 与 plugin 分两级更新：
+
+```sh
+# 1. 拉取 marketplace 最新（克隆远程仓库）
+claude plugin marketplace update mint
+
+# 2. 升级 plugin 到最新版本
+claude plugin update mint-faa@mint       # 或 mint-faa-cn@mint
+
+# 重启会话生效（hooks 在启动时快照）
+```
+
+> 版本号在正式版发布时同步更新（见仓库根 CLAUDE.md「版本同步」）。
 
 ## 卸载
 
 ```sh
 claude plugin uninstall mint-faa@mint    # 或 mint-faa-cn@mint
+# 可选：移除 marketplace
+claude plugin marketplace remove mint
 ```
 
 ## 工作原理
