@@ -1,0 +1,43 @@
+# crates.io 发布：tag vX.Y.Z 激活；gate 判定 stable（-alpha/-beta 跳过）。
+# 受保护 environment `crates-io`（放 CARGO_REGISTRY_TOKEN + Required reviewers 审批）。
+name: Publish crates.io
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      is_stable: ${{ steps.check.outputs.is_stable }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::tag($TAG) != Cargo.toml($VERSION)"; exit 1
+          fi
+          case "$VERSION" in
+            *-*) echo "is_stable=false" ;;   # -alpha/-beta/-rc/-dev 预发布不碰 crates.io
+            *)   echo "is_stable=true" ;;
+          esac
+
+  publish:
+    needs: gate
+    if: needs.gate.outputs.is_stable == 'true'
+    runs-on: ubuntu-latest
+    environment: crates-io
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo publish --locked
