@@ -22,7 +22,7 @@ Before any flow, determine the current host agent and `Read` **only** the matchi
 | Claude Code | `AskUserQuestion` tool present, or env `CLAUDE_PLUGIN_ROOT` | `references/agent/claude.md` |
 | Codex | env `CODEX_*` and no AskUserQuestion | `references/agent/codex.md` |
 | OpenCode | context contains the plugin-injected `mint-adapter: opencode` marker, or env `OPENCODE_*` and no AskUserQuestion | `references/agent/opencode.md` |
-| Unknown | none of the above | default `references/agent/claude.md` |
+| Unknown / no hooks (e.g. CLI agent) | none of the above | `references/agent/cli.md` (no-hooks fallback) |
 
 ## Execution Flow
 
