@@ -65,6 +65,30 @@ pub fn parse_query(q: &str) -> SearchType {
     SearchType::None
 }
 
+/// 单个 issue 是否匹配搜索 query（内存过滤，TUI / list --search 复用）。
+/// 类型化命中（Id/Status/Kind）→ 只匹配该类型；否则兑底子串匹配（旧行为）。
+pub fn issue_matches(i: &Issue, q: &str) -> bool {
+    let q = q.trim();
+    match parse_query(q) {
+        SearchType::Id(n) => i.id == n as i64 || i.id.to_string().starts_with(&n.to_string()),
+        SearchType::Status(s) => i.status == s,
+        SearchType::Kind(k) => i.kind == k,
+        SearchType::None => substring_match(i, q),
+    }
+}
+
+/// 子串匹配（兑底）：title/body/status/#id/kind/label，大小写不敏感。
+fn substring_match(i: &Issue, q: &str) -> bool {
+    let q = q.to_lowercase();
+    let contains = |hay: &str| hay.to_lowercase().contains(&q);
+    contains(&i.title)
+        || i.body.as_deref().is_some_and(contains)
+        || i.status.as_str().contains(&q)
+        || format!("#{}", i.id).contains(&q)
+        || i.kind.as_str().contains(&q)
+        || i.labels.iter().any(|l| contains(l))
+}
+
 /// 对结果集应用类型化筛选 + 排序。
 /// `SearchType::None` 原样返回（兑底旧行为）。
 pub fn apply(issues: &mut Vec<Issue>, search_type: SearchType) -> bool {

@@ -11,18 +11,6 @@ use crate::link;
 use crate::models::{Issue, Kind, Status};
 use crate::output;
 
-/// issue 匹配 --search：title/body/status/id(#N 或裸数)/kind/label 任一，大小写不敏感子串。
-fn issue_matches_search(i: &Issue, q: &str) -> bool {
-    let q = q.to_lowercase();
-    let contains = |hay: &str| hay.to_lowercase().contains(&q);
-    contains(&i.title)
-        || i.body.as_deref().is_some_and(contains)
-        || i.status.as_str().contains(&q)
-        || format!("#{}", i.id).contains(&q)
-        || i.kind.as_str().contains(&q)
-        || i.labels.iter().any(|l| contains(l))
-}
-
 #[derive(clap::Args)]
 pub struct ListArgs {
     /// Show all statuses (including done/dropped)
@@ -104,9 +92,9 @@ pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Er
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;
-    // --search 文本过滤（title/body/status/id/kind/label，大小写不敏感子串）。
+    // --search 过滤（#260/#262 统一：类型化筛选 + 兑底子串，与 `mint search` / TUI 一致）。
     if let Some(q) = l.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
-        issues.retain(|i| issue_matches_search(i, q));
+        issues.retain(|i| search_filter::issue_matches(i, q));
     }
     if l.tui {
         // list --tui 归一：复用 dashboard Issues 页（带初始筛选）。

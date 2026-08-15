@@ -20,16 +20,9 @@ pub fn current_search(m: &DashboardModel) -> Option<&str> {
     m.tab_search[idx].as_deref().filter(|q| !q.is_empty())
 }
 
-/// issue 匹配搜索：title/body/status/id(#N 或裸数)/kind/label 任一，大小写不敏感子串。
+/// issue 匹配搜索：类型化筛选 + 兑底子串（与 CLI `mint search` / `list --search` 一致）。
 fn issue_matches_search(i: &Issue, q: &str) -> bool {
-    let q = q.to_lowercase();
-    let contains = |hay: &str| hay.to_lowercase().contains(&q);
-    contains(&i.title)
-        || i.body.as_deref().is_some_and(contains)
-        || i.status.as_str().contains(&q)
-        || format!("#{}", i.id).contains(&q)
-        || i.kind.as_str().contains(&q)
-        || i.labels.iter().any(|l| contains(l))
+    crate::cli::issue::search_filter::issue_matches(i, q)
 }
 
 /// 容器（plan/milestone）匹配搜索：title/body/status/#id，大小写不敏感子串。
@@ -395,5 +388,74 @@ impl DashboardModel {
     /// 按 id 查 issue（详情数据源）。
     pub fn issue(&self, id: i64) -> Option<&Issue> {
         self.issues.iter().find(|i| i.id == id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::models::{Issue, Kind, Status};
+    use crate::tui::dashboard::model::DashboardModel;
+    use crate::tui::dashboard::types::View;
+    use rusqlite::Connection;
+
+    fn issue(id: i64, kind: Kind, status: Status) -> Issue {
+        Issue {
+            id,
+            title: format!("t{id}"),
+            body: None,
+            kind,
+            status,
+            priority: 0,
+            project_id: 1,
+            project: None,
+            test_cmd: None,
+            dropped_reason: None,
+            last_commit_id: None,
+            plan_id: None,
+            machine_id: None,
+            uid: None,
+            hit_count: 0,
+            labels: vec![],
+            links: vec![],
+            created_at: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    /// TUI `/` 搜索与 CLI `search` 一致：typed 筛选（#260/#262 统一）。
+    #[test]
+    fn tui_search_drop_matches_cli_typed() {
+        let _conn = Connection::open_in_memory().unwrap();
+        let mut m = DashboardModel::new();
+        m.issues = vec![
+            issue(1, Kind::Task, Status::Open),
+            issue(2, Kind::Task, Status::Dropped),
+            issue(3, Kind::Task, Status::Done),
+        ];
+        m.view = View::Issues;
+        // 模拟 `/` 搜索 drop。
+        m.tab_search[0] = Some("drop".to_string());
+        let v = m.visible_issues();
+        assert_eq!(
+            v.len(),
+            1,
+            "应只显 dropped: {:?}",
+            v.iter().map(|i| i.status).collect::<Vec<_>>()
+        );
+        assert_eq!(v[0].id, 2);
+        assert_eq!(v[0].status, Status::Dropped);
+    }
+
+    /// TUI 搜索兑底：非类型化文本走子串匹配（与 CLI 一致）。
+    #[test]
+    fn tui_search_text_falls_back_substring() {
+        let _conn = Connection::open_in_memory().unwrap();
+        let mut m = DashboardModel::new();
+        m.issues = vec![issue(1, Kind::Task, Status::Open)];
+        m.issues[0].title = "login broken".to_string();
+        m.view = View::Issues;
+        m.tab_search[0] = Some("login".to_string());
+        let v = m.visible_issues();
+        assert_eq!(v.len(), 1, "子串匹配应命中");
     }
 }
