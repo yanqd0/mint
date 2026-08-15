@@ -2,12 +2,13 @@
 
 use rusqlite::Connection;
 
+use crate::cli::issue::search_filter;
 use crate::cli::list_common::{paged_json, paginate, print_page_footer};
 use crate::db;
 use crate::error::Error;
 use crate::label;
 use crate::link;
-use crate::models::{Issue, Status};
+use crate::models::{Issue, Kind, Status};
 use crate::output;
 
 /// issue 匹配 --search：title/body/status/id(#N 或裸数)/kind/label 任一，大小写不敏感子串。
@@ -195,6 +196,57 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
     let status = s.status;
     let priority = s.priority;
 
+    // 类型化搜索（#260）：query 匹配 ID/status/kind 时旁路 FTS，直接按类型查库。
+    // 无类型命中（SearchType::None）或 typed 无结果 → 兑底旧行为（FTS5/LIKE 子串，#262）。
+    let search_type = search_filter::parse_query(q);
+    let mut issues: Vec<Issue> = match search_type {
+        search_filter::SearchType::Id(n) => {
+            let typed = typed_search(
+                conn,
+                project,
+                Some(n as i64),
+                Some(n.to_string()),
+                None,
+                None,
+            )?;
+            if typed.is_empty() {
+                fts_search(conn, q, project, label, status, priority)?
+            } else {
+                typed
+            }
+        }
+        search_filter::SearchType::Status(st) => {
+            typed_search(conn, project, None, None, Some(st), None)?
+        }
+        search_filter::SearchType::Kind(k) => {
+            typed_search(conn, project, None, None, None, Some(k))?
+        }
+        search_filter::SearchType::None => fts_search(conn, q, project, label, status, priority)?,
+    };
+
+    fill_labels(conn, &mut issues)?;
+    let (issues, total, page) = paginate(issues, s.page, s.page_size);
+
+    if s.json {
+        let items: Vec<serde_json::Value> = issues.iter().map(issue_to_json).collect();
+        println!("{}", paged_json(&items, page, s.page_size, total));
+    } else {
+        let (headers, rows) = crate::cli::list_common::issues(&issues);
+        print!("{}", crate::output::format_tsv(&headers, &rows));
+        print_page_footer(page, s.page_size, total);
+    }
+    Ok(())
+}
+
+/// FTS5/LIKE 全文搜索（≥3 字符 MATCH，≤2 字符 LIKE 兜底）。#262 兑底路径。
+fn fts_search(
+    conn: &Connection,
+    q: &str,
+    project: Option<&str>,
+    label: Option<&str>,
+    status: Option<Status>,
+    priority: Option<i64>,
+) -> Result<Vec<Issue>, Error> {
     let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if q.chars().count() < 3 {
         let like = format!("%{}%", escape_like(q));
         (
@@ -219,24 +271,40 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
             ],
         )
     };
-
     let mut stmt = conn.prepare(sql)?;
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
     let rows = stmt.query_map(param_refs.as_slice(), issue_from_row)?;
+    rows.collect::<Result<_, _>>().map_err(Error::from)
+}
+
+/// 类型化搜索：旁路 FTS，直接按 id（精确+前缀）/status/kind 查库（#260）。
+fn typed_search(
+    conn: &Connection,
+    project: Option<&str>,
+    id_exact: Option<i64>,
+    id_prefix: Option<String>,
+    status: Option<Status>,
+    kind: Option<Kind>,
+) -> Result<Vec<Issue>, Error> {
+    // 前缀参数转 LIKE 模式（如 "223" → "223%"）；调用方保证 id_prefix 为纯数字串。
+    let prefix_like = id_prefix.map(|p| format!("{}%", escape_like(&p)));
+    let mut stmt = conn.prepare(db::ISSUE_SEARCH_TYPED)?;
+    let rows = stmt.query_map(
+        rusqlite::params![
+            id_exact,
+            prefix_like,
+            status,
+            kind,
+            project.map(|s| s.to_string()),
+        ],
+        issue_from_row,
+    )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
-
-    fill_labels(conn, &mut issues)?;
-    let (issues, total, page) = paginate(issues, s.page, s.page_size);
-
-    if s.json {
-        let items: Vec<serde_json::Value> = issues.iter().map(issue_to_json).collect();
-        println!("{}", paged_json(&items, page, s.page_size, total));
-    } else {
-        let (headers, rows) = crate::cli::list_common::issues(&issues);
-        print!("{}", crate::output::format_tsv(&headers, &rows));
-        print_page_footer(page, s.page_size, total);
+    // 精确 id 置顶，其余按 id 升序（SQL 已按 id ASC；这里仅把精确项移到最前）。
+    if let Some(n) = id_exact {
+        issues.sort_by_key(|i| (i.id != n, i.id));
     }
-    Ok(())
+    Ok(issues)
 }
 
 /// JSON 序列化 issue（list 视图：永远不包含 body）。

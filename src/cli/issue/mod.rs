@@ -13,6 +13,7 @@ pub mod add;
 pub mod label;
 pub mod link;
 pub mod list;
+pub mod search_filter;
 pub mod set_get;
 pub mod state;
 

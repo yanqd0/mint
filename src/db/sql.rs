@@ -11,6 +11,7 @@ pub const ISSUE_INSERT: &str = include_str!("queries/issue_insert.sql");
 pub const ISSUE_LIST: &str = include_str!("queries/issue_list.sql");
 pub const ISSUE_SEARCH: &str = include_str!("queries/issue_search.sql");
 pub const ISSUE_SEARCH_LIKE: &str = include_str!("queries/issue_search_like.sql");
+pub const ISSUE_SEARCH_TYPED: &str = include_str!("queries/issue_search_typed.sql");
 pub const ISSUE_SHOW: &str = include_str!("queries/issue_show.sql");
 pub const ISSUE_SELECT_STATUS: &str = include_str!("queries/issue_select_status.sql");
 pub const ISSUE_SELECT_STATUS_KIND: &str = include_str!("queries/issue_select_status_kind.sql");
