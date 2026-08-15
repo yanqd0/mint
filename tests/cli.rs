@@ -1328,9 +1328,11 @@ fn st_timestamps_local_under_tz() {
         .unwrap();
     }
 
-    // 两种 TZ 下 show 的 created_at
+    // 两种 TZ 下 show 的 created_at。
+    // 用 POSIX 风格（UTC0 / CST-8）而非 IANA 名（UTC / Asia/Shanghai）：
+    // Windows CRT `_tzset` 不识别 IANA 时区名，只认 POSIX `std offset` 格式（#256）。
     let out_utc = mint(&db)
-        .env("TZ", "UTC")
+        .env("TZ", "UTC0")
         .args(["show", "1", "--json"])
         .assert()
         .success()
@@ -1341,7 +1343,7 @@ fn st_timestamps_local_under_tz() {
     let created_utc = v_utc["created_at"].as_str().unwrap().to_string();
 
     let out_sh = mint(&db)
-        .env("TZ", "Asia/Shanghai")
+        .env("TZ", "CST-8")
         .args(["show", "1", "--json"])
         .assert()
         .success()
@@ -1355,7 +1357,7 @@ fn st_timestamps_local_under_tz() {
     assert_eq!(
         diff,
         8 * 60,
-        "Asia/Shanghai 应比 UTC 晚 8h: {created_utc} vs {created_sh}"
+        "CST-8 应比 UTC0 晚 8h: {created_utc} vs {created_sh}"
     );
 }
 
@@ -1367,9 +1369,10 @@ fn st_timestamps_stored_utc_unchanged() {
     // 推进一个状态触发 updated_at 写入
     run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
 
+    // POSIX 风格 TZ（UTC0 / CST-8），Windows 兼容（IANA 名 `_tzset` 不识别，见 #256）。
     let v_utc: Value = serde_json::from_slice(
         &mint(&db)
-            .env("TZ", "UTC")
+            .env("TZ", "UTC0")
             .args(["show", &id.to_string(), "--json"])
             .assert()
             .success()
@@ -1381,7 +1384,7 @@ fn st_timestamps_stored_utc_unchanged() {
 
     let v_sh: Value = serde_json::from_slice(
         &mint(&db)
-            .env("TZ", "Asia/Shanghai")
+            .env("TZ", "CST-8")
             .args(["show", &id.to_string(), "--json"])
             .assert()
             .success()
