@@ -86,6 +86,8 @@ issue/plan 之上的**聚合容器**。概念层级：`roadmap`（上位抽象�
 
 编程 agent 的**执行计划**：记录标题 + 完整 markdown 信息（body），主要**关联多个 issue**（issues.plan_id）。程序化承载 mint-dogfood skill 的"多 issue plan 统一测试"模式——plan 记录拆解、issue 分批推进、全绿后统一 `close`。
 
+**跨 milestone 移动语义**（#223，2026-08-15）：`plan set --milestone` 把 plan 移到**另一** milestone 时，其下 `planned` issue 自动重置为 `open`——排期上下文随版本桶变更作废，由新归属重新排期；`dev/test/done/dropped` 不动（进行中/已完成与版本桶归属无关）。同 milestone 移动 no-op。此机制保证 deferred plan（挂未来 milestone）不再因残余 `planned` issue 派生 `running`（误导为执行中）。
+
 ### Git 关联（issues.last_commit_id）
 
 `issues.last_commit_id TEXT`：最后一个解决/推进该 issue 的 git commit（**多个 commit 只记最后一个**，覆盖式写入）。写入时机：**`mint state commit <id> --sha <SHA>`**（dev→test，必填 --sha，默认读当前 HEAD）——开发完成必须 commit（刚提交未测试 → 进 test）。读取侧：`mint show <id>` 展示；done 的解决方案从该 commit 的 message 读（不做 resolution，见 D7）。

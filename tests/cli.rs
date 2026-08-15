@@ -1938,6 +1938,48 @@ fn st_plan_set_milestone_moves_and_syncs() {
     assert_eq!(v["status"], "running", "新侧推进");
 }
 
+/// #223：plan set --milestone 跨桶移动时，其下 planned issue 重置回 open（排期作废），
+/// plan 不再派生 running；同里程碑 no-op 不重置。
+#[test]
+fn st_plan_set_milestone_resets_planned_issues() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["milestone", "create", "a", "--version", "0.5.0", "--json"],
+    );
+    run_json(
+        &db,
+        &["milestone", "create", "b", "--version", "2.0.0", "--json"],
+    );
+    run_json(&db, &["plan", "create", "p", "--milestone", "1", "--json"]);
+    let iid = add_issue(&db, "x");
+    run_json(&db, &["plan", "attach", "1", &iid.to_string(), "--json"]);
+    run_json(&db, &["issue", "state", "plan", &iid.to_string(), "--json"]);
+    // 初始：issue planned → plan running → ms1 running（#223 现象）。
+    let v = run_json(&db, &["plan", "show", "1", "--json"]);
+    assert_eq!(v["status"], "running");
+    let v = run_json(&db, &["milestone", "show", "1", "--json"]);
+    assert_eq!(v["status"], "running");
+    // 移到 ms2（未来版本桶）：planned 重置 open，reset 计数 1。
+    let v = run_json(&db, &["plan", "set", "1", "--milestone", "2", "--json"]);
+    assert_eq!(v["reset"], 1);
+    let v = run_json(&db, &["issue", "show", &iid.to_string(), "--json"]);
+    assert_eq!(v["status"], "open");
+    // plan 不再派生 running；旧侧回落 open，新侧 open（plan 全 open）。
+    let v = run_json(&db, &["plan", "show", "1", "--json"]);
+    assert_eq!(v["status"], "open");
+    let v = run_json(&db, &["milestone", "show", "1", "--json"]);
+    assert_eq!(v["status"], "open");
+    let v = run_json(&db, &["milestone", "show", "2", "--json"]);
+    assert_eq!(v["status"], "open");
+    // 同 milestone 移动：no-op，不重置排期。
+    run_json(&db, &["issue", "state", "plan", &iid.to_string(), "--json"]);
+    let v = run_json(&db, &["plan", "set", "1", "--milestone", "2", "--json"]);
+    assert_eq!(v["reset"], 0);
+    let v = run_json(&db, &["issue", "show", &iid.to_string(), "--json"]);
+    assert_eq!(v["status"], "planned");
+}
+
 /// plan set --milestone 目标不存在 → 报错。
 #[test]
 fn st_plan_set_milestone_missing_errors() {

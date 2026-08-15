@@ -40,7 +40,8 @@ pub fn cmd_plan_create(conn: &Connection, a: &PlanCreateArgs) -> Result<(), Erro
     Ok(())
 }
 
-/// Plan set：更新 title/body/milestone（milestone 移动会级联重算两侧状态）。
+/// Plan set：更新 title/body/milestone（milestone 移动会级联重算两侧状态，
+/// 并将其下 planned issue 重置回 open——跨桶排期作废）。
 pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
     let title = s.title.as_deref().map(str::trim);
     let body = s.body.as_deref();
@@ -57,9 +58,10 @@ pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
     if title.is_some() || body.is_some() {
         container::update_plan(conn, s.id, title, body)?;
     }
-    // milestone 移动（级联派生两侧）。
+    // milestone 移动（级联派生两侧 + 重置其下 planned issue）。
+    let mut reset = 0;
     if let Some(mid) = milestone {
-        container::move_plan(conn, s.id, mid)?;
+        reset = container::move_plan(conn, s.id, mid)?;
     }
     if s.json {
         let mut obj = serde_json::Map::new();
@@ -72,6 +74,7 @@ pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
         }
         if let Some(m) = milestone {
             obj.insert("milestone_id".into(), serde_json::Value::from(m));
+            obj.insert("reset".into(), serde_json::Value::from(reset));
         }
         println!(
             "{}",
@@ -79,6 +82,9 @@ pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
         );
     } else {
         println!("Updated plan #{}", s.id);
+        if reset > 0 {
+            println!("reset {reset} planned issue(s) to open (moved to another milestone)");
+        }
     }
     Ok(())
 }

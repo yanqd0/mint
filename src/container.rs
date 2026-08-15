@@ -257,9 +257,11 @@ pub fn delete_plan(conn: &Connection, id: i64) -> Result<(), Error> {
     })
 }
 
-/// 移动 plan 到另一 milestone：更新 milestone_id + 两侧 milestone 派生状态重算，同一事务内原子。
+/// 移动 plan 到另一 milestone：更新 milestone_id，将其下 planned issue 重置回 open
+/// （跨桶排期作废），并重算 plan 状态与两侧 milestone 派生状态，同一事务内原子。
 /// 旧侧不再含该 plan（派生回落），新侧纳入该 plan（派生推进）。拒绝嵌套事务（同 delete_txn）。
-pub fn move_plan(conn: &Connection, id: i64, new_milestone_id: i64) -> Result<(), Error> {
+/// 返回被重置（planned → open）的 issue 数。
+pub fn move_plan(conn: &Connection, id: i64, new_milestone_id: i64) -> Result<usize, Error> {
     let plan = get(conn, ContainerKind::Plan, id)?
         .ok_or_else(|| Error::Other(format!("plan #{id} not found")))?;
     // 校验新 milestone 存在（FK 下不存在会报原始约束错；显式校验给友好报错，对齐 link_direct）。
@@ -270,7 +272,7 @@ pub fn move_plan(conn: &Connection, id: i64, new_milestone_id: i64) -> Result<()
     }
     let old = plan.milestone_id;
     if old == Some(new_milestone_id) {
-        return Ok(()); // 同 milestone 迁移：no-op
+        return Ok(0); // 同 milestone 迁移：no-op（不重置排期）
     }
     if !conn.is_autocommit() {
         return Err(Error::Other(
@@ -280,16 +282,19 @@ pub fn move_plan(conn: &Connection, id: i64, new_milestone_id: i64) -> Result<()
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let result = (|| {
         conn.execute(db::PLAN_SET_MILESTONE, params![new_milestone_id, id])?;
+        // 跨桶移动 = 排期上下文变更：planned（已排期未开始）作废回 open，由新归属重新排期；
+        // dev/test/done/dropped 不动（进行中/已完成与版本桶归属无关）。
+        let reset = conn.execute(db::PLAN_RESET_PLANNED, params![id])?;
+        sync_plan(conn, id)?; // plan 状态重算（其下 issue 已变），并同步新侧 milestone
         if let Some(rid) = old {
             sync_milestone(conn, rid)?; // 旧侧重算（回落）
         }
-        sync_milestone(conn, new_milestone_id)?; // 新侧重算（推进）
-        Ok(())
+        Ok(reset)
     })();
     match result {
-        Ok(()) => {
+        Ok(reset) => {
             conn.execute_batch("COMMIT")?;
-            Ok(())
+            Ok(reset)
         }
         Err(e) => {
             let _ = conn.execute_batch("ROLLBACK");
@@ -840,6 +845,167 @@ mod tests {
                 .status,
             ContainerStatus::Running
         );
+    }
+
+    /// #223 修复：跨 milestone 移动 plan 时其下 planned issue 重置回 open（排期作废），
+    /// plan 不再派生 running，旧侧派生回落、新侧按现状推进。
+    #[test]
+    fn move_plan_resets_planned_issues_and_derives() {
+        let (conn, iid) = setup();
+        let ms_a = create(
+            &conn,
+            ContainerKind::Milestone,
+            "a",
+            Some("0.5.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let ms_b = create(
+            &conn,
+            ContainerKind::Milestone,
+            "b",
+            Some("2.0.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, Some(ms_a)).unwrap();
+        set_issue_plan(&conn, iid, pid).unwrap();
+        set_status(&conn, iid, "planned");
+        sync_container_status(&conn, iid).unwrap();
+        // 初始：issue planned → plan running → msA running（#223 现象）。
+        assert_eq!(
+            get(&conn, ContainerKind::Plan, pid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Running
+        );
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, ms_a)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Running
+        );
+        // 移到 msB（未来版本桶）：planned 重置 open，返回 1。
+        let reset = move_plan(&conn, pid, ms_b).unwrap();
+        assert_eq!(reset, 1);
+        let st: String = conn
+            .query_row(
+                "SELECT status FROM issues WHERE id = ?1",
+                params![iid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(st, "open");
+        // plan 回落 open；旧侧 msA 回落 open；新侧 msB 派生 open（plan 全 open）。
+        assert_eq!(
+            get(&conn, ContainerKind::Plan, pid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open
+        );
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, ms_a)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open
+        );
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, ms_b)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open
+        );
+    }
+
+    /// 只重置 planned：dev/test/done/dropped 保持，reset 计数精确。
+    #[test]
+    fn move_plan_keeps_non_planned_issues() {
+        let (conn, iid) = setup();
+        let ms_a = create(
+            &conn,
+            ContainerKind::Milestone,
+            "a",
+            Some("0.5.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let ms_b = create(
+            &conn,
+            ContainerKind::Milestone,
+            "b",
+            Some("2.0.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, Some(ms_a)).unwrap();
+        set_issue_plan(&conn, iid, pid).unwrap();
+        set_status(&conn, iid, "planned");
+        // 追加 dev/test/done/dropped 4 个 issue 挂同一 plan。
+        let pid0: i64 = conn
+            .query_row("SELECT id FROM projects", [], |r| r.get(0))
+            .unwrap();
+        for (t, st) in [("d", "dev"), ("t", "test"), ("n", "done"), ("r", "dropped")] {
+            conn.execute(
+                "INSERT INTO issues (title, project_id) VALUES (?1, ?2)",
+                params![t, pid0],
+            )
+            .unwrap();
+            let id = conn.last_insert_rowid();
+            set_issue_plan(&conn, id, pid).unwrap();
+            set_status(&conn, id, st);
+        }
+        let reset = move_plan(&conn, pid, ms_b).unwrap();
+        assert_eq!(reset, 1, "仅 planned 被重置");
+        let statuses: Vec<String> = conn
+            .prepare("SELECT status FROM issues WHERE plan_id = ?1")
+            .unwrap()
+            .query_map(params![pid], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            statuses,
+            vec!["open", "dev", "test", "done", "dropped"],
+            "planned→open，其余保持"
+        );
+    }
+
+    /// 同 milestone 迁移 no-op：不重置排期。
+    #[test]
+    fn move_plan_same_milestone_is_noop() {
+        let (conn, iid) = setup();
+        let ms_a = create(
+            &conn,
+            ContainerKind::Milestone,
+            "a",
+            Some("0.5.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, Some(ms_a)).unwrap();
+        set_issue_plan(&conn, iid, pid).unwrap();
+        set_status(&conn, iid, "planned");
+        sync_container_status(&conn, iid).unwrap();
+        let reset = move_plan(&conn, pid, ms_a).unwrap();
+        assert_eq!(reset, 0);
+        let st: String = conn
+            .query_row(
+                "SELECT status FROM issues WHERE id = ?1",
+                params![iid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(st, "planned");
     }
 
     /// 删除 plan：解绑其下 issue（plan_id 置 NULL），plan 消失、issue 保留。
