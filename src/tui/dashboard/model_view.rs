@@ -11,7 +11,7 @@ pub struct PlanGroup<'a> {
 }
 
 /// 当前 tab 的搜索 filter（tab_search[tab_index]）。None = 无搜索。
-fn current_search(m: &DashboardModel) -> Option<&str> {
+pub fn current_search(m: &DashboardModel) -> Option<&str> {
     let idx = match m.active_tab() {
         View::Issues => 0,
         View::Plans => 1,

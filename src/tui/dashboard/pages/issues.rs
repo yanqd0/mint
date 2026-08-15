@@ -7,6 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
 use crate::tui::dashboard::model::DashboardModel;
+use crate::tui::dashboard::model_view;
 use crate::tui::dashboard::pages::common::{
     flash_style, flex_col_width, footer_line, kind_abbrev, status_abbrev, status_dot,
     status_text_style,
@@ -14,7 +15,7 @@ use crate::tui::dashboard::pages::common::{
 use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
 use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::{render_panel, stack};
-use crate::tui::text::truncate;
+use crate::tui::text::{highlight_spans, truncate};
 
 /// 列表面板标题（Issues tab 与 PlanDetail 共用，恒为 issues；页码在调用处拼接）。
 fn panel_title() -> String {
@@ -67,6 +68,12 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
                 .first()
                 .map(|l| truncate(l, 20))
                 .unwrap_or_default();
+            // 搜索命中高亮（#261）：有搜索词时对 title 命中子串反色。
+            let title = truncate(&i.title, title_w.max(1) as usize);
+            let title_spans = match model_view::current_search(m) {
+                Some(q) => highlight_spans(&title, q, Style::default()),
+                None => vec![Span::raw(title)],
+            };
             let mut row = Row::new(vec![
                 Cell::from(Line::from(vec![
                     Span::styled(format!("{dot}"), dot_style), // 状态点 ●（状态色/闪烁）
@@ -79,7 +86,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
                 Cell::from(i.priority.to_string()),
                 Cell::from(kind_abbrev(i.kind).to_string()),
                 Cell::from(label),
-                Cell::from(truncate(&i.title, title_w.max(1) as usize)),
+                Cell::from(Line::from(title_spans)),
             ]);
             if m.selected_idx() == Some(idx) {
                 row = row.style(Style::new().add_modifier(Modifier::REVERSED));

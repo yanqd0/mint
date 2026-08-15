@@ -2931,3 +2931,22 @@ fn st_search_typed_none_falls_back_unchanged() {
     let items = v["items"].as_array().unwrap();
     assert!(items.iter().any(|x| x["id"] == i), "旧 FTS 行为应命中");
 }
+
+// ── TUI 搜索命中高亮（#261）─────────────────────────────────────
+
+/// 高亮逻辑不破坏 TUI 快照渲染（title 仍完整输出；REVERSED 样式由单测验证）。
+#[test]
+fn st_tui_title_renders_with_search_hook() {
+    let (_dir, db) = empty_db();
+    add_issue(&db, "highlighted search target");
+    // 快照路径（非 TTY）不激活搜索，title 应完整渲染。
+    let out = mint(&db)
+        .args(["tui"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("highlighted search target"), "title 应完整: {text}");
+}
