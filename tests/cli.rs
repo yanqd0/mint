@@ -2948,5 +2948,33 @@ fn st_tui_title_renders_with_search_hook() {
         .stdout
         .clone();
     let text = String::from_utf8_lossy(&out).to_string();
-    assert!(text.contains("highlighted search target"), "title 应完整: {text}");
+    assert!(
+        text.contains("highlighted search target"),
+        "title 应完整: {text}"
+    );
+}
+
+// ── list panel 标题 size 显示（#264/#265）────────────────────────
+
+/// TUI 列表标题含 size（当前页实际行数/总数），与 page 并列。
+#[test]
+fn st_tui_list_title_shows_size() {
+    let (_dir, db) = empty_db();
+    // 唯一标题避免去重合并；2 条 → size 2/2。
+    add_issue(&db, "alpha-one");
+    add_issue(&db, "bravo-two");
+    let out = mint(&db)
+        .args(["tui"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    // 标题同时含 page 与 size。
+    assert!(
+        text.contains("issues · page 1/1 · size 2/2"),
+        "列表标题应含 page+size: {text}"
+    );
+    assert!(text.contains("alpha-one"), "缺 issue 行: {text}");
 }

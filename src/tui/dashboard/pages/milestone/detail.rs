@@ -9,7 +9,7 @@ use ratatui::widgets::Paragraph;
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    body_lines_capped, container_status_color, kv_lines, panel_wrap, status_dot,
+    body_lines_capped, container_status_color, kv_lines, list_title, panel_wrap, status_dot,
 };
 use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
 use crate::tui::panel::{render_panel, stack};
@@ -199,10 +199,12 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, milestone_id: i64,
     render_panel(
         frame,
         chunks[ci],
-        &format!(
-            "plans · page {}/{}",
+        &list_title(
+            "plans",
             m.plans_page + 1,
-            m.milestone_plans_pages(milestone_id)
+            m.milestone_plans_pages(milestone_id),
+            plan_lines.len(),
+            m.milestone_plans(milestone_id).len(),
         ),
         plan_lines,
     );
@@ -210,10 +212,12 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, milestone_id: i64,
     render_panel(
         frame,
         chunks[ci],
-        &format!(
-            "issues · page {}/{}",
+        &list_title(
+            "issues",
             m.issues_page + 1,
-            m.milestone_issues_pages(milestone_id)
+            m.milestone_issues_pages(milestone_id),
+            issue_lines.len(),
+            m.scope_issues().len(),
         ),
         issue_lines,
     );

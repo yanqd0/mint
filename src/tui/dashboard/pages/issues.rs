@@ -9,7 +9,7 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::model_view;
 use crate::tui::dashboard::pages::common::{
-    flash_style, flex_col_width, footer_line, kind_abbrev, status_abbrev, status_dot,
+    flash_style, flex_col_width, footer_line, kind_abbrev, list_title, status_abbrev, status_dot,
     status_text_style,
 };
 use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
@@ -102,8 +102,17 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
         m,
         "j/k row · ←/→ page · 1/2/3 tab · Enter detail · / search · q quit",
     );
-    // 翻页信息移入列表 panel 标题（需求：不放 help 栏）。
-    let list_title = format!("─{} · page {}/{}", panel_title(), m.page + 1, m.pages());
+    // 翻页 + size 信息移入列表 panel 标题（#264：统一 list_title helper）。
+    let list_title = format!(
+        "─{}",
+        list_title(
+            &panel_title(),
+            m.page + 1,
+            m.pages(),
+            page.len(),
+            m.visible_issues().len(),
+        )
+    );
     render_panel(frame, chunks[0], "progress", prog_lines);
     let table = Table::new(rows, widths).header(header).block(
         Block::bordered()

@@ -9,7 +9,7 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use crate::models::Issue;
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    container_status_color, flash_style, flex_col_width, footer_line,
+    container_status_color, flash_style, flex_col_width, footer_line, list_title,
 };
 use crate::tui::dashboard::pages::progress::progress_bar;
 use crate::tui::dashboard::types::JumpKind;
@@ -79,12 +79,23 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
             row
         })
         .collect();
+    // size 取填充空行前的实际行数（空列表时 size 0/N，不把占位行计入）。
+    let size = rows.len();
     if rows.is_empty() {
         rows.push(Row::new(vec![Cell::from("(no plans)")]));
     }
 
     let footer = footer_line(m, "j/k ↑↓ plan · ←/→ page · 1/2/3 tab · / search · q quit");
-    let title = format!("─plans · page {}/{}", m.page + 1, m.pages());
+    let title = format!(
+        "─{}",
+        list_title(
+            "plans",
+            m.page + 1,
+            m.pages(),
+            size,
+            m.visible_plans().len(),
+        )
+    );
     let table = Table::new(rows, widths).header(header).block(
         Block::bordered()
             .title(title)

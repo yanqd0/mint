@@ -8,7 +8,7 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    container_status_color, flash_style, flex_col_width, footer_line,
+    container_status_color, flash_style, flex_col_width, footer_line, list_title,
 };
 use crate::tui::dashboard::types::JumpKind;
 use crate::tui::panel::stack;
@@ -81,8 +81,19 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
             row
         })
         .collect();
+    // size 取填充空行前的实际行数。
+    let size = rows.len();
     let footer = footer_line(m, "j/k ↑↓ row · ←/→ page · 1/2/3 tab · / search · q quit");
-    let title = format!("─milestones · page {}/{}", m.page + 1, m.pages());
+    let title = format!(
+        "─{}",
+        list_title(
+            "milestones",
+            m.page + 1,
+            m.pages(),
+            size,
+            m.visible_milestones().len(),
+        )
+    );
     let mut rows = rows;
     if rows.is_empty() {
         rows.push(Row::new(vec![Cell::from("(no milestones)")]));

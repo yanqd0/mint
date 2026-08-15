@@ -19,6 +19,20 @@ pub fn footer_line(m: &DashboardModel, help: &str) -> Line<'static> {
     }
 }
 
+/// 列表 panel 标题：`{title} · page {cur}/{pages} · size {cur_size}/{total}`。
+/// `cur_size` 为当前页实际行数（非分页数）；`total` 为总行数。
+/// **不含 `─` 前缀**：Block title 路径由调用方加；render_panel 路径由 `panel_title` 加（避免双重前缀）。
+/// 各 list panel（issues/plans/milestones/detail 双段）统一复用（#264）。
+pub fn list_title(
+    title: &str,
+    cur_page: usize,
+    total_pages: usize,
+    cur_size: usize,
+    total: usize,
+) -> String {
+    format!("{title} · page {cur_page}/{total_pages} · size {cur_size}/{total}")
+}
+
 /// 闪烁样式：目标（id+kind）在 `m.flash` 中 → SLOW_BLINK（列表行闪烁标记，变化内容提示）。
 pub fn flash_style(m: &DashboardModel, id: i64, kind: JumpKind) -> Option<Style> {
     m.flash
