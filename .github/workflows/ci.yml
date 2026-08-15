@@ -64,5 +64,6 @@ jobs:
       - uses: codecov/codecov-action@v5
         with:
           files: lcov.info
-          fail_ci_if_error: true
+          # coverage 门禁由 `--fail-under-lines` 严格执行；上传失败（如 token 未配）不阻塞 CI
+          fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
