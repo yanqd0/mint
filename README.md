@@ -1,6 +1,8 @@
 # mint: Minimal Issue & Needs Tracker
 
 [![crates.io](https://img.shields.io/crates/v/mint-faa.svg)](https://crates.io/crates/mint-faa)
+[![PyPI](https://img.shields.io/pypi/v/mint-faa.svg)](https://pypi.org/project/mint-faa/)
+[![npm](https://img.shields.io/npm/v/mint-faa.svg)](https://www.npmjs.com/package/mint-faa)
 [![CI](https://github.com/yanqd0/mint/actions/workflows/ci.yml/badge.svg)](https://github.com/yanqd0/mint/actions)
 [![codecov](https://codecov.io/gh/yanqd0/mint/graph/badge.svg)](https://codecov.io/gh/yanqd0/mint)
 
