@@ -15,4 +15,5 @@ pub mod models;
 pub mod output;
 pub mod project;
 pub mod state;
+#[cfg(feature = "tui")]
 pub mod tui;

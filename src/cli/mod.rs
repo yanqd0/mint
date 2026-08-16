@@ -42,6 +42,7 @@ pub struct ListContainersArgs {
     #[arg(long)]
     pub json: bool,
     /// Table view (interactive on TTY, single page otherwise)
+    #[cfg(feature = "tui")]
     #[arg(long, conflicts_with = "json")]
     pub tui: bool,
 }
@@ -53,6 +54,7 @@ pub struct ContainerIdArgs {
     #[arg(long)]
     pub json: bool,
     /// TUI detail page (reuses the mint tui page)
+    #[cfg(feature = "tui")]
     #[arg(long, conflicts_with = "json")]
     pub tui: bool,
 }
@@ -312,6 +314,7 @@ pub enum Commands {
     /// Plan container subcommands
     Plan(PlanArgs),
     /// Live dashboard: auto-refreshing issue/plan activity feed (TTY) or snapshot (non-TTY)
+    #[cfg(feature = "tui")]
     Tui,
     /// Export all data (issues with labels/links + plans + milestones + labels) for backup/migration
     Export(ExportArgs),
@@ -451,6 +454,7 @@ impl Cli {
             Commands::Milestone(r) => milestone::dispatch(&conn, &project, &r.command),
             Commands::Plan(p) => plan::dispatch(&conn, &project, &p.command),
             Commands::Delete(d) => delete::dispatch(&conn, &d.command),
+            #[cfg(feature = "tui")]
             Commands::Tui => crate::tui::run_dashboard(&conn, &project),
             Commands::Export(a) => export::cmd_export(&conn, a),
         }
@@ -501,11 +505,12 @@ fn container_matches_search(c: &Container, q: &str) -> bool {
 /// 容器 list：默认只显非 done，--all/-a 全列。
 pub(crate) fn cmd_container_list(
     conn: &Connection,
-    project: &str,
+    #[cfg_attr(not(feature = "tui"), allow(unused_variables))] project: &str,
     kind: ContainerKind,
     a: &ListContainersArgs,
 ) -> Result<(), Error> {
     let mut items = container::list(conn, kind, a.all)?;
+    #[cfg(feature = "tui")]
     if a.tui {
         // list --tui 归一：复用 dashboard 列表页（带 --all-states 筛选）。
         let filter = crate::tui::dashboard::types::IssueFilter {
@@ -549,10 +554,11 @@ pub(crate) fn cmd_container_list(
 /// 容器 show：详情 + 其下 issue。
 pub(crate) fn cmd_container_show(
     conn: &Connection,
-    project: &str,
+    #[cfg_attr(not(feature = "tui"), allow(unused_variables))] project: &str,
     kind: ContainerKind,
     a: &ContainerIdArgs,
 ) -> Result<(), Error> {
+    #[cfg(feature = "tui")]
     if a.tui {
         let view = match kind {
             ContainerKind::Plan => crate::tui::dashboard::types::View::PlanDetail { plan_id: a.id },

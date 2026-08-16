@@ -38,6 +38,7 @@ pub struct ListArgs {
     #[arg(long)]
     pub json: bool,
     /// Table view (interactive on TTY, single page otherwise)
+    #[cfg(feature = "tui")]
     #[arg(long, conflicts_with = "json")]
     pub tui: bool,
 }
@@ -73,6 +74,7 @@ pub struct ShowArgs {
     #[arg(long)]
     pub json: bool,
     /// TUI detail page (reuses the mint tui page)
+    #[cfg(feature = "tui")]
     #[arg(long, conflicts_with = "json")]
     pub tui: bool,
 }
@@ -96,6 +98,7 @@ pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Er
     if let Some(q) = l.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         issues.retain(|i| search_filter::issue_matches(i, q));
     }
+    #[cfg(feature = "tui")]
     if l.tui {
         // list --tui 归一：复用 dashboard Issues 页（带初始筛选）。
         let filter = crate::tui::dashboard::types::IssueFilter {
@@ -315,8 +318,13 @@ fn issue_to_json(i: &Issue) -> serde_json::Value {
     })
 }
 
-pub fn cmd_show(conn: &Connection, project: &str, s: &ShowArgs) -> Result<(), Error> {
+pub fn cmd_show(
+    conn: &Connection,
+    #[cfg_attr(not(feature = "tui"), allow(unused_variables))] project: &str,
+    s: &ShowArgs,
+) -> Result<(), Error> {
     let id = s.id;
+    #[cfg(feature = "tui")]
     if s.tui {
         return crate::tui::run_dashboard_view(
             conn,
