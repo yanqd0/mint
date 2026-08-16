@@ -41,13 +41,19 @@ Most of the time, it changes by itself.
 
 ## Install the CLI
 
-The `mint` binary is published to three registries (package name `mint-faa`, command `mint`):
+The `mint` binary ships to three registries (package name `mint-faa`, command `mint`). Pick any:
 
 ```sh
-cargo install mint-faa        # crates.io
-pip install mint-faa          # PyPI
-npm install -g mint-faa       # npm (downloads platform binary from GitHub Releases)
+cargo install mint-faa        # crates.io — compiles from source (any platform)
+pip install mint-faa          # PyPI — prebuilt wheel (Linux/macOS/Windows)
+npm install -g mint-faa       # npm — downloads the platform binary from GitHub Releases
 ```
+
+- **crates.io**: source build; needs a Rust toolchain.
+- **PyPI**: prebuilt `maturin` wheels — install anywhere Python runs, no compiler needed.
+- **npm**: a `cargo-dist` installer that fetches the correct prebuilt binary for your platform (Linux/macOS/Windows) from GitHub Releases. Linux binaries are **musl-static** (single file, no glibc dependency).
+
+> Pre-release versions (`0.5.0-alpha.1` style) are only published to npm / GitHub Releases; crates.io and PyPI get **stable** releases only.
 
 Or build from source: `cargo install --path .`
 
