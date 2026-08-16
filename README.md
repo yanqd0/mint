@@ -6,6 +6,28 @@
 
 This is a global, single-machine, SQLite-backed issue system CLI for AI agents.
 
+![plan-demo](https://github.com/user-attachments/assets/ed7ca3b9-8af2-417f-850f-ccb77928b7f9)
+
+## Usage
+
+### In AI Agent
+
+```sh
+/mint   # In a new session.
+# Or
+/mint <Something>
+```
+
+Most of the time, it works by itself.
+
+### In Shell (Optional)
+
+```sh
+mint tui
+```
+
+Most of the time, it changes by itself.
+
 ## Features
 
 - **Single global database** at `$XDG_DATA_HOME/mint/mint.db` (`MINT_DB_PATH` overrides) — no per-project install, cross-project shared via refs
@@ -29,7 +51,9 @@ npm install -g mint-faa       # npm (downloads platform binary from GitHub Relea
 
 Or build from source: `cargo install --path .`
 
-## Install the Claude Code plugin
+## Install the Plugin
+
+### Install the Claude Code plugin
 
 ```sh
 # From GitHub (one-liner):
@@ -55,7 +79,7 @@ claude plugin uninstall mint-faa@mint
 claude plugin marketplace remove mint     # optional
 ```
 
-## Install the Codex adapter
+### Install the Codex adapter
 
 ```sh
 # One-liner (global): installs hooks into ~/.codex + skill into ~/.agents/skills
@@ -72,7 +96,7 @@ claude plugin marketplace remove mint     # optional
 
 The adapter injects failure signals (`mint: tool X failed — <cmd>`) and issue context (`mint list`) into Codex sessions, and ships `AGENTS.md` + a `.agents/skills/mint` symlink to the shared skill. Full flow lives in `.agents/skills/mint/SKILL.md`.
 
-## Install the OpenCode plugin
+### Install the OpenCode plugin
 
 ```sh
 # One-liner (global): plugin into ~/.config/opencode/plugins + skill into ~/.config/opencode/skills
@@ -90,23 +114,3 @@ The adapter injects failure signals (`mint: tool X failed — <cmd>`) and issue 
 The plugin injects failure signals (`mint: tool X failed — <cmd>`), issue context (`mint list`), and commit reminders into OpenCode sessions, and marks the host (`mint-adapter: opencode`) so the shared skill routes to its OpenCode rules. Full flow lives in `.agents/skills/mint/SKILL.md`.
 
 Data lives in a single global SQLite database at `$XDG_DATA_HOME/mint/mint.db` (`MINT_DB_PATH` overrides).
-
-## Usage
-
-### In AI Agent
-
-```sh
-/mint   # In a new session.
-# Or
-/mint <Something>
-```
-
-Most of the time, it works by itself.
-
-### In Shell (Optional)
-
-```sh
-mint tui
-```
-
-Most of the time, it changes by itself.
