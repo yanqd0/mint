@@ -131,6 +131,9 @@ pub struct Issue {
     pub uid: Option<String>,
     pub hit_count: i64,
     pub labels: Vec<String>,
+    /// label 名 → color 映射（TUI 渲染着色用，不进 export JSON）。
+    #[serde(default, skip_serializing)]
+    pub label_colors: std::collections::HashMap<String, String>,
     pub links: Vec<Link>,
     pub created_at: String,
     pub updated_at: String,

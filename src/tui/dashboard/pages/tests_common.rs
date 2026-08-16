@@ -23,6 +23,7 @@ pub fn mk_issue(id: i64, title: &str, status: Status, plan_id: Option<i64>) -> I
         machine_id: None,
         uid: None,
         hit_count: 0,
+        label_colors: std::collections::HashMap::new(),
         labels: vec![],
         links: vec![],
         created_at: "t".into(),

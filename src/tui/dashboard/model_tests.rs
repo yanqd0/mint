@@ -27,6 +27,7 @@ fn mk_issue(id: i64, status: Status, plan_id: Option<i64>, updated: &str) -> Iss
         machine_id: None,
         uid: None,
         hit_count: 0,
+        label_colors: std::collections::HashMap::new(),
         labels: vec![],
         links: vec![],
         created_at: "t".into(),

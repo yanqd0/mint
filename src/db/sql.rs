@@ -32,6 +32,7 @@ pub const ISSUE_LINK_DELETE: &str = include_str!("queries/issue_link_delete.sql"
 pub const ISSUE_LINKS_FOR: &str = include_str!("queries/issue_links_for.sql");
 pub const ISSUE_LINKS_FOR_ALL: &str = include_str!("queries/issue_links_for_all.sql");
 pub const ISSUE_LABELS_FOR_ALL: &str = include_str!("queries/issue_labels_for_all.sql");
+pub const ISSUE_LABELS_COLORS_FOR_ALL: &str = include_str!("queries/issue_labels_colors_for_all.sql");
 
 pub const MACHINE_UPSERT: &str = include_str!("queries/machine_upsert.sql");
 pub const MACHINE_BACKFILL_UID: &str = include_str!("queries/machine_backfill_uid.sql");

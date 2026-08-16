@@ -143,6 +143,7 @@ pub(crate) fn issue_from_row(r: &rusqlite::Row) -> rusqlite::Result<Issue> {
         uid: r.get(13)?,
         hit_count: r.get(14)?,
         labels: Vec::new(),
+        label_colors: std::collections::HashMap::new(),
         links: Vec::new(),
         created_at: r.get(15)?,
         updated_at: r.get(16)?,

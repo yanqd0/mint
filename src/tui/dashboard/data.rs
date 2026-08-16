@@ -6,6 +6,7 @@ use crate::cli::issue::list::{fill_labels, issue_from_row};
 use crate::container::{self, ContainerKind};
 use crate::db;
 use crate::error::Error;
+use crate::label;
 use crate::link;
 use crate::models::{Issue, Status};
 use crate::tui::dashboard::diff::DashboardSnapshot;
@@ -25,6 +26,14 @@ pub fn load_snapshot(conn: &Connection, project: &str) -> Result<DashboardSnapsh
     )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
     fill_labels(conn, &mut issues)?;
+    // 补 label 名 → color 映射（TUI 渲染着色用）。
+    let colors_map = label::colors_for_issues(conn)?;
+    for i in issues.iter_mut() {
+        i.label_colors = colors_map
+            .get(&i.id)
+            .map(|pairs| pairs.iter().cloned().collect())
+            .unwrap_or_default();
+    }
     // 补 links（出向 + 入向反向派生），供详情页 links 列表与 diff 使用；批量一次取回防 N+1。
     let links_map = link::links_for_many(conn)?;
     for i in issues.iter_mut() {

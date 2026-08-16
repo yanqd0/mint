@@ -177,6 +177,7 @@ mod tests {
             machine_id: None,
             uid: None,
             hit_count: 0,
+            label_colors: std::collections::HashMap::new(),
             labels: vec![],
             links: vec![],
             created_at: "t".into(),
