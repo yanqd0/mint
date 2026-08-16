@@ -64,6 +64,21 @@ release 二进制（1.7M）各归档格式实测（`tar`，unix 平台）：
 
 **结论**：**不实施手写化**，记录评估结论（#296 close）。serde_json 保持生产依赖。
 
+### rusqlite cache feature 关闭评估（2026-08-16，plan #68）
+
+**实测**：改 Cargo.toml `rusqlite = { version = "0.39", default-features = false, features = ["bundled"] }`（关默认 `cache` feature）后重建 release：
+
+| 状态 | 体积 |
+|---|---|
+| baseline（cache 开） | 1,742,688 B |
+| cache 关闭 | 1,742,720 B（**+32B，噪声级**） |
+
+- hashlink（cache feature 专属依赖，156B）确实从依赖图消失，但**二进制体积几乎零变化**——release 的 lto 已消除 mint 不调用的 cache 死代码，收益被摊薄到不可测量
+- mint 全库无 `prepare_cached`（CLI 每命令新连接 + TUI 均普通 `.prepare()`），关闭无行为影响
+- 运行时收益仅剩：`Connection.cache` 字段删除 → 每连接少一个 LruCache（容量 16）堆分配（CLI 场景影响极小）
+
+**结论**：**收益可忽略（<1KiB 阈值），不实施**，保留 cache feature 默认开启（#295 close）。
+
 ### 已应用的体积优化（历史）
 
 | commit | 优化 | 收益 |
