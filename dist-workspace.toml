@@ -13,6 +13,8 @@ installers = ["npm"]
 publish-jobs = ["npm"]
 # npm package name (crates.io/PyPI 统一 mint-faa；`mint` 已被占)
 npm-package = "mint-faa"
+# 允许手改生成的 release.yml（npm OIDC trusted publishing 需加 --provenance + id-token: write）
+allow-dirty = ["ci"]
 # Target platforms to build apps for (Rust target-triple syntax)
 # Linux 走 musl 静态链接（单文件免依赖）；macOS/Windows 默认
 targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
