@@ -8,6 +8,7 @@
 - [技术选型与决策](decisions.md) — ADR 式记录（D1-D31）：命名/ORM/CLI 框架/SQLite 集成/体积目标/状态机/close 语义/语言策略/label/project 检测/容器建模/轻量迁移/issue links/容器 5 态派生/state commit/skill 多 agent 化（D29 Codex / D30 OpenCode 适配形态 / D31 CI 发布架构）。
 - [notes 使用规范](CLAUDE.md) — notes/ 全中文、新增概念登记 DDD、技术选型记录 decisions 的写作约定。
 - [多 SQLite 合并方案调研](evaluation-sync.md) — 0.5.0 同步背景：社区方案分类（物理复制派/CRDT 派）、uid 方案印证、借鉴点、独立项目评估。
+- [体积基线](volume-baseline.md) — release 二进制各 crate 占比 + 段分布 + 已应用体积优化（plan #71 产物，作增量对比基准）。
 - 设计决策记录 — `~/Documents/claude/mint.md`（仓库外）：早期设计全过程，需求、方案对比、架构取舍、命名由来（mint/mint-faa/docket 被否）。
 - Rust 开发与构建偏好 — mem-lite #189：release 优化矩阵、thiserror/eyre、workspace 结构、.cargo/config.toml 全显式（mold/国内镜像）。
 - 命名决策 — mem-lite #188：命令名 `mint`、crates.io 包名 `mint-faa`、候选评估与 `mint-cli` 被占用约束。
