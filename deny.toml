@@ -1,0 +1,36 @@
+# cargo-deny 配置：依赖治理门禁（CVE/license/版本漂移）。
+# 文档：https://embarkstudios.github.io/cargo-deny/
+# 本地验证：cargo deny check（CI deny job 同步执行）。
+
+[graph]
+all-features = false
+no-default-features = false
+
+[advisories]
+ignore = []
+
+[licenses]
+# mint 是 MIT 项目；主依赖为 MIT/Apache-2.0 dual。
+# 例外（Unicode-3.0 等）用 exceptions/clarify 显式登记，不放开全局。
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.8
+# 按 crate 放行的例外 license（不进全局 allow）。
+exceptions = [
+    { allow = ["Zlib"], crate = "foldhash" },
+]
+
+[bans]
+# 版本漂移治理：同 crate 多版本 → 硬门禁。
+multiple-versions = "deny"
+wildcards = "deny"
+highlight = "all"
+# 已知合理的 transitive 多版本（生态各自引入，无法合并，记录原因）。
+skip = [
+    { crate = "hashbrown@0.17.1", reason = "std/ratatui 生态 transitive，与 0.16 并存不可避免" },
+    { crate = "syn@3.0.3", reason = "rustdoc-types/生态新链引入，与 syn 2 并存" },
+    { crate = "redox_syscall@0.9.2", reason = "redox 目标平台依赖，与 0.5 并存" },
+]

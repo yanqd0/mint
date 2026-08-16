@@ -37,6 +37,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
+  # 依赖治理门禁：CVE(advisories) + license + 版本漂移(bans) + 来源(sources)。
+  # deny.toml 为权威配置；advisories 数据由 action 缓存（与本地 cargo audit 同源 RustSec）。
+  deny:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: embarkstudios/cargo-deny-action@v2
+        with:
+          command: check
+
   # headless 门禁：--no-default-features 必须可编译（TUI feature-gating 后）
   headless:
     runs-on: ubuntu-latest
