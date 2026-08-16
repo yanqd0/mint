@@ -22,6 +22,43 @@ fn panel_title() -> String {
     "issues".to_string()
 }
 
+/// 生成 label chip Spans（#273）：每个 label 按记录 color 着色，空格分隔。
+/// 按 `budget` 显示宽度截断：超出预算时保留已放入的完整 chip + 追加 `…`。
+fn label_chips(
+    labels: &[String],
+    colors: &std::collections::HashMap<String, String>,
+    budget: usize,
+) -> Vec<Span<'static>> {
+    use unicode_width::UnicodeWidthStr;
+    if labels.is_empty() {
+        return Vec::new();
+    }
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut used = 0usize;
+    let mut truncated = false;
+    for (n, l) in labels.iter().enumerate() {
+        let sep = if n == 0 { 0 } else { 1 };
+        let lw = l.width();
+        // 预留 1 给末尾 `…`（若后续还有 label 或本 chip 超预算）。
+        let needs_ellipsis = n + 1 < labels.len() || used + sep + lw > budget;
+        if used + sep + lw + (if needs_ellipsis { 1 } else { 0 }) > budget {
+            truncated = true;
+            break;
+        }
+        if n > 0 {
+            spans.push(Span::raw(" "));
+            used += 1;
+        }
+        let color = colors.get(l).cloned().unwrap_or_default();
+        spans.push(Span::styled(l.clone(), label_style(&color)));
+        used += lw;
+    }
+    if truncated && !spans.is_empty() {
+        spans.push(Span::raw("…"));
+    }
+    spans
+}
+
 /// 渲染 issues 页面：进度 panel（上）+ 列表 panel（下）+ footer（Issues tab / PlanDetail 共用）。
 pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
     // 布局先定：progress panel + 列表面板高度（列表按可见高度分页）。
@@ -63,21 +100,8 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
         .enumerate()
         .map(|(idx, i)| {
             let (dot, dot_style) = status_dot(i.status);
-            // LABEL 列：首个 label 按记录 color 着色（#270，REVERSED chip 效果）。
-            let label_text = i
-                .labels
-                .first()
-                .map(|l| truncate(l, 20))
-                .unwrap_or_default();
-            let label_cell = if let Some(first) = i.labels.first() {
-                let color = i.label_colors.get(first).cloned().unwrap_or_default();
-                Cell::from(Line::from(vec![Span::styled(
-                    label_text,
-                    label_style(&color),
-                )]))
-            } else {
-                Cell::from("")
-            };
+            // LABEL 列：全部 label 按记录 color 着色（#273，chip 效果），按列宽预算截断。
+            let label_cell = Cell::from(Line::from(label_chips(&i.labels, &i.label_colors, 20)));
             // 搜索命中高亮（#261）：有搜索词时对 title 命中子串反色。
             let title = truncate(&i.title, title_w.max(1) as usize);
             let title_spans = match model_view::current_search(m) {
@@ -141,6 +165,45 @@ mod tests {
         buffer_text, mk_issue, model_with, test_backend,
     };
     use crate::tui::dashboard::types::View;
+    use ratatui::style::Color;
+
+    #[test]
+    fn label_chips_all_labels_with_colors() {
+        let mut colors = std::collections::HashMap::new();
+        colors.insert("dev-clean".to_string(), "#1a7f37".to_string());
+        colors.insert("TUI".to_string(), "#a371f7".to_string());
+        let labels = vec!["dev-clean".to_string(), "TUI".to_string()];
+        let spans = label_chips(&labels, &colors, 20);
+        assert_eq!(spans.len(), 3, "2 label + 1 空格");
+        assert_eq!(spans[0].content, "dev-clean");
+        assert_eq!(spans[1].content, " ");
+        assert_eq!(spans[2].content, "TUI");
+        // chip 样式：bg=记录色。
+        assert_eq!(spans[0].style.bg, Some(Color::Rgb(0x1a, 0x7f, 0x37)));
+    }
+
+    #[test]
+    fn label_chips_truncates_when_over_budget() {
+        let colors = std::collections::HashMap::new();
+        // 预算 10：一个长 label 超预算 → 直接空（无 chip 放入），或截断逻辑。
+        let long = vec!["a-very-long-label".to_string()];
+        let spans = label_chips(&long, &colors, 10);
+        assert!(spans.is_empty(), "超预算 label 不应放入: {spans:?}");
+        // 两个短 label 挤满预算：第一个放入，第二个超 → 追加 …。
+        let colors2 = std::collections::HashMap::new();
+        let two = vec!["aa".to_string(), "bbbbbbbbbbbb".to_string()];
+        let spans2 = label_chips(&two, &colors2, 5);
+        assert_eq!(spans2.len(), 2, "aa + …");
+        assert_eq!(spans2[0].content, "aa");
+        assert_eq!(spans2[1].content, "…");
+    }
+
+    #[test]
+    fn label_chips_empty_no_spans() {
+        let colors = std::collections::HashMap::new();
+        let spans = label_chips(&[], &colors, 20);
+        assert!(spans.is_empty());
+    }
 
     #[test]
     fn progress_counts_dropped_even_with_all_filter() {
