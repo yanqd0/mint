@@ -25,8 +25,8 @@ jobs:
             echo "::error::tag($TAG) != Cargo.toml($VERSION)"; exit 1
           fi
           case "$VERSION" in
-            *-*) echo "is_stable=false" ;;   # -alpha/-beta/-rc/-dev 预发布不碰 crates.io
-            *)   echo "is_stable=true" ;;
+            *-*) echo "is_stable=false" >> $GITHUB_OUTPUT ;;   # -alpha/-beta/-rc/-dev 预发布不碰 crates.io
+            *)   echo "is_stable=true" >> $GITHUB_OUTPUT ;;
           esac
 
   publish:

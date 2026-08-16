@@ -27,8 +27,8 @@ jobs:
             echo "::error::tag($TAG) != Cargo.toml($VERSION)"; exit 1
           fi
           case "$VERSION" in
-            *-*) echo "is_stable=false" ;;
-            *)   echo "is_stable=true" ;;
+            *-*) echo "is_stable=false" >> $GITHUB_OUTPUT ;;
+            *)   echo "is_stable=true" >> $GITHUB_OUTPUT ;;
           esac
 
   build:
