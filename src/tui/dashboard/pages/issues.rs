@@ -137,7 +137,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
         "j/k row · ←/→ page · 1/2/3 tab · Enter detail · / search · q quit",
     );
     // 翻页 + size 信息移入列表 panel 标题（#264：统一 list_title helper）。
-    let list_title = format!(
+    let panel_list_title = format!(
         "─{}",
         list_title(
             &panel_title(),
@@ -150,7 +150,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
     render_panel(frame, chunks[0], "progress", prog_lines);
     let table = Table::new(rows, widths).header(header).block(
         Block::bordered()
-            .title(list_title)
+            .title(panel_list_title)
             .padding(Padding::horizontal(1)),
     );
     frame.render_widget(table, chunks[1]);

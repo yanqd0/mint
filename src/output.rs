@@ -12,13 +12,17 @@ pub fn sanitize_terminal(s: &str) -> String {
         .collect()
 }
 
-/// 渲染 TSV 表格（表头首行 + tab 分隔数据行，list 与 show 默认输出）。每 cell 净化终端控制字符。
+/// 渲染 TSV 表格（表头首行 + tab 分隔数据行，list 与 show 默认输出）。
+/// 每 cell 净化终端控制字符 + 把 `\t\n\r` → 空格（保持单行，防 tab/换行拆列拆行）。
 pub fn format_tsv(headers: &[String], rows: &[Vec<String>]) -> String {
     let mut out = String::new();
     out.push_str(&headers.join("\t"));
     out.push('\n');
     for r in rows {
-        let cells: Vec<String> = r.iter().map(|s| sanitize_terminal(s)).collect();
+        let cells: Vec<String> = r
+            .iter()
+            .map(|s| sanitize_terminal(s).replace(['\t', '\n', '\r'], " "))
+            .collect();
         out.push_str(&cells.join("\t"));
         out.push('\n');
     }

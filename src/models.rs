@@ -206,7 +206,7 @@ impl rusqlite::types::FromSql for LinkType {
 }
 
 /// issue 链接（从某 issue 视角聚合出向 + 入向）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Link {
     /// 对端 issue id
     pub other_id: i64,

@@ -170,7 +170,7 @@ fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
 }
 
 /// hex 颜色（`#rrggbb` 或 `rrggbb`）：是否合法 6 位十六进制（parse_specs 三段判色用）。
-fn is_hex_color(s: &str) -> bool {
+pub(crate) fn is_hex_color(s: &str) -> bool {
     let h = s.trim_start_matches('#');
     h.len() == 6 && h.chars().all(|c| c.is_ascii_hexdigit())
 }

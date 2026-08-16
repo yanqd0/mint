@@ -654,6 +654,13 @@ fn cmd_label_set(conn: &Connection, s: &LabelSetArgs) -> Result<(), Error> {
             "label set requires --color or --description".to_string(),
         ));
     }
+    if let Some(c) = color
+        && !crate::label::is_hex_color(c)
+    {
+        return Err(Error::Other(format!(
+            "invalid color '{c}' — expected #rrggbb"
+        )));
+    }
     crate::label::set(conn, &s.name, color, desc)?;
     if s.json {
         println!(

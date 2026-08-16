@@ -102,6 +102,7 @@ fn issue_fields_changed(a: &Issue, b: &Issue) -> bool {
         || a.plan_id != b.plan_id
         || a.body != b.body
         || a.labels != b.labels
+        || a.links != b.links
 }
 
 /// 两轮快照 → 变化事件（issues 按 id 升序 → plans 按 id 升序，确定性）。
