@@ -380,6 +380,19 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D32. feature 规范化定案（default=[tui] + 未来网络依赖默认关）
+
+**背景**：plan #70 落地。为引入网络依赖（多机同步/MCP）建立 feature 边界，防功能悄悄膨胀。
+
+**决策**：
+- **`default = ["tui"]`**：TUI 作为默认特性（ratatui/crossterm/unicode-width 为 optional dep + feature-gated），`headless` CI job 强制 `cargo check --no-default-features --all-targets` 通过（commit `a1dc2f3`，headless 构建省 ~350KB）。
+- **未来网络依赖默认关**：新增 sync/mcp 等网络特性一律 `default` 不含，经 `--features`/`--no-default-features` 显式开启；核心 CLI 保持最小依赖（仅 clap/rusqlite/serde 系）。
+- **体积基线**：`notes/volume-baseline.md`（#304 建立）记录 release 各 crate 占比 + 段分布，作 feature 膨胀的量化对比基准。
+
+**理由**：单文件免依赖小二进制是核心价值（D5），默认开 TUI 是交互体验权衡，但网络依赖体积/安全风险大，须默认关 + CI 门禁锁定；体积基线让"加了什么变多大"可审计（配合 D31 依赖治理 deny）。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
