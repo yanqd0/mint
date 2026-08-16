@@ -4,121 +4,121 @@
 
 ### Features
 
-- Agent 生态：Codex adapter（hooks 失败启发式 + AGENTS.md）、OpenCode 插件（事件流转发）、skill 多 agent 化（宿主识别路由 + references/agent/）。
-- 发布流水线：GitHub Actions 门禁（fmt/clippy/test 三平台 + 覆盖率棘轮 90%）+ cargo-dist（npm 壳 + GitHub Release，musl 静态）+ crates.io/PyPI 发布（tag 激活，兼容带/不带 v 前缀）。
-- `mint export`：全量 JSON/TSV 导出（issues 含 labels/links + plans + milestones + labels），供备份/迁移；备份与迁移指南 docs/BACKUP.md。
-- 发布预检脚本 scripts/precheck.sh（版本一致性 / CHANGELOG / lint 一键）。
-- 搜索增强：类型化二次筛选（ID 精确置顶 + 同前缀跟随、status/kind 别名）、TUI 命中高亮、TUI/CLI 搜索语义统一。
-- TUI 增强：list panel 标题加 size（当前页/总数）、label 按记录色着色（前景自动推定对比色）、label 全量显示。
-- Label 治理：去版本 label（由 milestone 表达）、模块 label 体系（CI/MCP/TUI/cli/db/docs/plugin/search）、全量配色。
+- Agent ecosystem: Codex adapter (hook-based failure heuristic + AGENTS.md), OpenCode plugin (event-stream relay), skill multi-agent support (host-identification routing + `references/agent/`).
+- Release pipeline: GitHub Actions gate (fmt/clippy/test on three platforms + 90% coverage ratchet) + cargo-dist (npm shell + GitHub Release, musl static) + crates.io/PyPI publishing (tag-activated, compatible with and without a `v` prefix).
+- `mint export`: full JSON/TSV dump (issues with labels/links + plans + milestones + labels) for backup/migration; backup & migration guide `docs/BACKUP.md`.
+- Release precheck script `scripts/precheck.sh` (version consistency / CHANGELOG / lint one-shot).
+- Search enhancements: typed secondary filtering (exact ID pinned first + same-prefix follow, status/kind aliases), TUI match highlighting, unified TUI/CLI search semantics.
+- TUI enhancements: list-panel titles show size (current page / total), labels colored by their recorded value (foreground auto-inferred for contrast), all labels shown in list.
+- Label governance: removed version labels (expressed via milestone), module-label system (CI/MCP/TUI/cli/db/docs/plugin/search), full palette assignment.
 
 ### Docs
 
-- README 三端安装详情（crates.io/PyPI/npm）。
-- docs/RELEASING.md 发布操作指南。
+- README three-registry install details (crates.io/PyPI/npm).
+- `docs/RELEASING.md` release operations guide.
 
 ## 0.4.0
 
 ### Features
 
-- `mint tui` 大屏 dashboard：自动变化 issue/plan/milestone 面板 + 进度条 + 状态点（● 黄/绿闪/绿/白/红），TTY 每秒自动刷新、非 TTY 输出快照文本；plan 执行中自动切 plan 面板、结束切所属 milestone 再回 issue；Enter 查看 issue 详情 / milestone 面板查看其下 plan 行进度。
-- `mint tui` 界面重构：6 页面（Issues/Plans/Milestones 3 tab + Issue/Plan/Milestone 3 详情）、顶部 Tabs（1/2/3/Tab 切换）、圆角 Panel、plan 详情 kanban（6 态分列）、plans 按 milestone 分组、自动切换加空闲约束；UI 打磨（最外框项目名、Tabs 立体高亮、操作提示、页码总量）。
-- `mint tui` 自动跳转：事件驱动双 queue 管道（延迟合并 + 限长队列 + 空闲执行），新增 issue/plan/milestone 跳列表+详情（变化内容闪烁 2s），issue 状态变化跳对应 plan、plan 结束跳所属 milestone，60s 空闲回首页。
-- TUI 列表：issues/plans/milestones 三列表改 ratatui Table（按显示宽对齐）+ STATUS/P/Kind 列 + milestones 数字列（PLANS·ISSUES 总数(直属)）+ TITLE 顶格省略 + 无默认选中 + 按面板高度动态分页。
-- TUI 详情页：basic 键值对紧凑 `key: value | ...`（整对换行不拆、status 着色、created/updated 紫）；plan/milestone body ≤10 行省略、issue body 铺满底部；milestone 详情 plans/issues 面板状态点（容器色/issue 色）+ 直属优先显示全部 issue + 聚合进度面板；show 详情 basic 超宽自动换行不截断。
-- TUI 进度条：4 组聚合（done/open/working/dropped）+ eighth-block 亚像素（dropped 恒可见）+ 分组百分比行 + 全局配色对齐（open 白/工作黄/完成绿/放弃红，partial 青）+ plans PROGRESS 复用 plan 详情填色逻辑。
-- TUI 导航交互：Ctrl+C 退出（TuiKey 按键抽象保留修饰符）、Backspace 历史路由链（前进/后退）、milestone 双面板独立分页 + 跨 panel 光标路由、plan detail Enter 进 issue / issue detail p/m 进 plan/milestone。
-- list 类 `--tui` 表格浏览：TTY ratatui 可翻页表格（j/k 或 ↑/↓ 选行、PgUp/PgDn 或 h/l 翻页、q/Esc 退出），非 TTY 降级输出单页表格文本；`--tui` 与 `--json` 互斥，列宽按 Unicode 显示宽度对齐。
-- list 类默认输出改 TSV：表头首行 + tab 分隔数据行（token 最优），`--tsv` 参数移除（默认即 TSV）、`--json`/`--tui` 保留。
-- `show` 与详情：show 默认 TSV（issue/plan/milestone，body 末列转义）；issue 详情 basic 动态多列 + tags/test/body/links panel；`show --tui` 复用 dashboard 详情页；`list --tui` 归一 dashboard 列表页（Enter 进详情/Esc 返回）。
-- 插件与 CLI：根目录 marketplace.json 支持 git URL 远程安装；label list 去 `--tui`、project list TSV 化。
+- `mint tui` dashboard: auto-changing issue/plan/milestone panels + progress bars + status dots (● yellow/green-blink/green/white/red), TTY auto-refresh every second, non-TTY text snapshot; plan in execution auto-switches to plan panel, switches to its milestone on completion, then back to issues; Enter opens issue detail / milestone panel shows plan rows.
+- `mint tui` UI rebuild: 6 pages (Issues/Plans/Milestones tabs + Issue/Plan/Milestone details), top tabs (1/2/3/Tab to switch), rounded panels, plan-detail kanban (6-state columns), plans grouped by milestone, auto-switch with idle constraint; UI polish (outer-frame project name, raised tab highlight, action hints, page total).
+- `mint tui` auto-navigation: event-driven dual-queue pipeline (delayed merge + bounded queue + idle execution); new issue/plan/milestone jumps to list+detail (2s flash on change); issue status changes jump to its plan, plan end jumps to its milestone, 60s idle returns home.
+- TUI lists: issues/plans/milestones switched to ratatui Table (width-aligned) + STATUS/P/Kind columns + milestones numeric columns (PLANS·ISSUES total(direct)) + TITLE top-aligned ellipsis + no default selection + dynamic page size by panel height.
+- TUI detail pages: basic compact `key: value | ...` kv (whole-pair wrap, status colored, created/updated purple); plan/milestone body ≤10 lines ellipsized, issue body fills bottom; milestone detail plans/issues panels status dots (container/issue color) + direct-first all-issues display + aggregate progress panel; show detail basic auto-wraps over-width without truncation.
+- TUI progress bars: 4-group aggregate (done/open/working/dropped) + eighth-block subpixel (dropped always visible) + group-percentage line + global palette alignment (open white/working yellow/done green/dropped red, partial cyan) + plans PROGRESS reuses plan-detail fill logic.
+- TUI navigation: Ctrl+C quits (TuiKey keeps modifiers), Backspace history route chain (forward/back), milestone dual panels independently paged + cross-panel cursor routing, plan-detail Enter into issue / issue-detail p/m into plan/milestone.
+- list `--tui` table browsing: TTY ratatui paged table (j/k or ↑/↓ row, PgUp/PgDn or h/l page, q/Esc quit), non-TTY falls back to single-page text; `--tui` conflicts with `--json`; columns aligned by Unicode display width.
+- list default output switched to TSV: header row + tab-separated data rows (token-optimal); `--tsv` flag removed (TSV is the default), `--json`/`--tui` kept.
+- `show` & details: show defaults to TSV (issue/plan/milestone, body last column escaped); issue detail basic dynamic columns + tags/test/body/links panels; `show --tui` reuses the dashboard detail page; `list --tui` unifies into the dashboard list page (Enter detail / Esc back).
+- Plugin & CLI: root marketplace.json supports git-URL remote install; label list dropped `--tui`; project list TSV-ified.
 
 ### Bug Fixes
 
-- 插件加载：hooks.json 顶层补 `hooks` 包裹键（修插件加载失败）；hook timeout 提到 50/100 兼容秒/毫秒单位。
-- TUI 显示：长标题按列宽顶格省略防溢出/硬切角（kanban 列标题、panel_wrap/body 标题、三列表 TITLE、milestone 详情 plan/issue 行）；plans 分组分页组标题跨页重显消除计划丢失；issue list 标题恒 `issues`；plans/milestones STATUS 列按容器状态色着色；progress 百分比 present 组最小 1%（与进度条可见性对齐）。
+- Plugin loading: hooks.json top-level `hooks` wrapper key (fixes plugin load failure); hook timeout raised to 50/100 to tolerate both ms and second units.
+- TUI display: long titles top-aligned ellipsis to prevent overflow/hard corner cuts (kanban column titles, panel_wrap/body titles, three-list TITLE, milestone-detail plan/issue rows); plans group-paging group title re-displayed across pages to avoid "missing plan" (plan loss); issue list title always `issues`; plans/milestones STATUS column colored by container status; progress percentage present group min 1% (aligned with progress-bar visibility).
 
 ### Others
 
-- 依赖新增：ratatui 0.30、crossterm 0.29、unicode-width。
-- 公共代码：分页三件套提升至 `src/cli/list_common.rs`；TUI 渲染分层 `src/tui/`（model 纯状态机 / draw / rows）；dashboard 递归拆分（data/diff/draw/model/model_nav/model_view/run/types + pages/），model.rs 拆分至 ≤300 行。
-- migration 合并回 001_init.sql（v1 基线）；notes 新增 status.md 状态生命周期与着色权威文档；roadmap 默认 TSV 策略。
-- 插件规范：`title-templates/`（标题语义 + ≤60 字符上限）+ `body-templates/`（T1-T16 场景模板）；SKILL.md 精简段 + flow 小索引，en/cn 同步。
-- `state retest` 命令（test→dev 测试失败打回，保留 `last_commit_id` 标记失败、`--test-cmd` 必填）；skill 统一测试模式（同 plan 多 issue 停 test → 统一验证 → 统一 close）。
-- 决策记录：TUI 选型（D25）、默认 TSV（D26）、mint tui 大屏（D27）。
+- New deps: ratatui 0.30, crossterm 0.29, unicode-width.
+- Shared code: pagination trio hoisted to `src/cli/list_common.rs`; TUI render layering under `src/tui/` (model pure state machine / draw / rows); dashboard recursive split (data/diff/draw/model/model_nav/model_view/run/types + pages/), model.rs split to ≤300 lines.
+- Migration merged back to 001_init.sql (v1 baseline); notes gained status.md lifecycle & coloring authoritative doc; roadmap default-TSV strategy.
+- Plugin specs: `title-templates/` (title semantics + ≤60-char cap) + `body-templates/` (T1-T16 scenario templates); SKILL.md slim sections + flow mini-index, en/cn synced.
+- `state retest` command (test→dev fail-back, keeps `last_commit_id` marking the failure, requires `--test-cmd`); skill unified-testing mode (same-plan issues stay test → unified verify → unified close).
+- Decision records: TUI choice (D25), default TSV (D26), mint tui dashboard (D27).
 
 ## 0.3.0
 
 ### Features
 
-- 去重：`add` 自动合并同项目重复 issue（标题归一化 + 模糊匹配，重复计入 `hit_count`）。
-- 全文搜索：`mint search <q>`（FTS5 trigram，中文按子串检索，支持 project/label/status 过滤）。
-- Claude Code 插件适配：双语 skill `mint-faa` / `mint-faa-cn` + hooks（失败信号注入、SessionStart 注入待办）+ 私有 marketplace。
-- `mint edit <ID>`：更新 issue 标题/正文（未提供字段保留，标题/正文变更同步搜索索引）。
+- Dedup: `add` auto-merges duplicate issues within a project (title normalization + fuzzy match, duplicates bump `hit_count`).
+- Full-text search: `mint search <q>` (FTS5 trigram, CJK substring retrieval, project/label/status filters).
+- Claude Code plugin adapter: bilingual skills `mint-faa` / `mint-faa-cn` + hooks (failure-signal injection, SessionStart pending-issues injection) + private marketplace.
+- `mint edit <ID>`: update issue title/body (unspecified fields kept; title/body changes sync the search index).
 
 ### Bug Fixes
 
-- 修正插件 marketplace 结构（统一私有市场，`claude plugin validate` 通过）。
+- Fixed plugin marketplace structure (unified private market, `claude plugin validate` passes).
 
 ### Others
 
-- 决策记录：去重算法（D22）、FTS 定案（D23）、多 agent 适配（D24）。
-- skill 本体迁移与命令参考同步；schema 迁移改增量式（发布前合并回基线）。
+- Decision records: dedup algorithm (D22), FTS decision (D23), multi-agent adaptation (D24).
+- Skill body migration + command-reference sync; schema migration made incremental (merged back to baseline before release).
 
 ## 0.2.0
 
 ### Features
 
-- 容器（roadmap/plan）：issue 之上的两级"容器"，`mint roadmap` / `mint plan` 子命令（create/list/show + 状态操作）。
-  - schema v2：roadmaps/plans 表 + 轻量迁移框架；层级关系 `issue→plan(plan_id)`、`plan→roadmap(roadmap_id)`、roadmap 直接挂 issue（roadmap_direct_issues，二选一）。
-  - roadmap 关键字段 `version`(UNIQUE) + `body`；plan `body`。
-  - 容器状态 5 态派生：open/running/partial/dropped/done，写后级联同步（issue→plan→roadmap）。
-- git commit 关联：`state commit`（原 `state stage` 改名合并，dev→test）必填 `--sha` 写入 `issues.last_commit_id`；删除顶层 commit 子命令。
-- issue links：`mint link create/remove/list`，`related`/`solves`/`duplicates` 带类型多对多（schema v3，单向存 + 反向派生），show 内嵌 links。
-- 时区显示修复：存储 UTC、显示转本地时区（`datetime(col,'localtime')`）。
-- `--all/-a` 短别名：所有 list 命令统一（默认隐藏 dropped/done，`-a` 全量）。
-- mint delete 顶层命令：危险操作收敛到统一入口（`mint delete issue|plan|roadmap <id>`），删除 SQL 为完整事务、先解绑关联再删、与派生状态同步原子。
+- Containers (roadmap/plan): two-level "containers" above issues; `mint roadmap` / `mint plan` subcommands (create/list/show + state ops).
+  - schema v2: roadmaps/plans tables + lightweight migration framework; hierarchy `issue→plan(plan_id)`, `plan→roadmap(roadmap_id)`, roadmap direct issue mount (roadmap_direct_issues, either-or).
+  - roadmap key fields `version`(UNIQUE) + `body`; plan `body`.
+  - Container status 5-state derived: open/running/partial/dropped/done, cascade-synced on write (issue→plan→roadmap).
+- git commit association: `state commit` (renamed/merged from `state stage`, dev→test) requires `--sha`, written to `issues.last_commit_id`; top-level commit subcommand removed.
+- issue links: `mint link create/remove/list`, typed `related`/`solves`/`duplicates` many-to-many (schema v3, one-way store + reverse derivation), links embedded in show.
+- Timezone display fix: stored UTC, displayed in local timezone (`datetime(col,'localtime')`).
+- `--all/-a` short alias: unified across all list commands (default hides dropped/done, `-a` full).
+- `mint delete` top-level command: dangerous ops consolidated ( `mint delete issue|plan|roadmap <id>`), delete SQL is a full transaction (unbind associations first, then delete), atomic with derived-status sync.
 
 ### Bug Fixes
 
-- 修复旧 v2 库升级时容器表不更新：002 原地改 DDL 致跳迁移，改为 004 增量迁移重建（DROP 重建，0.2.0 未发布、容器表全空无数据丢失）。
-- 修复显示时间未转本地时区的问题。
-- 修复容器列表单复数误加在标题后（"标题s issues"），计数单复数移到 issue 后。
+- Fixed old v2 DB upgrades where container tables didn't update: 002 in-place DDL change skipped a migration; changed to 004 incremental rebuild (DROP+recreate, 0.2.0 unreleased so container tables empty — no data loss).
+- Fixed display time not converted to local timezone.
+- Fixed container-list count/plurality mis-suffixed on the title ("title s issues"); count plurality moved after issue.
 
 ### Others
 
-- 迁移合并：4 个 migration 合并为 1 个（001 最终 schema，user_version 重定基线 1），清升级专属 UT。
-- 测试体系：UT 全面参数化（rstest：状态机全矩阵/枚举往返/格式化字段组合）、cargo-llvm-cov 覆盖率实测（85%→91%）、ST 补粗粒度 migration 与容器派生边界。
-- SQL 规范：剥离至 src/db/CLAUDE.md（组织约定/简易规范/迁移哲学）、sqruff_format Stop hook（只格式化改动文件）、全面整改布局（SELECT 列每行一列）。
-- issue label 全局改名：`tag`→`label`（tags/issue_tags→labels/issue_labels、`--tag`→`--label`、`mint tag`→`mint label`），与 git tag / roadmap version 语义区分。
-- mint-dogfood skill 重构为流程注入：描述性参数 + flow reference 多流程（bug/requirement/review/todo/planning/conditions/session）+ 新 session 接管模式。
-- 开发规范：commit 自洽原则、RENAME 外键陷阱、INSERT OR IGNORE 注意、参数化优先约定写入 src/CLAUDE.md。
-- 版本号 bump 至 0.2.0-alpha.1。
+- Migration merge: 4 migrations merged into 1 (001 final schema, user_version rebased to 1), upgrade-only UT cleaned up.
+- Test system: UT heavily parameterized (rstest: full state-machine matrix / enum round-trips / format field combos), cargo-llvm-cov coverage measured (85%→91%), ST added coarse-grained migration and container derivation boundaries.
+- SQL spec: split to src/db/CLAUDE.md (organization/simple spec/migration philosophy), sqruff_format Stop hook (formats only changed files), full layout overhaul (SELECT one column per line).
+- issue label global rename: `tag`→`label` (tags/issue_tags→labels/issue_labels, `--tag`→`--label`, `mint tag`→`mint label`), distinguished from git tag / roadmap version semantics.
+- mint-dogfood skill rebuilt as flow injection: descriptive args + flow references (bug/requirement/review/todo/planning/conditions/session) + new-session takeover mode.
+- Dev spec: commit-self-consistency principle, RENAME foreign-key pitfall, INSERT OR IGNORE caveat, parameterized-first convention written into src/CLAUDE.md.
+- Version bumped to 0.2.0-alpha.1.
 
 ## 0.1.0
 
 ### Features
 
-- 核心 issue 系统：基于 SQLite 的全局 issue 追踪 CLI，支持 add/list/show 与 6 态状态机（open/planned/dev/test/done/dropped）全命令推进。
-  - 4 表 schema（projects/issues/tags/issue_tags），project 自动检测（显式→git 库名→dirname→default）。
-  - tag 支持 `name:desc` 语法、自由注册与 issue 关联，`mint tag list` 供 agent 学习语义。
-  - 用户侧输出全英文（i18n 基线）；`--json` 结构化输出。
-- 开发规范收编（dogfooding 基建）：use 语句四组分组规范、src/CLAUDE.md 检查清单、Stop hook 自动格式化、sqruff SQL 检查、SQL 抽至 src/db/*.sql 并参数化、CLI 级端到端 ST 测试、项目级 tester agent。
-- mint-dogfood skill：Claude Code 主动记录/推进本项目 issue 的早期实验 adapter（0.3.0 铺垫）。
+- Core issue system: SQLite-backed global issue-tracking CLI with add/list/show and the full 6-state machine (open/planned/dev/test/done/dropped).
+  - 4-table schema (projects/issues/tags/issue_tags), project auto-detection (explicit → git repo name → dirname → default).
+  - tag `name:desc` syntax, free registration and issue association, `mint tag list` for agent semantics.
+  - User-facing output all-English (i18n baseline); `--json` structured output.
+- Dev-spec consolidation (dogfooding infrastructure): four-group `use` ordering spec, src/CLAUDE.md checklist, Stop hook auto-format, sqruff SQL check, SQL extracted to src/db/*.sql and parameterized, CLI-level end-to-end ST tests, project-level tester agent.
+- mint-dogfood skill: early experimental adapter for Claude Code to proactively record/advance this project's issues (0.3.0 groundwork).
 
 ### Bug Fixes
 
-- 修复 `drop --reason` 静默丢弃与 `reset` 未清空 test_cmd 的问题。
-- 修复首次运行数据库父目录不存在时创建失败的问题。
-- 修复 clippy 提示的 DoubleEndedIterator 用法。
-- 修复 Stop hook 依赖工作目录、cargo 异常无降级的问题。
-- 修复 reopen 后残留 `dropped_reason`（重开后旧周期字段不再有意义）。
-- 修复生产代码 `expect` 违规、project 注册吞掉真实错误、close 校验顺序掩盖 invalid transition。
-- 修复 `--tag "a:"` 产出畸形 tag 名；新增 title/`--project` 空值校验。
-- 并发健壮性：cmd_add 事务原子提交（BEGIN IMMEDIATE）、project/tag 注册幂等、busy_timeout + WAL。
+- Fixed `drop --reason` silently discarded and `reset` not clearing test_cmd.
+- Fixed first-run failure when the DB parent directory didn't exist.
+- Fixed clippy-flagged DoubleEndedIterator usage.
+- Fixed Stop hook depending on the working directory, and no degradation on cargo errors.
+- Fixed reopen leaving residual `dropped_reason` (old-period field meaningless after reopen).
+- Fixed production-code `expect` violations, project registration swallowing real errors, and close validation order masking invalid transitions.
+- Fixed `--tag "a:"` producing a malformed tag name; added empty-value validation for title/`--project`.
+- Concurrency robustness: cmd_add transactional atomic commit (BEGIN IMMEDIATE), idempotent project/tag registration, busy_timeout + WAL.
 
 ### Others
 
-- 项目初始化与构建配置（cargo 骨架、release 优化、.cargo/config.toml）。
-- 文档体系（CLAUDE.md、src/CLAUDE.md、notes/ 记忆与规划、CONTRIBUTING、.vscode 配置）。
-- SQL 抽取重构与 cmd_list 参数化（行为保持）；use 语句分组重排；状态操作收编为 `mint state <action>`；移除 config 子命令统一环境变量前缀。
+- Project init & build config (cargo skeleton, release optimization, .cargo/config.toml).
+- Docs system (CLAUDE.md, src/CLAUDE.md, notes/ memory & planning, CONTRIBUTING, .vscode config).
+- SQL extraction refactor + cmd_list parameterization (behavior preserved); use-statement grouping; state ops consolidated into `mint state <action>`; config subcommand removed, unified env-var prefix.

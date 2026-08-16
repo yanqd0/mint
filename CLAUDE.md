@@ -19,6 +19,7 @@ mint = **M**inimal **I**ssue & **N**eeds **T**racker。一个全局、单机、S
 - **用户侧输出全英文**（i18n 前）：CLI help/错误/输出无中文；代码注释与 notes/ 文档用中文（标识符英文）。
 - **6 态状态机**：`open/planned/dev/test/done/dropped`；`close` 必填 `test_cmd`（跳过测试填"没测"），无 dev→done 捷径——见 `notes/DDD.md`。
 - **版本同步**：Cargo.toml `version` 是权威版本号。正式版发布时同步更新 `claude-plugin/*/plugin.json` 与 marketplace.json 的 version；预发布版（`-alpha`/`-beta`）不碰 plugin 版本。
+- **CHANGELOG 全英文**：`CHANGELOG.md` 的版本段与条目一律用英文撰写（与用户侧输出一致）；新增/整理版本条目时自动按英文写，不用中文。
 - **Plugin 开发规范**见 `claude-plugin/CLAUDE.md`。
 
 ## 文档导航
