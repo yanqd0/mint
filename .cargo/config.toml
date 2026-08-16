@@ -3,6 +3,9 @@
 # 覆盖率 *.profraw 收集到 target/profraw/（覆盖用户级 /tmp 默认值）。
 # cargo test 直接生效；cargo tarpaulin 需通过 shell 环境变量手动传入。
 LLVM_PROFILE_FILE = { value = "target/profraw/%p-%m.profraw", relative = true }
+# SQLite 裁剪未用编译特性（保留 FTS5/trigram）：dev==build==test==dist 同构，-136KB。
+# 被裁宏在应用 SQL 中零使用；LOAD_EXTENSION 双保险关闭（安全收益）。
+LIBSQLITE3_FLAGS = "-USQLITE_ENABLE_RTREE -USQLITE_ENABLE_DBSTAT_VTAB -USQLITE_ENABLE_COLUMN_METADATA -USQLITE_ENABLE_STAT4 -USQLITE_ENABLE_API_ARMOR -USQLITE_ENABLE_PREUPDATE_HOOK -USQLITE_ENABLE_SESSION -USQLITE_ENABLE_FTS3 -USQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_DEFAULT_MEMSTATUS=0"
 
 # ========== 网络 ==========
 [net]
