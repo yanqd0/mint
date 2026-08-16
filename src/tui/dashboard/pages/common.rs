@@ -109,13 +109,24 @@ fn parse_hex_color(hex: &str) -> Option<Color> {
     Some(Color::Rgb(r, g, b))
 }
 
-/// label 着色样式：fg=记录 color + REVERSED（前后景相反，label chip 效果）。
-/// 无 color（空串）→ 默认样式。
+/// label chip 样式：背景=记录 color，前景按背景亮度自动推定（反差够大）。
+/// 亮背景 → 深前景（黑）；暗背景 → 浅前景（白），基于 YIQ 亮度判定。
+/// 无 color（空串/非法）→ 默认样式。
 pub fn label_style(color: &str) -> Style {
     match parse_hex_color(color) {
-        Some(c) => Style::new().fg(c).add_modifier(Modifier::REVERSED),
+        Some(c) => Style::new().bg(c).fg(contrast_fg(c)),
         None => Style::default(),
     }
+}
+
+/// 按背景亮度推定前景色：YIQ 亮度 Y=(R*299+G*587+B*114)/1000，
+/// Y ≥ 128（亮背景）→ 深前景 Black；否则 → 浅前景 White。
+fn contrast_fg(bg: Color) -> Color {
+    let Color::Rgb(r, g, b) = bg else {
+        return Color::White;
+    };
+    let y = (r as u32 * 299 + g as u32 * 587 + b as u32 * 114) / 1000;
+    if y >= 128 { Color::Black } else { Color::White }
 }
 
 /// kind 简写（仅列表显示；requirement→req、problem→bug、task→task）。
@@ -273,16 +284,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn label_style_hex_and_empty() {
-        // 合法 #hex → fg Rgb + REVERSED。
+    fn label_style_bg_and_contrast_fg() {
+        // 暗背景（#1f6feb 蓝）→ 背景=记录色，前景=白。
         let s = label_style("#1f6feb");
         assert_eq!(
             s,
             Style::new()
-                .fg(Color::Rgb(0x1f, 0x6f, 0xeb))
-                .add_modifier(Modifier::REVERSED)
+                .bg(Color::Rgb(0x1f, 0x6f, 0xeb))
+                .fg(Color::White)
         );
-        // 空串/非法 → 默认样式（无 fg、无 REVERSED）。
+        // 亮背景（#bbdd3c 黄绿）→ 前景=黑。
+        let bright = label_style("#bbdd3c");
+        assert_eq!(
+            bright,
+            Style::new()
+                .bg(Color::Rgb(0xbb, 0xdd, 0x3c))
+                .fg(Color::Black)
+        );
+        // 空串/非法 → 默认样式。
         assert_eq!(label_style(""), Style::default());
         assert_eq!(label_style("not-a-color"), Style::default());
         assert_eq!(label_style("#fff"), Style::default());
