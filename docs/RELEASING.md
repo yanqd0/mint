@@ -1,6 +1,6 @@
 # Releasing mint
 
-mint ships to **three registries** from a single git tag: crates.io (source), PyPI (maturin wheel), npm (cargo-dist installer). All three are **tag-activated**: `git tag vX.Y.Z` + `git push origin vX.Y.Z` triggers the release workflows. Regular pushes to `master` only run the CI gate (`.github/workflows/ci.yml`).
+mint ships to **three registries** from a single git tag: crates.io (source), PyPI (maturin wheel), npm (cargo-dist installer). All three are **tag-activated**: `git tag X.Y.Z` (or `vX.Y.Z`) + `git push origin X.Y.Z` triggers the release workflows. Regular pushes to `master` only run the CI gate (`.github/workflows/ci.yml`).
 
 Pre-release versions (`0.5.0-alpha.1` style) are **skipped** by crates.io/PyPI (the `gate` job sets `is_stable=false`) — only npm/GitHub Release gets a prerelease. Stable releases (`v1.0.0` and up) publish to all three.
 
@@ -41,8 +41,8 @@ Recommended: **trusted publishing (OIDC, no token)**.
 
 # 2. Commit + tag + push (you, manually)
 git add Cargo.toml Cargo.lock claude-plugin/ && git commit -m "chore(release): 1.0.0"
-git tag v1.0.0
-git push origin v1.0.0        # ← the only remote gesture; triggers all release workflows
+git tag 1.0.0                # 不带 v 前缀（v1.0.0 亦可，两种均触发）
+git push origin 1.0.0        # ← the only remote gesture; triggers all release workflows
 ```
 
 3. Watch GitHub Actions:
