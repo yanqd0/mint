@@ -52,6 +52,18 @@ release 二进制（1.7M）各归档格式实测（`tar`，unix 平台）：
 
 **结论**：`strip`（`[profile.release]`）+ `-C symbol-mangling-version=v0` 生效，**无残留调试段 / 死代码**，无需处理。
 
+### serde_json 手写化评估（2026-08-16，plan #69）
+
+实测 `cargo bloat --crates`：`serde_json` 8.5KiB + `serde_core` 704B ≈ **9.2KiB**（.text 0.7%），相对 strip 后 1.7M 二进制约 **0.5%**——远低于 #296 预估的 0.3-0.5MB。
+
+**为何不值得手写化**：
+- 收益上限 ~9.2KiB（0.5% 二进制），且为峰值——手写序列化代码本身也占字节
+- serde 仅用于 CLI 输出（src/ 无反序列化调用，`Deserialize` derive 未用）；`--json` 输出点 **28 处**（14 文件），构建方式多样（`json!` 宏 / derive `to_string` / `to_string_pretty` / 条件 `serde_json::Map`），全重构成本高
+- 测试端仍依赖 serde_json（tests/cli.rs 287 处 `--json` 用 `from_slice` 解析）→ dev-dependency 不可去
+- 手写 JSON 转义需正确非 ASCII 处理（测试含中文标题），逐字节一致性 ST 覆盖工作量大
+
+**结论**：**不实施手写化**，记录评估结论（#296 close）。serde_json 保持生产依赖。
+
 ### 已应用的体积优化（历史）
 
 | commit | 优化 | 收益 |
