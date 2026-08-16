@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    body_paragraph, kv_lines, panel_wrap, status_text_style,
+    body_paragraph, kv_lines, label_style, panel_wrap, status_text_style,
 };
 use crate::tui::panel::{render_panel, stack};
 
@@ -92,12 +92,17 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, id: i64, area: Rec
     ci += 1;
 
     if !issue.labels.is_empty() {
-        render_panel(
-            frame,
-            chunks[ci],
-            "tags",
-            vec![Line::from(issue.labels.join(" "))],
-        );
+        // 每个 label 按记录 color 着色（#270，REVERSED chip 效果），空格分隔。
+        let mut spans: Vec<Span> = Vec::new();
+        for (n, l) in issue.labels.iter().enumerate() {
+            if n > 0 {
+                spans.push(Span::raw(" "));
+            }
+            let color = issue.label_colors.get(l).cloned().unwrap_or_default();
+            spans.push(Span::styled(l.clone(), label_style(&color)));
+        }
+        let line = Line::from(spans);
+        render_panel(frame, chunks[ci], "tags", vec![line]);
         ci += 1;
     }
     if let Some(tc) = &issue.test_cmd {

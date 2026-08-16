@@ -9,8 +9,8 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::model_view;
 use crate::tui::dashboard::pages::common::{
-    flash_style, flex_col_width, footer_line, kind_abbrev, list_title, status_abbrev, status_dot,
-    status_text_style,
+    flash_style, flex_col_width, footer_line, kind_abbrev, label_style, list_title, status_abbrev,
+    status_dot, status_text_style,
 };
 use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
 use crate::tui::dashboard::types::JumpKind;
@@ -63,11 +63,21 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
         .enumerate()
         .map(|(idx, i)| {
             let (dot, dot_style) = status_dot(i.status);
-            let label = i
+            // LABEL 列：首个 label 按记录 color 着色（#270，REVERSED chip 效果）。
+            let label_text = i
                 .labels
                 .first()
                 .map(|l| truncate(l, 20))
                 .unwrap_or_default();
+            let label_cell = if let Some(first) = i.labels.first() {
+                let color = i.label_colors.get(first).cloned().unwrap_or_default();
+                Cell::from(Line::from(vec![Span::styled(
+                    label_text,
+                    label_style(&color),
+                )]))
+            } else {
+                Cell::from("")
+            };
             // 搜索命中高亮（#261）：有搜索词时对 title 命中子串反色。
             let title = truncate(&i.title, title_w.max(1) as usize);
             let title_spans = match model_view::current_search(m) {
@@ -85,7 +95,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
                 )])),
                 Cell::from(i.priority.to_string()),
                 Cell::from(kind_abbrev(i.kind).to_string()),
-                Cell::from(label),
+                label_cell,
                 Cell::from(Line::from(title_spans)),
             ]);
             if m.selected_idx() == Some(idx) {

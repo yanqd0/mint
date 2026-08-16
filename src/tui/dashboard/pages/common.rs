@@ -97,6 +97,27 @@ pub fn status_abbrev(status: Status) -> &'static str {
     }
 }
 
+/// 解析 `#hex` 颜色串 → ratatui Color（非法/空 → None）。
+fn parse_hex_color(hex: &str) -> Option<Color> {
+    let h = hex.trim_start_matches('#');
+    if h.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&h[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&h[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&h[4..6], 16).ok()?;
+    Some(Color::Rgb(r, g, b))
+}
+
+/// label 着色样式：fg=记录 color + REVERSED（前后景相反，label chip 效果）。
+/// 无 color（空串）→ 默认样式。
+pub fn label_style(color: &str) -> Style {
+    match parse_hex_color(color) {
+        Some(c) => Style::new().fg(c).add_modifier(Modifier::REVERSED),
+        None => Style::default(),
+    }
+}
+
 /// kind 简写（仅列表显示；requirement→req、problem→bug、task→task）。
 pub fn kind_abbrev(kind: crate::models::Kind) -> &'static str {
     match kind {
@@ -250,6 +271,22 @@ pub fn kv_lines(pairs: &[(String, Span<'static>)], width: u16) -> Vec<Line<'stat
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn label_style_hex_and_empty() {
+        // 合法 #hex → fg Rgb + REVERSED。
+        let s = label_style("#1f6feb");
+        assert_eq!(
+            s,
+            Style::new()
+                .fg(Color::Rgb(0x1f, 0x6f, 0xeb))
+                .add_modifier(Modifier::REVERSED)
+        );
+        // 空串/非法 → 默认样式（无 fg、无 REVERSED）。
+        assert_eq!(label_style(""), Style::default());
+        assert_eq!(label_style("not-a-color"), Style::default());
+        assert_eq!(label_style("#fff"), Style::default());
+    }
 
     #[test]
     fn status_and_kind_abbrev() {
