@@ -12,7 +12,7 @@
    body 注明 `来源: 文件:行号`）。**不重复创建**。
 3. **milestone/milestone 检查与建议**：对比现有 milestone 与项目当前状态，若发现新的版本规划迹象
    （如代码里出现下一版本需求/方向）→ **向用户确认后** `milestone create`（重复则不问、不加）。
-4. **下一步计划建议**：基于 milestone 规划 + open issues，推荐下一个应开发项，附理由：
+4. **下一步计划建议**：基于 milestone 规划 + open issues，推荐下一个应开发项，附理由（若存在 running 的存量 mint plan：提示「从该 plan 开始执行需先进入宿主 plan 模式，再逐步推进」——plan 双向绑定，勿 auto 直接跑）：
    - 有 `blocks` 其它 issue 的（被依赖者优先，拓扑排序）；
    - 同层按 priority 升序（P0→P3）；
    - 未排期且未关闭的 bug（problem）优先；

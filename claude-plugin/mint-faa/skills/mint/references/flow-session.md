@@ -14,7 +14,7 @@ Goal: let the user know immediately what to develop next — mint replaces initi
    body notes `source: file:line`). **Don't create duplicates**.
 3. **Milestone/milestone check & suggestion**: compare existing milestones with current project state; if new version planning signs appear
    (e.g. next-version requirements/direction in code) → **confirm with user** then `milestone create` (skip if duplicate, don't ask).
-4. **Next step recommendation**: based on milestone planning + open issues, recommend the next item to develop, with rationale:
+4. **Next step recommendation**: based on milestone planning + open issues, recommend the next item to develop, with rationale (if a running existing mint plan exists: note that "starting from that plan requires entering host plan mode first, then advancing step by step" — plan two-way binding; don't run it directly in auto mode):
    - Items that `blocks` other issues (dependencies first, topological sort);
    - Same level by priority ascending (P0→P3);
    - Unclosed bugs with no schedule (problem) prioritized;

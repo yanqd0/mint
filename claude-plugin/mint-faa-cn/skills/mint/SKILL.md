@@ -47,6 +47,11 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
 
 > 以下规则不因宿主 plan 机制 / 任何其他流程步骤而跳过。违反视为"未接管"，下次 session 必须补登记。
 
+> **plan 双向绑定（#275）**：宿主 plan 机制 ⟷ mint plan 必须一一对应，消除脱钩。
+> - 先进宿主 plan 模式 → 必建/挂对应 mint plan + 拆 issue（下方 step 0-1）。
+> - **先有 mint plan（如接管模式从存量 plan 开始）→ 必须先进入宿主 plan 模式**，再逐步执行该 plan；**禁止 auto 模式直接跑完 mint plan**（会让 plan/issue 状态失控）。
+> - 脱钩检测：宿主进入执行/auto 模式时，若当前 work 无对应 mint plan 或 mint plan 非 planned/dev，先补建/排期，再继续。
+
 0. **宿主 plan 机制审批通过后，判断该工作是否属于已有 mint plan**：
    - **属于**已有 plan → `mint plan attach <plan_id> <issue_id>` 挂入
    - **不属于**任何已有 plan → 第一步必须是 `mint plan create` 新建 plan（挂 milestone），再建 issue 并 attach

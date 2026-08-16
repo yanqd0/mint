@@ -47,6 +47,11 @@ Before any flow, determine the current host agent and `Read` **only** the matchi
 
 > The rules below MUST NOT be skipped due to the host plan mechanism or any other workflow step. Skipping means "not taken over" — the next session MUST backfill.
 
+> **Plan two-way binding (#275)**: the host plan mechanism and the mint plan must correspond 1:1 — no decoupling.
+> - Enter host plan mode first → must create/attach a matching mint plan + split issues (steps 0-1 below).
+> - **Have a mint plan first (e.g. starting from an existing plan in takeover mode) → must enter host plan mode** before executing it; **never run a mint plan to completion directly in auto mode** (loses control of plan/issue states).
+> - Decoupling check: when the host enters execution/auto mode, if the current work has no mint plan, or the mint plan isn't planned/dev, backfill/schedule it first, then continue.
+
 0. **After host plan mechanism approval, determine whether this work belongs to an existing mint plan**:
    - **Belongs** to an existing plan → `mint plan attach <plan_id> <issue_id>`
    - **Does NOT belong** to any existing plan → first action MUST be `mint plan create` (under a milestone), then create issues and attach
