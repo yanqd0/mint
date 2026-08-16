@@ -214,6 +214,13 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
     };
 
     fill_labels(conn, &mut issues)?;
+    // --label / --priority 过滤（typed 与 None 分支统一；#1 修复——typed 路径此前静默忽略）。
+    if let Some(lb) = label {
+        issues.retain(|i| i.labels.iter().any(|x| x == lb));
+    }
+    if let Some(p) = priority {
+        issues.retain(|i| i.priority == p);
+    }
     let (issues, total, page) = paginate(issues, s.page, s.page_size);
 
     if s.json {
