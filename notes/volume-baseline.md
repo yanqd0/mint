@@ -42,6 +42,16 @@ release 二进制（1.7M）各归档格式实测（`tar`，unix 平台）：
 
 **结论**：cargo-dist 0.32.0 `unix-archive` 默认值即 `.tar.xz`，`dist-workspace.toml` 未配置 = 用默认，**传输体积已最优，无需改配置**。xz 是三类中压缩比最高者；zst 默认 level 反而更大，若未来追求解压速度再评估（本二进制 <1MB 归档，速度差异可忽略）。
 
+### 符号级审计（2026-08-16）
+
+`nm` + `size -m` 扫描 release 二进制（strip 后）：
+
+- 符号共 172 个，**全部为 `U`（undefined 外部引用）**，唯一已定义符号为 `__mh_execute_header`（Mach-O 固有文件头符号，非残留）
+- 无 `__DWARF` / `__LLVM` / `__debug_*` 调试段；`__stubs`/`__stub_helper` 为标准动态链接桩
+- `__TEXT` 1,622,016（`__text` 代码 1,356,056）+ `__DATA_CONST` 49,152 + `__DATA` 32,768，无异常大段
+
+**结论**：`strip`（`[profile.release]`）+ `-C symbol-mangling-version=v0` 生效，**无残留调试段 / 死代码**，无需处理。
+
 ### 已应用的体积优化（历史）
 
 | commit | 优化 | 收益 |
