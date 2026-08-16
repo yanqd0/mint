@@ -1,7 +1,6 @@
 //! project 检测（--project 显式 → git 库名 → dirname → default）与自动注册。
 
 use std::path::Path;
-use std::process::Command;
 
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -220,17 +219,27 @@ pub fn query_id(conn: &Connection, name: &str) -> Result<Option<i64>, Error> {
 }
 
 /// 查询 git remote url（检测用，非关键路径可失败）。
+///
+/// 读 `.git/config` 的 `[remote "origin"]` 段 `url =` 值，不调 git 子进程。
 fn git_repo_url(cwd: &Path) -> Option<String> {
-    Command::new("git")
-        .arg("remote")
-        .arg("get-url")
-        .arg("origin")
-        .current_dir(cwd)
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .filter(|s| !s.is_empty())
+    let git_dir = crate::git::find_git_dir(cwd)?;
+    let config = std::fs::read_to_string(git_dir.join("config")).ok()?;
+    let mut in_origin = false;
+    for line in config.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            // `[remote "origin"]` / `[remote 'origin']` / `[remote.origin]`。
+            in_origin = line.contains("remote") && line.contains("origin");
+            continue;
+        }
+        if in_origin && line.starts_with("url =") {
+            let url = line["url =".len()..].trim();
+            if !url.is_empty() {
+                return Some(url.to_string());
+            }
+        }
+    }
+    None
 }
 
 /// 列出所有 project。
@@ -281,28 +290,21 @@ mod tests {
     /// git 库名：有 remote origin 时取库名（去 .git 后缀），优先于 dirname。
     #[test]
     fn detect_uses_git_repo_name() {
-        // git 缺失时跳过（CI 极简镜像/未装 git 环境），不 panic 拖垮套件。
-        if std::process::Command::new("git")
-            .arg("--version")
-            .status()
-            .is_err()
-        {
-            eprintln!("skip: git not found");
-            return;
-        }
         let dir = TempDir::new().unwrap();
-        let git = |args: &[&str]| {
-            std::process::Command::new("git")
-                .args(args)
-                .current_dir(dir.path())
-                .status()
-                .unwrap()
+        let write_config = |url: &str| {
+            std::fs::create_dir_all(dir.path().join(".git")).unwrap();
+            std::fs::write(
+                dir.path().join(".git/config"),
+                format!(
+                    "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = {url}\n"
+                ),
+            )
+            .unwrap();
         };
-        assert!(git(&["init", "-q"]).success());
-        assert!(git(&["remote", "add", "origin", "git@github.com:yanqd0/mint.git"]).success());
+        write_config("git@github.com:yanqd0/mint.git");
         assert_eq!(detect_name(dir.path(), None), "mint");
         // git 名末段 `.git` 后缀去除
-        assert!(git(&["remote", "set-url", "origin", "https://host/user/repo.git"]).success());
+        write_config("https://host/user/repo.git");
         assert_eq!(detect_name(dir.path(), None), "repo");
     }
 
