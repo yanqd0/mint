@@ -362,6 +362,20 @@ fn issue_detail_p_and_m_navigate() {
 }
 
 #[test]
+fn plan_detail_m_navigates_to_milestone() {
+    let mut m = DashboardModel::new();
+    m.init(snap_full(
+        vec![mk_issue(1, Status::Dev, Some(7), "1")],
+        vec![(mk_plan(7, Some(4), "1"), 0)],
+        vec![(mk_container(4), 0)],
+    ));
+    m.view = View::PlanDetail { plan_id: 7 };
+    m.selected = 0; // 无选中也应跳（PlanDetail 分支与选中行无关）
+    m.handle_key(k(KeyCode::Char('m')));
+    assert_eq!(m.view, View::MilestoneDetail { milestone_id: 4 });
+}
+
+#[test]
 fn plan_groups_skip_empty_milestones() {
     let mut m = DashboardModel::new();
     m.init(snap_full(

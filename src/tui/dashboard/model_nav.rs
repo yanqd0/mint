@@ -69,6 +69,14 @@ impl DashboardModel {
                 .and_then(|pid| self.plans.iter().find(|(c, _)| c.id == pid))
                 .and_then(|(c, _)| c.milestone_id);
         }
+        if let View::PlanDetail { plan_id } = self.view {
+            // PlanDetail：跳当前 plan 所属 milestone（与选中行无关）。
+            return self
+                .plans
+                .iter()
+                .find(|(c, _)| c.id == plan_id)
+                .and_then(|(c, _)| c.milestone_id);
+        }
         let idx = self.selected_idx()?;
         match self.view {
             View::Issues => self
