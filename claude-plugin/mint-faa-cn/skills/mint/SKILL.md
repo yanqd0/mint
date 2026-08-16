@@ -122,7 +122,7 @@ mint plan attach 12 42
 - **不写已知**：公共知识/技能/常识不描述（如"issue 是待办"这类定义不写）
 - **不瞎猜**：不明确的信息不虚构，写 `? 待确认 <简述>` 尾节；读取方看到后找用户确认，或按上下文准确推定后消除
 - **标题**：≤60 字符（约 30 汉字）；语义见 `references/title-templates/`（issue=类型概述、plan=实现目标、milestone=业务目标）；**好标题可省 body**
-- **body**：套 `references/body-templates/N.md` 模板，≤4 字段、每字段 ≤1 句、要点用 `-`。常用：
+- **body**：套 `references/body-templates/N.md` 模板，≤4 字段、每字段 ≤1 句、要点用 `-`。**禁止 `- [ ]` checkbox**（mint 轻量设计，agent 不二次改 body，checkbox 永远显未完成——拆解/要点用纯 `- ` 列表）。常用：
   - T1 bug：`**现象** / **位置**`
   - T2 需求：`**目标** / **要点**`
   - T6 plan：`## 目标 / ## 拆解 / ## 验收`
