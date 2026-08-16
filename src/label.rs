@@ -249,9 +249,7 @@ pub fn names_for_issues(conn: &Connection) -> Result<HashMap<i64, Vec<String>>, 
 
 /// 批量取全部 issue 的 label 名 → color 映射（TUI 渲染着色用，一次查询）。
 /// 返回 issue_id → Vec<(name, color)>，color 为 `#hex` 或空串（label 无配色时）。
-pub fn colors_for_issues(
-    conn: &Connection,
-) -> Result<HashMap<i64, Vec<(String, String)>>, Error> {
+pub fn colors_for_issues(conn: &Connection) -> Result<HashMap<i64, Vec<(String, String)>>, Error> {
     let mut stmt = conn.prepare(db::ISSUE_LABELS_COLORS_FOR_ALL)?;
     let rows = stmt.query_map([], |r| {
         Ok((
