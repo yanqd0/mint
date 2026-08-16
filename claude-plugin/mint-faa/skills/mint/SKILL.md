@@ -79,7 +79,7 @@ Before any flow, determine the current host agent and `Read` **only** the matchi
 When called without `<description>`, enters takeover mode to replace initial thinking:
 
 1. **Scan TODO/FIXME/XXX**: grep project code markers, convert each to an issue (dedup, no duplicates; body notes source location).
-2. **Milestone/milestone check**: Compare existing milestones with project state; suggest creating new ones when version planning signs appear → **confirm with user** before creating (skip if duplicate).
+2. **Milestone/milestone check**: Compare existing milestones with project state; suggest creating new ones when version planning signs appear → **confirm with user** before creating (skip if duplicate). **Single-running constraint (#276)**: at any time only 1 milestone should be `running` (the current development target); if ≥2 are running, list them to the user and ask how to handle it (e.g. move the far-future milestone's completed plans/issues to the current one, reset its running-state plans/issues to open), then reset the far-future milestone to `open` after confirmation.
 3. **Next step recommendation**: Topological sort by blocks (dependencies first), same level by priority ascending, with rationale.
 4. **Declare takeover**: Subsequent sessions can describe intent directly; the skill auto-follows the mint flow.
 

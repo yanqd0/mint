@@ -79,7 +79,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
 无 `<description>` 参数时进入接管模式，代替用户初始化思考：
 
 1. **扫描 TODO/FIXME/XXX**：grep 项目代码标记，逐个转 issue（查重不重复，body 注明来源位置）。
-2. **milestone/milestone 检查与建议**：对比现有 milestone 与项目状态，发现新版本规划迹象 → **和用户确认后**创建（重复则不问）。
+2. **milestone/milestone 检查与建议**：对比现有 milestone 与项目状态，发现新版本规划迹象 → **和用户确认后**创建（重复则不问）。**唯一 running 约束（#276）**：同刻只应有 1 个 milestone 为 running（当前开发目标）；发现 ≥2 running → 向用户列出并反问处理意见（如把远期 milestone 已完成 plan/issue 挪当期、远期 running 态 plan/issue 重置 open），确认后重置远期 milestone 为 open。
 3. **下一步计划建议**：按 blocks 拓扑排序（被依赖者优先），同层按 priority 升序推荐下一个应开发项，附理由。
 4. **声明接管**：后续 session 直接描述意图即可，skill 自动走 mint 流程。
 
