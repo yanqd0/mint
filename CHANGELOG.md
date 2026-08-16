@@ -1,5 +1,22 @@
 # Change Log
 
+## 0.5.0
+
+### Features
+
+- Agent 生态：Codex adapter（hooks 失败启发式 + AGENTS.md）、OpenCode 插件（事件流转发）、skill 多 agent 化（宿主识别路由 + references/agent/）。
+- 发布流水线：GitHub Actions 门禁（fmt/clippy/test 三平台 + 覆盖率棘轮 90%）+ cargo-dist（npm 壳 + GitHub Release，musl 静态）+ crates.io/PyPI 发布（tag 激活，兼容带/不带 v 前缀）。
+- `mint export`：全量 JSON/TSV 导出（issues 含 labels/links + plans + milestones + labels），供备份/迁移；备份与迁移指南 docs/BACKUP.md。
+- 发布预检脚本 scripts/precheck.sh（版本一致性 / CHANGELOG / lint 一键）。
+- 搜索增强：类型化二次筛选（ID 精确置顶 + 同前缀跟随、status/kind 别名）、TUI 命中高亮、TUI/CLI 搜索语义统一。
+- TUI 增强：list panel 标题加 size（当前页/总数）、label 按记录色着色（前景自动推定对比色）、label 全量显示。
+- Label 治理：去版本 label（由 milestone 表达）、模块 label 体系（CI/MCP/TUI/cli/db/docs/plugin/search）、全量配色。
+
+### Docs
+
+- README 三端安装详情（crates.io/PyPI/npm）。
+- docs/RELEASING.md 发布操作指南。
+
 ## 0.4.0
 
 ### Features

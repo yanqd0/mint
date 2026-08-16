@@ -1,6 +1,6 @@
 {
   "name": "mint-faa-cn",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "mint issue 追踪（中文）— 用 mint CLI 管理开发 issue 与流程。",
   "author": {
     "name": "yanqd0"
