@@ -1,5 +1,9 @@
 # Contributing to mint
 
+> **⚠️ Development status**
+>
+> This project is developed by **Claude Code + DeepSeek V4 Flash** (AI-assisted). It does **not** currently accept community pull requests. For feature requests, bug reports, or general discussion, please open a [GitHub issue](https://github.com/yanqd0/mint/issues).
+
 mint is a global, single-machine, SQLite-backed issue system CLI written in Rust.
 Thanks for your interest in contributing!
 
