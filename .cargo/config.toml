@@ -22,12 +22,13 @@ rustflags = [
 # ========== 编译优化配置 ==========
 
 [profile.release]
-opt-level = "s"          # 平衡 size/speed 优化
+opt-level = "z"          # 更激进 size 优化（毫秒级 CLI 无性能热路径）
 strip = true             # 去除调试符号
 debug = false            # 不生成 debug 信息（如需堆栈回溯改为 "limited"）
 lto = true               # 链接时优化
 codegen-units = 1        # 单代码生成单元，最大化优化
 panic = "abort"          # panic 直接 abort，不生成 unwinding 代码
+incremental = false      # release 关增量（增量会降低优化质量、拖慢构建；dev/test 不受影响）
 
 [profile.dev]
 opt-level = 0            # 快速编译
