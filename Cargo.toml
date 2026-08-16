@@ -32,3 +32,8 @@ assert_cmd = "2"
 predicates = "3"
 rstest = "0.26"
 tempfile = "3"
+
+# cargo-dist 发布构建 profile（Release workflow 用 `cargo build --profile dist`）。
+[profile.dist]
+inherits = "release"
+lto = "thin"
