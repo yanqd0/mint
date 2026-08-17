@@ -1,5 +1,52 @@
 # Change Log
 
+## 0.6.0
+
+### Optimizations
+
+Measured against the previous release (0.5.0), same project database, median of multiple runs:
+
+| Metric | 0.5.0 | 0.6.0 | Change |
+|---|---|---|---|
+| Release binary size | 2,318,992 B | 1,659,424 B | **-28%** |
+| Cold startup (first DB) | 22.02 ms | 7.17 ms | **-67%** |
+| Warm startup | 19.38 ms | 4.70 ms | **-76%** |
+| Search latency | 18.3–19.6 ms | 4.7–4.9 ms | **-75%** |
+
+Key contributors: TUI feature-gating (-350KB), SQLite compile-time trimming (-136KB + -100KB), opt-level z + dist LTO fat, WAL journal-mode skip on startup. Search improvement is dominated by the faster startup. Volume baseline documented (crate share + segment distribution) for future regression tracking.
+
+### Optimization Evaluations
+
+| Optimization | Verdict | Data |
+|---|---|---|
+| serde_json manual serialization | Rejected | 0.7% of binary, rewrite cost not justified |
+| rusqlite cache feature removal | Rejected | +32B (LTO already removed dead code) |
+| target-cpu=x86-64-v2 | Rejected | -0.18%, below 2% threshold |
+| gc-sections / force-unwind-tables | Rejected | no gain on macOS/musl, rustc defaults suffice |
+| build-std | Rejected | nightly toolchain complexity exceeds benefit |
+| FTS5 sub-feature trimming | Rejected | flags absent in bundled SQLite 3.51.3 |
+| Delivery compression | Confirmed optimal | default .tar.xz, 22% smaller than gzip |
+
+### Features
+
+- TUI list panels show parent resources: plans display milestone version; issues display version (blank when unattached).
+- TUI search Esc clears the active filter and resets cursor/page, reverting to unfiltered results.
+- List filtering expanded and combinable: plan/milestone filter by status and milestone ('' = unattached); issue filter by kind and plan; both support `--created-after`/`--updated-after` with date-prefix completion.
+- Removed per-command `--tui` flag (TUI entry is the `mint tui` subcommand only).
+- List panel column widths sized to content estimates (Flex::Legacy), freeing TITLE space on narrow screens.
+
+### Bug Fixes
+
+- PlanDetail `m` key now jumps to its milestone (missing branch in selected_milestone_id).
+- Plans DONE/TOTAL column truncated totals; data and header now render fully.
+
+### Others
+
+- Added cargo-deny dependency audit to CI (CVE/license/duplicate-version gates).
+- Replaced git subprocess calls with direct .git/ file parsing.
+- npm OIDC trusted publishing (node22 + npm11, removed NODE_AUTH_TOKEN fallback).
+- Updated skill docs with new list filter parameters (CN/EN synced).
+
 ## 0.5.0
 
 ### Features
