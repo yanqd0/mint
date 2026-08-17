@@ -140,6 +140,12 @@ macOS（Mach-O）与 Linux musl（ELF，cargo-zigbuild）双平台实测：
 
 **关键经验**：`-D SQLITE_OMIT_*`（删功能模块）比 `-U SQLITE_ENABLE_*`（关特性）有效——OMIT 结构性移除 lto 无法消除的代码路径；但需逐项编译+测试验证（AUTOINIT 省 50KB 却 SIGSEGV）。
 
+### FTS5 子功能裁剪评估（2026-08-17，plan #65）
+
+**否决**：`SQLITE_FTS5_NO_MATHS` / `SQLITE_FTS5_NO_AUX_FUNCTION` 在 bundled SQLite 3.51.3 中**不存在**（sqlite3.c 0 匹配，该版本只有 `SQLITE_FTS5_NO_WITHOUT_ROWID`）。FTS5 aux 函数（snippet/highlight/bm25）注册表与 tokenizer 均无编译期守卫。
+
+mint 只用 MATCH + rank（默认 bm25），但无编译期 flag 可裁这些未用功能 → **无法实现，记录否决**（#292 close）。
+
 ### 已应用的体积优化（历史）
 
 | commit | 优化 | 收益 |
