@@ -2933,10 +2933,21 @@ fn st_export_json_full() {
         ],
     );
 
+    // 直接挂 i1 到 milestone（i1 无 plan，符合二选一约束）。
+    run_json(
+        &db,
+        &["milestone", "attach", "1", &i1.to_string(), "--json"],
+    );
+
     let v = run_json(&db, &["export", "--format", "json"]);
     assert_eq!(v["issues"].as_array().unwrap().len(), 2);
     assert_eq!(v["plans"].as_array().unwrap().len(), 1);
     assert_eq!(v["milestones"].as_array().unwrap().len(), 1);
+    // milestone_directs 导出直接挂载（#330：此前丢失，恢复备份后关联全无）。
+    let directs = v["milestone_directs"].as_array().unwrap();
+    assert_eq!(directs.len(), 1);
+    assert_eq!(directs[0]["milestone_id"], 1);
+    assert_eq!(directs[0]["issue_id"], i1);
 
     // links 双向派生：a→solves→b 与 b→solved-by→a。
     let by_id: std::collections::HashMap<i64, &serde_json::Value> = v["issues"]
