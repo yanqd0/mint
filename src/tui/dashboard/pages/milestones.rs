@@ -37,7 +37,7 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
         Constraint::Length(2),
         Constraint::Length(5),
         Constraint::Length(8), // STATUS
-        Constraint::Length(9),
+        Constraint::Length(6), // VERSION（如 0.6.0）
         Constraint::Length(6),
         Constraint::Length(10),
         Constraint::Min(0),

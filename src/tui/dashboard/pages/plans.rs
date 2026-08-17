@@ -9,8 +9,7 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use crate::models::Issue;
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    container_status_color, flash_style, flex_col_width, footer_line, list_column_spacing,
-    list_title,
+    container_status_color, flash_style, flex_col_width, footer_line, list_title,
 };
 use crate::tui::dashboard::pages::progress::progress_bar;
 use crate::tui::dashboard::types::JumpKind;
@@ -25,13 +24,14 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
     m.set_page_size(rows_avail as usize);
 
     // 列宽 + TITLE 弹性列实际宽（title 按此预截断、右侧省略）。
+    // 定宽列按内容最小需求收缩（VERSION 5 字符/PROGRESS 16 格/DONE-TOTAL 5 字符），解放 TITLE。
     let widths = [
         Constraint::Length(2),  // 状态点
         Constraint::Length(5),  // ID
         Constraint::Length(8),  // STATUS
-        Constraint::Length(10), // VERSION（所属 milestone version，可空）
-        Constraint::Length(22), // PROGRESS
-        Constraint::Length(10), // DONE/TOTAL（`{:>4}` 使 / 对齐 header）
+        Constraint::Length(6),  // VERSION（所属 milestone version，如 0.6.0）
+        Constraint::Length(18), // PROGRESS（16 格进度条 + 边框）
+        Constraint::Length(6),  // DONE/TOTAL（如 12/21）
         Constraint::Min(0),     // TITLE
     ];
     let title_w = flex_col_width(area, &widths);
@@ -60,7 +60,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
                 .iter()
                 .filter(|i| i.plan_id == Some(plan.id))
                 .collect();
-            let bar = progress_bar(&plan_issues, 20);
+            let bar = progress_bar(&plan_issues, 16);
             let dot = container_status_color(plan.status);
             // VERSION：所属 milestone 的 version（plan.milestone_id → milestone.version；无则空）。
             let version = plan
@@ -106,14 +106,11 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
             m.visible_plans().len(),
         )
     );
-    let table = Table::new(rows, widths)
-        .header(header)
-        .column_spacing(list_column_spacing(area.width))
-        .block(
-            Block::bordered()
-                .title(title)
-                .padding(Padding::horizontal(1)),
-        );
+    let table = Table::new(rows, widths).header(header).block(
+        Block::bordered()
+            .title(title)
+            .padding(Padding::horizontal(1)),
+    );
     frame.render_widget(table, chunks[0]);
     frame.render_widget(Paragraph::new(footer), chunks[1]);
 }

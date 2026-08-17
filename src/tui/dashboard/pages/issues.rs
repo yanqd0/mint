@@ -9,8 +9,8 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::model_view;
 use crate::tui::dashboard::pages::common::{
-    flash_style, flex_col_width, footer_line, kind_abbrev, label_style, list_column_spacing,
-    list_title, status_abbrev, status_dot, status_text_style,
+    flash_style, flex_col_width, footer_line, kind_abbrev, label_style, list_title, status_abbrev,
+    status_dot, status_text_style,
 };
 use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
 use crate::tui::dashboard::types::JumpKind;
@@ -81,14 +81,15 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
     prog_lines.push(progress_pct_line(&all));
 
     // 列宽 + TITLE 弹性列实际宽（title 按此预截断、右侧省略，避免长文本溢出/换行）。
+    // 定宽列按内容最小需求收缩（VERSION 5 字符/LABEL 短 chip），解放 TITLE。
     let widths = [
         Constraint::Length(2),
         Constraint::Length(5),
         Constraint::Length(6),
         Constraint::Length(2),
         Constraint::Length(5),
-        Constraint::Length(8), // VERSION（所属 milestone version，可空）
-        Constraint::Length(20),
+        Constraint::Length(6), // VERSION（所属 milestone version，如 0.6.0）
+        Constraint::Length(14),
         Constraint::Min(0),
     ];
     let title_w = flex_col_width(area, &widths);
@@ -104,7 +105,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
         .map(|(idx, i)| {
             let (dot, dot_style) = status_dot(i.status);
             // LABEL 列：全部 label 按记录 color 着色（#273，chip 效果），按列宽预算截断。
-            let label_cell = Cell::from(Line::from(label_chips(&i.labels, &i.label_colors, 20)));
+            let label_cell = Cell::from(Line::from(label_chips(&i.labels, &i.label_colors, 14)));
             // 搜索命中高亮（#261）：有搜索词时对 title 命中子串反色。
             let title = truncate(&i.title, title_w.max(1) as usize);
             let title_spans = match model_view::current_search(m) {
@@ -160,14 +161,11 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
         )
     );
     render_panel(frame, chunks[0], "progress", prog_lines);
-    let table = Table::new(rows, widths)
-        .header(header)
-        .column_spacing(list_column_spacing(area.width))
-        .block(
-            Block::bordered()
-                .title(panel_list_title)
-                .padding(Padding::horizontal(1)),
-        );
+    let table = Table::new(rows, widths).header(header).block(
+        Block::bordered()
+            .title(panel_list_title)
+            .padding(Padding::horizontal(1)),
+    );
     frame.render_widget(table, chunks[1]);
     frame.render_widget(Paragraph::new(footer), chunks[2]);
 }
