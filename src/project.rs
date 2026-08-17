@@ -225,7 +225,10 @@ pub fn query_id(conn: &Connection, name: &str) -> Result<Option<i64>, Error> {
 fn remote_section_is_origin(section: &str) -> bool {
     let inner = section.trim().trim_start_matches('[').trim_end_matches(']');
     let (key, val) = if let Some(dot) = inner.find('.') {
-        (&inner[..dot], inner[dot + 1..].trim_matches('"').trim_matches('\''))
+        (
+            &inner[..dot],
+            inner[dot + 1..].trim_matches('"').trim_matches('\''),
+        )
     } else {
         // `remote "origin"` / `remote 'origin'`：空格分隔，值带引号。
         let mut it = inner.split_whitespace();
