@@ -29,7 +29,7 @@ pub struct ListContainersArgs {
     /// Show all statuses (including done)
     #[arg(long = "all-states", short = 'a')]
     pub all: bool,
-    /// Filter by status (open/planned/dev/test/done/dropped; plan/milestone 用容器状态)
+    /// Filter by status (container: open/running/partial/dropped/done)
     #[arg(long, value_enum)]
     pub status: Option<crate::models::ContainerStatus>,
     /// Filter by milestone (plan list): id 或空串 ''（筛未挂 milestone 的 plan）
