@@ -28,6 +28,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
         Constraint::Length(2),  // 状态点
         Constraint::Length(5),  // ID
         Constraint::Length(8),  // STATUS
+        Constraint::Length(10), // VERSION（所属 milestone version，可空）
         Constraint::Length(22), // PROGRESS
         Constraint::Length(10), // DONE/TOTAL（`{:>4}` 使 / 对齐 header）
         Constraint::Min(0),     // TITLE
@@ -38,6 +39,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
         Cell::from(""),
         Cell::from("ID"),
         Cell::from("STATUS"),
+        Cell::from("VERSION"),
         Cell::from("PROGRESS"),
         Cell::from("DONE/TOTAL"), // 右对齐值用 {:>4} 使 / 与 header 对齐
         Cell::from("TITLE"),
@@ -59,6 +61,12 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
                 .collect();
             let bar = progress_bar(&plan_issues, 20);
             let dot = container_status_color(plan.status);
+            // VERSION：所属 milestone 的 version（plan.milestone_id → milestone.version；无则空）。
+            let version = plan
+                .milestone_id
+                .and_then(|mid| m.milestones.iter().find(|(ms, _)| ms.id == mid))
+                .and_then(|(ms, _)| ms.version.clone())
+                .unwrap_or_default();
             let mut row = Row::new(vec![
                 Cell::from(Line::from(vec![Span::styled("●", Style::new().fg(dot))])),
                 Cell::from(format!("#{}", plan.id)),
@@ -66,6 +74,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
                     plan.status.as_str(),
                     container_status_color(plan.status),
                 )),
+                Cell::from(version),
                 Cell::from(bar),
                 Cell::from(format!("{:>4}/{}", done, total)), // / 固定在第 4 列，与 header DONE/TOTAL 对齐
                 Cell::from(truncate(&plan.title, title_w.max(1) as usize)),
@@ -123,7 +132,7 @@ mod tests {
             vec![(mk_container(4, "TUI", Some("0.4.0"), None), 0)],
         );
         m.view = View::Plans;
-        let mut terminal = test_backend(70, 12);
+        let mut terminal = test_backend(100, 12);
         terminal
             .draw(|f| draw_plans_panel(f, &mut m, f.area()))
             .unwrap();
@@ -182,7 +191,7 @@ mod tests {
             vec![],
         );
         m.view = View::Plans;
-        let mut terminal = test_backend(70, 12);
+        let mut terminal = test_backend(100, 12);
         terminal
             .draw(|f| draw_plans_panel(f, &mut m, f.area()))
             .unwrap();

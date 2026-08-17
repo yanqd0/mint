@@ -87,14 +87,17 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
         Constraint::Length(6),
         Constraint::Length(2),
         Constraint::Length(5),
+        Constraint::Length(8), // VERSION（所属 milestone version，可空）
         Constraint::Length(20),
         Constraint::Min(0),
     ];
     let title_w = flex_col_width(area, &widths);
 
     // 列表 panel：ratatui Table（表头 + 行；列宽按内容，对齐由 Table 按显示宽处理，解决中文/标签歪）。
-    let header = Row::new(vec!["#", "ID", "STATUS", "P", "KIND", "LABEL", "TITLE"])
-        .style(Style::new().add_modifier(Modifier::BOLD));
+    let header = Row::new(vec![
+        "#", "ID", "STATUS", "P", "KIND", "VERSION", "LABEL", "TITLE",
+    ])
+    .style(Style::new().add_modifier(Modifier::BOLD));
     let rows: Vec<Row> = page
         .iter()
         .enumerate()
@@ -108,6 +111,14 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
                 Some(q) => highlight_spans(&title, q, Style::default()),
                 None => vec![Span::raw(title)],
             };
+            // VERSION：所属 plan 的 milestone version（issue.plan_id → plan.milestone_id → milestone.version；无则空）。
+            let version = i
+                .plan_id
+                .and_then(|pid| m.plans.iter().find(|(p, _)| p.id == pid))
+                .and_then(|(p, _)| p.milestone_id)
+                .and_then(|mid| m.milestones.iter().find(|(ms, _)| ms.id == mid))
+                .and_then(|(ms, _)| ms.version.clone())
+                .unwrap_or_default();
             let mut row = Row::new(vec![
                 Cell::from(Line::from(vec![
                     Span::styled(format!("{dot}"), dot_style), // 状态点 ●（状态色/闪烁）
@@ -119,6 +130,7 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
                 )])),
                 Cell::from(i.priority.to_string()),
                 Cell::from(kind_abbrev(i.kind).to_string()),
+                Cell::from(version),
                 label_cell,
                 Cell::from(Line::from(title_spans)),
             ]);
@@ -239,7 +251,7 @@ mod tests {
             mk_issue(1, "open one", Status::Open, None),
             mk_issue(2, "done one", Status::Done, None),
         ]);
-        let mut terminal = test_backend(60, 10);
+        let mut terminal = test_backend(90, 10);
         terminal
             .draw(|f| draw_issues_panel(f, &mut m, f.area()))
             .unwrap();
@@ -295,7 +307,7 @@ mod tests {
         ]);
         m.view = View::PlanDetail { plan_id: 7 };
         m.selected = 0;
-        let mut terminal = test_backend(60, 10);
+        let mut terminal = test_backend(90, 10);
         terminal
             .draw(|f| draw_issues_panel(f, &mut m, f.area()))
             .unwrap();
