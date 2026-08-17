@@ -118,7 +118,7 @@ mint issue link create 42 blocked_by 55
 
 # Plans (plan/sprint under milestone/milestone)
 mint plan create "sprint-1" --body "goal…" --milestone 4
-mint plan attach 12 42
+mint plan attach 12 42              # single arg: one issue per call, repeat for multiple (not the batch form above)
 ```
 
 See `references/commands.md` for the full command reference and `mint <sub> --help` for per-command details.

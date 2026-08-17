@@ -118,7 +118,7 @@ mint issue link create 42 blocked_by 55
 
 # 计划（plan/sprint 挂 milestone/milestone）
 mint plan create "sprint-1" --body "目标…" --milestone 4
-mint plan attach 12 42
+mint plan attach 12 42              # 单参：一次只挂一个 issue，多 issue 逐条执行（勿与上方批量混淆）
 ```
 
 详细用法见 `references/commands.md` 及各子命令 `mint <sub> --help`。

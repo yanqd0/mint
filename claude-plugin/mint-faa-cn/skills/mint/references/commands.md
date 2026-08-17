@@ -120,7 +120,7 @@ mint milestone create "v0.4 TUI" --version 0.4.0 --body "范围…"
 mint plan create "sprint-1" --body "目标…" --milestone 4
 mint milestone show 4
 mint plan show 12
-mint plan attach 12 42                        # 挂 issue 到 plan
+mint plan attach 12 42                        # 挂 issue 到 plan（单参：一次一个 issue，多 issue 逐条执行）
 mint plan detach 12 42                 # 解挂
 mint milestone attach 4 42                      # 直接挂 issue 到 milestone
 mint milestone detach 4 42               # 解挂
