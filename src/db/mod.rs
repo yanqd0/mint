@@ -42,7 +42,13 @@ pub fn open(path: &Path) -> Result<rusqlite::Connection, Error> {
     }
     // 多进程（多 agent）并发写：busy_timeout 让写锁竞争等待而非立即报 database is locked
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
-    conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
+    // WAL 持久写库头（跨连接），二次打开重发是 no-op 但走完整 prepare/step；
+    // 先查 journal_mode 已是 WAL 则跳过设置（启动热路径省一次设置）。foreign_keys 每连接必须重设。
+    let mode: String = conn.pragma_query_value(None, "journal_mode", |r| r.get(0))?;
+    if mode != "wal" {
+        conn.execute_batch("PRAGMA journal_mode = WAL;")?;
+    }
+    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     migrate(&conn)?;
     register_machine(&conn)?;
     Ok(conn)

@@ -146,6 +146,19 @@ macOS（Mach-O）与 Linux musl（ELF，cargo-zigbuild）双平台实测：
 
 mint 只用 MATCH + rank（默认 bm25），但无编译期 flag 可裁这些未用功能 → **无法实现，记录否决**（#292 close）。
 
+### 启动路径优化（2026-08-17，plan #67）
+
+**WAL journal_mode 跳过**（#294）：
+- 改法：`PRAGMA journal_mode = WAL` 前先 `pragma_query_value("journal_mode")` 查，已是 `wal` 则跳过设置（WAL 持久写库头，跨连接）
+- 收益：热启动 **6.46 → 5.81ms median（-0.65ms，-10%）**；冷启动 10.44ms 无回归
+- `foreign_keys = ON` 保留每连接设置（不跨连接持久，必须）
+- 验证：618 测试绿 + deny 四项绿 + fmt/clippy 干净
+
+**评估记录（不做）**：
+- `git_repo_url` 去重：实测单次 0.021ms（find_git_dir 遍历 0.005ms），非热点，去重收益可忽略
+- append_csv 合并（git+abs_dir 一次查）：收益 ~0.05ms，复杂度增加，不做
+- 观察：带 `--project` 启动（3.31ms）比无（5.62ms）快 2.3ms，来源非 git 检测（0.02ms），疑似 --project 参数解析路径差异，非计划范围
+
 ### 已应用的体积优化（历史）
 
 | commit | 优化 | 收益 |
