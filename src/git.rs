@@ -23,6 +23,10 @@ pub(crate) fn find_git_dir(cwd: &Path) -> Option<PathBuf> {
         if dot_git.is_file() {
             if let Ok(content) = std::fs::read_to_string(&dot_git) {
                 let gitdir = content.trim().strip_prefix("gitdir:")?.trim();
+                // 加固（#345）：gitdir 路径含 `..`（路径穿越）时拒绝，防止读仓库外任意文件。
+                if gitdir.split('/').any(|seg| seg == "..") {
+                    return None;
+                }
                 let p = PathBuf::from(gitdir);
                 return Some(if p.is_absolute() { p } else { cur.join(p) });
             }
@@ -45,6 +49,10 @@ pub fn head_sha(cwd: &Path) -> Option<String> {
         return is_sha(head).then(|| head.to_string());
     }
     // symbolic ref：refs/heads/x → 读 loose ref 文件，缺则查 packed-refs。
+    // 加固（#345）：ref 含 `..`（路径穿越）时拒绝，防止越出 gitdir 读任意文件。
+    if head.split('/').any(|seg| seg == "..") {
+        return None;
+    }
     std::fs::read_to_string(git_dir.join(head))
         .ok()
         .map(|s| s.trim().to_string())
@@ -159,5 +167,22 @@ mod tests {
         let sub = dir.path().join("a/b");
         std::fs::create_dir_all(&sub).unwrap();
         assert_eq!(find_git_dir(&sub), Some(dir.path().join(".git")));
+    }
+
+    /// 加固（#345）：gitdir 含 `..`（路径穿越）拒绝。
+    #[test]
+    fn find_git_dir_rejects_gitdir_path_traversal() {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(dir.path().join(".git"), "gitdir: ../../etc\n").unwrap();
+        assert!(find_git_dir(dir.path()).is_none());
+    }
+
+    /// 加固（#345）：symbolic ref 含 `..` 拒绝。
+    #[test]
+    fn head_sha_rejects_ref_path_traversal() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let git_dir = write_git(dir.path());
+        std::fs::write(git_dir.join("HEAD"), "ref: refs/../../etc/passwd\n").unwrap();
+        assert_eq!(head_sha(dir.path()), None);
     }
 }
