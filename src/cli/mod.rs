@@ -519,11 +519,7 @@ pub(crate) fn cmd_container_list(
     kind: ContainerKind,
     a: &ListContainersArgs,
 ) -> Result<(), Error> {
-    let mut items = container::list(conn, kind, a.all)?;
-    // --status 过滤（容器状态：open/planned/dev/test/done/dropped）。
-    if let Some(st) = a.status {
-        items.retain(|(c, _)| c.status == st);
-    }
+    let mut items = container::list(conn, kind, a.all, a.status)?;
     // --milestone 过滤（仅 plan）：id 筛指定；'' 筛未挂（milestone_id IS NULL）。
     if kind == ContainerKind::Plan
         && let Some(ms) = &a.milestone
@@ -603,7 +599,7 @@ pub(crate) fn cmd_container_show(
         let (headers, rows) = match kind {
             ContainerKind::Plan => crate::cli::list_common::plan_detail(&c, &issues),
             ContainerKind::Milestone => {
-                let plans = container::list(conn, ContainerKind::Plan, true)?
+                let plans = container::list(conn, ContainerKind::Plan, true, None)?
                     .into_iter()
                     .filter(|(p, _)| p.milestone_id == Some(c.id))
                     .count();

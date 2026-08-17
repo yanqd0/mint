@@ -29,8 +29,8 @@ pub fn cmd_export(conn: &Connection, a: &ExportArgs) -> Result<(), Error> {
     cli::issue::list::fill_labels(conn, &mut issues)?;
     fill_links(conn, &mut issues)?;
 
-    let plans = container::list(conn, ContainerKind::Plan, true)?;
-    let milestones = container::list(conn, ContainerKind::Milestone, true)?;
+    let plans = container::list(conn, ContainerKind::Plan, true, None)?;
+    let milestones = container::list(conn, ContainerKind::Milestone, true, None)?;
     let labels = label::list(conn)?;
     // milestone 直属 issue 挂载（milestone_direct_issues，非 issue.plan_id 表达）。
     let milestone_directs: Vec<(i64, i64)> = conn

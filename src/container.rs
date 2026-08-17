@@ -134,14 +134,16 @@ pub fn create(
 }
 
 /// 列出全部容器（含子项计数），(容器, 计数)。
+/// `status: Some(..)` 时按容器状态过滤（显式 status 放开 done 排除，对齐 issue_list）。
 pub fn list(
     conn: &Connection,
     kind: ContainerKind,
     all: bool,
+    status: Option<ContainerStatus>,
 ) -> Result<Vec<(Container, i64)>, Error> {
     let all_flag: i64 = if all { 1 } else { 0 };
     let mut stmt = conn.prepare(kind.list_sql())?;
-    let rows = stmt.query_map(params![all_flag], |r| {
+    let rows = stmt.query_map(params![all_flag, status], |r| {
         let container = Container {
             id: r.get(0)?,
             title: r.get(1)?,

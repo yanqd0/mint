@@ -42,7 +42,10 @@ pub fn highlight_spans(text: &str, query: &str, base: Style) -> Vec<Span<'static
     while pos < chars.len() {
         let mut k = 0;
         while k < q.len() && pos + k < chars.len() {
-            let tc = chars[pos + k].to_lowercase().next().unwrap_or(chars[pos + k]);
+            let tc = chars[pos + k]
+                .to_lowercase()
+                .next()
+                .unwrap_or(chars[pos + k]);
             if tc != q[k] {
                 break;
             }

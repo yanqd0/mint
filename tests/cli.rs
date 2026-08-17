@@ -2266,6 +2266,61 @@ fn st_plan_list_filter_status_time() {
     assert!(s2.contains("active"), "created-after 2020 命中: {s2}");
 }
 
+/// 显式 --status done 应命中 done 容器（#331：此前被活跃过滤静默排除，与 issue 语义不一致）。
+#[test]
+fn st_container_list_status_done_matches() {
+    let (_dir, db) = empty_db();
+    // plan → done：全部 issue 走完状态机。
+    let iid = add_issue(&db, "x");
+    run_json(&db, &["plan", "create", "done-plan", "--json"]);
+    run_json(&db, &["plan", "attach", "1", &iid.to_string(), "--json"]);
+    for st in ["plan", "start", "commit"] {
+        run_json(&db, &["issue", "state", st, &iid.to_string(), "--json"]);
+    }
+    run_json(
+        &db,
+        &[
+            "issue",
+            "state",
+            "close",
+            &iid.to_string(),
+            "--test-cmd",
+            "true",
+            "--json",
+        ],
+    );
+    let v = run_json(&db, &["plan", "list", "--status", "done", "--json"]);
+    let items = v["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "--status done 应命中: {:?}", items);
+    assert_eq!(items[0]["title"], "done-plan");
+
+    // milestone → done：显式 set --status done（终态派生不覆盖，验证过滤语义本身）。
+    run_json(
+        &db,
+        &[
+            "milestone",
+            "create",
+            "done-ms",
+            "--version",
+            "9.9.9",
+            "--json",
+        ],
+    );
+    run_json(
+        &db,
+        &["milestone", "set", "1", "--status", "done", "--json"],
+    );
+    let v = run_json(&db, &["milestone", "list", "--status", "done", "--json"]);
+    let items = v["items"].as_array().unwrap();
+    assert_eq!(
+        items.len(),
+        1,
+        "--status done 应命中 milestone: {:?}",
+        items
+    );
+    assert_eq!(items[0]["title"], "done-ms");
+}
+
 /// milestone list --status：容器状态筛选。
 #[test]
 fn st_milestone_list_filter_status() {

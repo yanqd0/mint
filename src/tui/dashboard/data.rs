@@ -39,8 +39,8 @@ pub fn load_snapshot(conn: &Connection, project: &str) -> Result<DashboardSnapsh
     for i in issues.iter_mut() {
         i.links = links_map.get(&i.id).cloned().unwrap_or_default();
     }
-    let plans = container::list(conn, ContainerKind::Plan, true)?;
-    let milestones = container::list(conn, ContainerKind::Milestone, true)?;
+    let plans = container::list(conn, ContainerKind::Plan, true, None)?;
+    let milestones = container::list(conn, ContainerKind::Milestone, true, None)?;
     // milestone 直属 issue 关联（详情页直属 issue 列表用）。
     let milestone_directs = {
         let mut stmt = conn.prepare(db::MILESTONE_DIRECTS_ALL)?;
