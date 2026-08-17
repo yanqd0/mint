@@ -9,7 +9,8 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use crate::models::Issue;
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::pages::common::{
-    container_status_color, flash_style, flex_col_width, footer_line, list_title,
+    container_status_color, flash_style, flex_col_width, footer_line, list_column_spacing,
+    list_title,
 };
 use crate::tui::dashboard::pages::progress::progress_bar;
 use crate::tui::dashboard::types::JumpKind;
@@ -105,11 +106,14 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
             m.visible_plans().len(),
         )
     );
-    let table = Table::new(rows, widths).header(header).block(
-        Block::bordered()
-            .title(title)
-            .padding(Padding::horizontal(1)),
-    );
+    let table = Table::new(rows, widths)
+        .header(header)
+        .column_spacing(list_column_spacing(area.width))
+        .block(
+            Block::bordered()
+                .title(title)
+                .padding(Padding::horizontal(1)),
+        );
     frame.render_widget(table, chunks[0]);
     frame.render_widget(Paragraph::new(footer), chunks[1]);
 }

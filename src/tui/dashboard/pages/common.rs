@@ -138,6 +138,11 @@ pub fn kind_abbrev(kind: crate::models::Kind) -> &'static str {
     }
 }
 
+/// list panel 列间距（窄屏 1 解放空间给 TITLE，宽屏 2 可读性）。
+pub fn list_column_spacing(width: u16) -> u16 {
+    if width < 120 { 1 } else { 2 }
+}
+
 /// 计算 Table 弹性列（如 TITLE 的 Min/Fill）实际宽：区内宽 − 边框/内边距(4) − 列间距 − 定宽列合计。
 /// 页面对该列内容预截断（右侧省略），避免长文本溢出/换行。
 pub fn flex_col_width(area: Rect, widths: &[Constraint]) -> u16 {
@@ -148,7 +153,8 @@ pub fn flex_col_width(area: Rect, widths: &[Constraint]) -> u16 {
             _ => None,
         })
         .sum();
-    let spacing = widths.len().saturating_sub(1) as u16;
+    // 间距数与 Table column_spacing 一致（N 列 N-1 间距）。
+    let spacing = list_column_spacing(area.width) * widths.len().saturating_sub(1) as u16;
     area.width
         .saturating_sub(4) // border 2 + padding 2
         .saturating_sub(spacing)

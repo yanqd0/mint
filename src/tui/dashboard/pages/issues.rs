@@ -9,8 +9,8 @@ use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use crate::tui::dashboard::model::DashboardModel;
 use crate::tui::dashboard::model_view;
 use crate::tui::dashboard::pages::common::{
-    flash_style, flex_col_width, footer_line, kind_abbrev, label_style, list_title, status_abbrev,
-    status_dot, status_text_style,
+    flash_style, flex_col_width, footer_line, kind_abbrev, label_style, list_column_spacing,
+    list_title, status_abbrev, status_dot, status_text_style,
 };
 use crate::tui::dashboard::pages::progress::{progress_bar, progress_pct_line};
 use crate::tui::dashboard::types::JumpKind;
@@ -160,11 +160,14 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
         )
     );
     render_panel(frame, chunks[0], "progress", prog_lines);
-    let table = Table::new(rows, widths).header(header).block(
-        Block::bordered()
-            .title(panel_list_title)
-            .padding(Padding::horizontal(1)),
-    );
+    let table = Table::new(rows, widths)
+        .header(header)
+        .column_spacing(list_column_spacing(area.width))
+        .block(
+            Block::bordered()
+                .title(panel_list_title)
+                .padding(Padding::horizontal(1)),
+        );
     frame.render_widget(table, chunks[1]);
     frame.render_widget(Paragraph::new(footer), chunks[2]);
 }
