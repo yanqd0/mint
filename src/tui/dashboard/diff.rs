@@ -69,6 +69,11 @@ pub enum ChangeEvent {
     MilestoneUpdated {
         milestone: Container,
     },
+    /// milestone 直属 issue 挂载变化（attach/detach，milestone 本体字段不变）。
+    MilestoneDirectChanged {
+        milestone_id: i64,
+        count: i64,
+    },
 }
 
 impl ChangeEvent {
@@ -198,6 +203,24 @@ pub fn diff_snapshots(prev: &DashboardSnapshot, next: &DashboardSnapshot) -> Vec
                     });
                 }
             }
+        }
+    }
+
+    // milestone 直属挂载变化（#335：direct attach/detach 不改 milestone 本体字段，
+    // 需单独比较；count 变化即触发，跳转详情）。
+    let direct_count = |v: &[(i64, i64)], mid: i64| -> usize {
+        v.iter().filter(|(m, _)| *m == mid).count()
+    };
+    let prev_direct_ms: HashSet<i64> = prev.milestone_directs.iter().map(|(m, _)| *m).collect();
+    let next_direct_ms: HashSet<i64> = next.milestone_directs.iter().map(|(m, _)| *m).collect();
+    for mid in prev_direct_ms.union(&next_direct_ms) {
+        let prev_c = direct_count(&prev.milestone_directs, *mid);
+        let next_c = direct_count(&next.milestone_directs, *mid);
+        if prev_c != next_c {
+            events.push(ChangeEvent::MilestoneDirectChanged {
+                milestone_id: *mid,
+                count: next_c as i64,
+            });
         }
     }
 
@@ -393,5 +416,27 @@ mod tests {
         assert!(matches!(ev[0], ChangeEvent::PlanUpdated { .. }));
         // 无变化不产生事件。
         assert!(diff_snapshots(&snap("sprint"), &snap("sprint")).is_empty());
+    }
+
+    /// milestone direct 挂载变化产生 MilestoneDirectChanged（#335：attach/detach 不改 milestone 本体字段）。
+    #[test]
+    fn milestone_direct_change_emits_event() {
+        let base = DashboardSnapshot {
+            issues: vec![],
+            plans: vec![],
+            milestones: vec![(mk_container(4, "m", ContainerStatus::Open), 0)],
+            project: "mint".into(),
+            milestone_directs: vec![],
+        };
+        let mut attached = base.clone();
+        attached.milestone_directs = vec![(4, 100)];
+        let ev = diff_snapshots(&base, &attached);
+        assert!(
+            matches!(&ev[0], ChangeEvent::MilestoneDirectChanged { milestone_id: 4, count: 1 }),
+            "attach 应产生事件: {:?}",
+            ev
+        );
+        // 无变化不产生事件。
+        assert!(diff_snapshots(&base, &base).is_empty());
     }
 }

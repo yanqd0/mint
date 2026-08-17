@@ -69,6 +69,12 @@ pub(crate) fn raw_jumps_from_events(events: &[ChangeEvent]) -> Vec<RawJump> {
                     target: JumpTarget::MilestoneDetail(milestone.id),
                 });
             }
+            // #335：direct attach/detach 跳转对应 milestone 详情。
+            ChangeEvent::MilestoneDirectChanged { milestone_id, .. } => {
+                out.push(RawJump {
+                    target: JumpTarget::MilestoneDetail(*milestone_id),
+                });
+            }
             _ => {}
         }
     }
