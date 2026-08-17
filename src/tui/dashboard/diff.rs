@@ -105,6 +105,11 @@ fn issue_fields_changed(a: &Issue, b: &Issue) -> bool {
         || a.links != b.links
 }
 
+/// plan 是否发生非状态字段变化（title/body/milestone_id；#334 补 PlanUpdated 事件）。
+fn plan_fields_changed(a: &Container, b: &Container) -> bool {
+    a.title != b.title || a.body != b.body || a.milestone_id != b.milestone_id
+}
+
 /// 两轮快照 → 变化事件（issues 按 id 升序 → plans 按 id 升序，确定性）。
 pub fn diff_snapshots(prev: &DashboardSnapshot, next: &DashboardSnapshot) -> Vec<ChangeEvent> {
     let prev_issues: HashMap<i64, &Issue> = prev.issues.iter().map(|i| (i.id, i)).collect();
@@ -154,6 +159,10 @@ pub fn diff_snapshots(prev: &DashboardSnapshot, next: &DashboardSnapshot) -> Vec
                         plan: plan.clone(),
                         from: p.status,
                         to: plan.status,
+                    });
+                } else if plan_fields_changed(p, plan) {
+                    events.push(ChangeEvent::PlanUpdated {
+                        plan: plan.clone(),
                     });
                 }
             }
@@ -368,5 +377,21 @@ mod tests {
             )
             .is_empty()
         );
+    }
+
+    /// plan 字段编辑（title 变化）应产生 PlanUpdated（#334：此前只比 status，字段编辑静默）。
+    #[test]
+    fn plan_updated_on_field_change() {
+        let snap = |title: &str| DashboardSnapshot {
+            issues: vec![],
+            plans: vec![(mk_container(7, title, ContainerStatus::Open), 0)],
+            milestones: vec![],
+            project: "mint".into(),
+            milestone_directs: vec![],
+        };
+        let ev = diff_snapshots(&snap("sprint"), &snap("sprint 2"));
+        assert!(matches!(ev[0], ChangeEvent::PlanUpdated { .. }));
+        // 无变化不产生事件。
+        assert!(diff_snapshots(&snap("sprint"), &snap("sprint")).is_empty());
     }
 }
