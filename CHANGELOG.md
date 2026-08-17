@@ -29,6 +29,8 @@ Key contributors: TUI feature-gating (-350KB), SQLite compile-time trimming (-13
 
 ### Features
 
+- All list commands (`list`, `search`, `plan list`, `milestone list`, `label list`) support `--no-page` to return all results in one page (alternative to a large `--page-size`).
+- TUI kanban merges empty adjacent columns to free width: dev+test both empty collapse into `dev | test`; open+planned both empty with dropped present collapse into `open | planned`.
 - TUI list panels show parent resources: plans display milestone version; issues display version (blank when unattached).
 - TUI search Esc clears the active filter and resets cursor/page, reverting to unfiltered results.
 - List filtering expanded and combinable: plan/milestone filter by status and milestone ('' = unattached); issue filter by kind and plan; both support `--created-after`/`--updated-after` with date-prefix completion.
@@ -37,14 +39,34 @@ Key contributors: TUI feature-gating (-350KB), SQLite compile-time trimming (-13
 
 ### Bug Fixes
 
-- PlanDetail `m` key now jumps to its milestone (missing branch in selected_milestone_id).
-- Plans DONE/TOTAL column truncated totals; data and header now render fully.
+- CLI & pagination:
+  - Pagination offset computed in u64, so a huge `--page` no longer overflows (debug panic / release silent mis-slice).
+  - `--page-size 0` no longer panics in page-count (list/search/plan/milestone/label).
+  - `--created-after`/`--updated-after` accept ISO `T` separator (e.g. `2026-08-17T00:00:00`), which previously excluded all same-day records.
+  - `plan/milestone list --status done` now matches done containers, consistent with `issue list --status`.
+  - `plan list --milestone` validates numeric id / `''`; `milestone list --milestone` now errors instead of silently ignoring.
+  - Container `--status` help lists the 5 container states (open/running/partial/dropped/done), not the 6 issue states.
+- TUI:
+  - Search hit highlighting no longer panics on titles whose lowercase differs in byte length (e.g. Turkish `İ`).
+  - Plan field edits (title/body/milestone) now emit `PlanUpdated` events; milestone direct attach/detach emits `MilestoneDirectChanged`.
+  - Auto-jump is no longer reverted by the same-tick home-timeout when idle exceeds the home threshold.
+  - Kanban rows fit the panel height with an overflow `…` marker (was clipped).
+  - Removed dead `SearchState.revert` field (Esc reset-to-zero behavior kept as designed).
+- Data integrity:
+  - `export` now includes `milestone_directs`, so direct milestone attachments survive backup/restore.
+  - Milestone/plan detach validate the issue exists (previously reported success for missing issues).
+- git parsing:
+  - `git_repo_url` exact-matches `[remote "origin"]`, no longer misdetecting `[remote "myorigin"]`/`[remote "origin2"]`.
+  - git metadata parsing rejects `..` path traversal in `gitdir:` and symbolic refs.
+- Adapter:
+  - OpenCode adapter routes pending signals per session, no longer injecting one session's signals into another.
 
 ### Others
 
 - Added cargo-deny dependency audit to CI (CVE/license/duplicate-version gates).
 - Replaced git subprocess calls with direct .git/ file parsing.
 - npm OIDC trusted publishing (node22 + npm11, removed NODE_AUTH_TOKEN fallback).
+- Skill docs updated (CN/EN synced): `plan attach` is single-issue (one per call), plus a debugging tip for token-optimizer proxies (e.g. `rtk proxy`).
 - Updated skill docs with new list filter parameters (CN/EN synced).
 
 ## 0.5.0
