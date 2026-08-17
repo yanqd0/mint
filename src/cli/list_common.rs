@@ -3,7 +3,31 @@
 //! 供 issue/plan/milestone/label 各 list 命令共用（分页原 `issue::list` 内、
 //! 列矩阵原 `tui::rows`，均提升至此）。
 
+use crate::error::Error;
 use crate::models::{Container, Issue, IssueSummary, Label};
+
+/// 时间前缀补全：`2026` → `2026-01-01 00:00:00`，`2026-08` → `2026-08-01 00:00:00`，
+/// `2026-08-10` → `2026-08-10 00:00:00`；完整格式（含时间）直接透传。
+/// 用于 `--created-after`/`--updated-after` 筛选（SQLite datetime 比较）。
+pub(crate) fn parse_datetime_prefix(s: &str) -> Result<String, Error> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err(Error::Other("time filter must not be empty".into()));
+    }
+    // 已有时间部分（含空格或 T 分隔）→ 直接透传。
+    if s.contains(' ') || s.contains('T') {
+        return Ok(s.to_string());
+    }
+    let parts: Vec<&str> = s.split('-').collect();
+    match parts.len() {
+        1 => Ok(format!("{}-01-01 00:00:00", parts[0])), // 2026
+        2 => Ok(format!("{}-{}-01 00:00:00", parts[0], parts[1])), // 2026-08
+        3 => Ok(format!("{} 00:00:00", s)),              // 2026-08-10
+        _ => Err(Error::Other(format!(
+            "unrecognized datetime prefix: {s} (use YYYY / YYYY-MM / YYYY-MM-DD)"
+        ))),
+    }
+}
 
 /// 分页总页数（至少 1 页）。
 pub(crate) fn page_count(total: usize, page_size: u32) -> u32 {

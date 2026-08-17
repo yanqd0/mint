@@ -29,6 +29,18 @@ pub struct ListContainersArgs {
     /// Show all statuses (including done)
     #[arg(long = "all-states", short = 'a')]
     pub all: bool,
+    /// Filter by status (open/planned/dev/test/done/dropped; plan/milestone 用容器状态)
+    #[arg(long, value_enum)]
+    pub status: Option<crate::models::ContainerStatus>,
+    /// Filter by milestone (plan list): id 或空串 ''（筛未挂 milestone 的 plan）
+    #[arg(long)]
+    pub milestone: Option<String>,
+    /// Filter by created_at >= 时间（支持前缀 2026/2026-08/2026-08-10）
+    #[arg(long)]
+    pub created_after: Option<String>,
+    /// Filter by updated_at >= 时间（支持前缀）
+    #[arg(long)]
+    pub updated_after: Option<String>,
     /// Filter by text (title/body/status/#id, case-insensitive substring)
     #[arg(long)]
     pub search: Option<String>,
@@ -502,6 +514,34 @@ pub(crate) fn cmd_container_list(
     a: &ListContainersArgs,
 ) -> Result<(), Error> {
     let mut items = container::list(conn, kind, a.all)?;
+    // --status 过滤（容器状态：open/planned/dev/test/done/dropped）。
+    if let Some(st) = a.status {
+        items.retain(|(c, _)| c.status == st);
+    }
+    // --milestone 过滤（仅 plan）：id 筛指定；'' 筛未挂（milestone_id IS NULL）。
+    if kind == ContainerKind::Plan
+        && let Some(ms) = &a.milestone
+    {
+        let ms = ms.trim();
+        items.retain(|(c, _)| {
+            if ms.is_empty() {
+                c.milestone_id.is_none()
+            } else {
+                ms.parse::<i64>()
+                    .ok()
+                    .is_some_and(|mid| c.milestone_id == Some(mid))
+            }
+        });
+    }
+    // --created-after / --updated-after 过滤（时间前缀补全后比较）。
+    if let Some(t) = a.created_after.as_deref().filter(|t| !t.trim().is_empty()) {
+        let bound = crate::cli::list_common::parse_datetime_prefix(t)?;
+        items.retain(|(c, _)| c.created_at >= bound);
+    }
+    if let Some(t) = a.updated_after.as_deref().filter(|t| !t.trim().is_empty()) {
+        let bound = crate::cli::list_common::parse_datetime_prefix(t)?;
+        items.retain(|(c, _)| c.updated_at >= bound);
+    }
     // --search 文本过滤（title/body/status/#id，大小写不敏感子串）。
     if let Some(q) = a.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         items.retain(|(c, _)| container_matches_search(c, q));

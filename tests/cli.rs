@@ -2037,6 +2037,104 @@ fn st_plan_list_search_matches_status_id() {
     assert!(s2.contains("p"), "#1 命中: {s2}");
 }
 
+/// plan list --milestone=''：筛未挂 milestone 的 plan；--milestone <id>：筛指定。
+#[test]
+fn st_plan_list_filter_milestone() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["milestone", "create", "m", "--version", "0.1.0", "--json"],
+    );
+    run_json(
+        &db,
+        &["plan", "create", "attached", "--milestone", "1", "--json"],
+    );
+    run_json(&db, &["plan", "create", "free", "--json"]);
+    // 未挂（''）
+    let out = mint(&db)
+        .args(["plan", "list", "--milestone", ""])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("free"), "未挂命中: {s}");
+    assert!(!s.contains("attached"), "已挂排除: {s}");
+    // 指定 milestone
+    let out2 = mint(&db)
+        .args(["plan", "list", "--milestone", "1"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s2 = String::from_utf8_lossy(&out2);
+    assert!(s2.contains("attached"), "指定 milestone 命中: {s2}");
+    assert!(!s2.contains("free"), "未挂排除: {s2}");
+}
+
+/// plan list --status / --created-after：状态 + 时间混合筛选。
+#[test]
+fn st_plan_list_filter_status_time() {
+    let (_dir, db) = empty_db();
+    let iid = add_issue(&db, "x");
+    run_json(&db, &["plan", "create", "active", "--json"]);
+    run_json(&db, &["plan", "create", "idle", "--json"]);
+    // active → running（attach + issue planned）
+    run_json(&db, &["plan", "attach", "1", &iid.to_string(), "--json"]);
+    run_json(&db, &["issue", "state", "plan", &iid.to_string(), "--json"]);
+    // --status running 只显 active
+    let out = mint(&db)
+        .args(["plan", "list", "--status", "running"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("active"), "running 命中: {s}");
+    assert!(!s.contains("idle"), "非 running 排除: {s}");
+    // --created-after 2026（今天之后也应全空？用过去时间筛全量）
+    let out2 = mint(&db)
+        .args(["plan", "list", "--created-after", "2020"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s2 = String::from_utf8_lossy(&out2);
+    assert!(s2.contains("active"), "created-after 2020 命中: {s2}");
+}
+
+/// milestone list --status：容器状态筛选。
+#[test]
+fn st_milestone_list_filter_status() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["milestone", "create", "m1", "--version", "0.1.0", "--json"],
+    );
+    let out = mint(&db)
+        .args(["milestone", "list", "--status", "open"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("m1"), "open 命中: {s}");
+    let out2 = mint(&db)
+        .args(["milestone", "list", "--status", "done"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s2 = String::from_utf8_lossy(&out2);
+    assert!(!s2.contains("m1"), "done 排除 open: {s2}");
+}
+
 /// plan list --search --json 与 TSV 内容一致。
 #[test]
 fn st_plan_list_search_json_same_content() {
