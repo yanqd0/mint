@@ -35,14 +35,18 @@ pub(crate) fn page_count(total: usize, page_size: u32) -> u32 {
 }
 
 /// Rust-side pagination：fetch all → slice。
+/// `page_size: None`（`--no-page`）时全量返回、page=1、不切片。
 /// 返回 (items, total, page)。
 pub(crate) fn paginate<T>(
     items: Vec<T>,
     page: Option<u32>,
-    page_size: u32,
+    page_size: Option<u32>,
 ) -> (Vec<T>, usize, u32) {
-    let p = page.unwrap_or(1).max(1);
     let total = items.len();
+    let Some(page_size) = page_size else {
+        return (items, total, 1); // --no-page：全量、page=1
+    };
+    let p = page.unwrap_or(1).max(1);
     let offset = ((p - 1) * page_size) as usize;
     if offset >= total {
         return (Vec::new(), total, p);
@@ -50,6 +54,15 @@ pub(crate) fn paginate<T>(
     let end = (offset + page_size as usize).min(total);
     let page_items = items.into_iter().skip(offset).take(end - offset).collect();
     (page_items, total, p)
+}
+
+/// `--no-page` 时的展示用 page_size：取 total（单页全量），空集退化为 1 避免 page_count 除零。
+pub(crate) fn effective_page_size(no_page: bool, page_size: u32, total: usize) -> u32 {
+    if no_page {
+        total.max(1) as u32
+    } else {
+        page_size
+    }
 }
 
 /// 构建分页信封 JSON 对象。
@@ -366,6 +379,40 @@ mod tests {
         assert_eq!(rows[0][5], "#7"); // plan 只显 #N
         assert_eq!(rows[0][10], "1"); // links 数量
         assert_eq!(rows[0][13], "line1 line2 tab"); // body 末列，换行/tab 转空格
+    }
+
+    #[test]
+    fn paginate_no_page_returns_all_with_page_one() {
+        let items: Vec<i64> = (1..=12).collect();
+        let (got, total, page) = paginate(items, Some(3), None);
+        assert_eq!(got, (1..=12).collect::<Vec<_>>());
+        assert_eq!(total, 12);
+        assert_eq!(page, 1);
+    }
+
+    #[test]
+    fn paginate_no_page_ignores_page() {
+        let items: Vec<i64> = (1..=6).collect();
+        let (got, total, page) = paginate(items, Some(99), None);
+        assert_eq!(got, (1..=6).collect::<Vec<_>>());
+        assert_eq!(total, 6);
+        assert_eq!(page, 1); // --page 被忽略
+    }
+
+    #[test]
+    fn paginate_empty_no_page() {
+        let items: Vec<i64> = vec![];
+        let (got, total, page) = paginate(items, None, None);
+        assert!(got.is_empty());
+        assert_eq!(total, 0);
+        assert_eq!(page, 1);
+    }
+
+    #[test]
+    fn effective_page_size_no_page_uses_total() {
+        assert_eq!(effective_page_size(true, 5, 7), 7);
+        assert_eq!(effective_page_size(true, 5, 0), 1); // 空集退化
+        assert_eq!(effective_page_size(false, 5, 7), 5); // 非 no-page 原样
     }
 
     #[test]

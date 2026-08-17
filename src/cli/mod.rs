@@ -9,7 +9,7 @@ use crate::container::{self, ContainerKind};
 use crate::error::Error;
 use crate::models::{Container, ContainerStatus};
 use crate::output;
-use list_common::{containers, paged_json, paginate, print_page_footer};
+use list_common::{containers, effective_page_size, paged_json, paginate, print_page_footer};
 
 pub mod delete;
 pub mod export;
@@ -50,6 +50,9 @@ pub struct ListContainersArgs {
     /// Items per page (default 5)
     #[arg(long, default_value = "5")]
     pub page_size: u32,
+    /// Do not paginate; show all results in one page (ignores --page/--page-size)
+    #[arg(long)]
+    pub no_page: bool,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -261,6 +264,9 @@ pub struct ListLabelsArgs {
     /// Items per page (default 5)
     #[arg(long, default_value = "5")]
     pub page_size: u32,
+    /// Do not paginate; show all results in one page (ignores --page/--page-size)
+    #[arg(long)]
+    pub no_page: bool,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -546,7 +552,12 @@ pub(crate) fn cmd_container_list(
     if let Some(q) = a.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         items.retain(|(c, _)| container_matches_search(c, q));
     }
-    let (items, total, page) = paginate(items, a.page, a.page_size);
+    let (items, total, page) = paginate(
+        items,
+        a.page,
+        if a.no_page { None } else { Some(a.page_size) },
+    );
+    let page_size = effective_page_size(a.no_page, a.page_size, total);
     if a.json {
         let arr: Vec<serde_json::Value> = items
             .iter()
@@ -559,11 +570,11 @@ pub(crate) fn cmd_container_list(
                 })
             })
             .collect();
-        println!("{}", paged_json(&arr, page, a.page_size, total));
+        println!("{}", paged_json(&arr, page, page_size, total));
     } else {
         let (headers, rows) = containers(&items);
         print!("{}", crate::output::format_tsv(&headers, &rows));
-        print_page_footer(page, a.page_size, total);
+        print_page_footer(page, page_size, total);
     }
     Ok(())
 }
@@ -637,7 +648,12 @@ pub(crate) fn kind_noun(kind: ContainerKind) -> &'static str {
 /// label list：列出所有 label（含关联 issue 数）。
 fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
     let labels = crate::label::list(conn)?;
-    let (labels, total, page) = paginate(labels, l.page, l.page_size);
+    let (labels, total, page) = paginate(
+        labels,
+        l.page,
+        if l.no_page { None } else { Some(l.page_size) },
+    );
+    let page_size = effective_page_size(l.no_page, l.page_size, total);
     if l.json {
         let arr: Vec<serde_json::Value> = labels
             .iter()
@@ -649,11 +665,11 @@ fn cmd_label_list(conn: &Connection, l: &ListLabelsArgs) -> Result<(), Error> {
                 })
             })
             .collect();
-        println!("{}", paged_json(&arr, page, l.page_size, total));
+        println!("{}", paged_json(&arr, page, page_size, total));
     } else {
         let (headers, rows) = crate::cli::list_common::labels(&labels);
         print!("{}", crate::output::format_tsv(&headers, &rows));
-        print_page_footer(page, l.page_size, total);
+        print_page_footer(page, page_size, total);
     }
     Ok(())
 }

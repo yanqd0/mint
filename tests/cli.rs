@@ -438,6 +438,128 @@ fn st_list_default_filters_active() {
     assert_eq!(v["items"].as_array().unwrap().len(), 1);
 }
 
+/// --no-page：全量返回单页；默认仍分页。
+#[test]
+fn st_list_no_page() {
+    let (_dir, db) = empty_db();
+    for title in [
+        "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf",
+    ] {
+        add_issue(&db, title);
+    }
+    // 默认分页：5 条/页
+    let v = run_json(&db, &["list", "--json"]);
+    assert_eq!(v["items"].as_array().unwrap().len(), 5);
+    assert_eq!(v["total"], 7);
+    assert_eq!(v["pages"], 2);
+    // --no-page：全量单页
+    let v = run_json(&db, &["list", "--no-page", "--json"]);
+    assert_eq!(v["items"].as_array().unwrap().len(), 7);
+    assert_eq!(v["total"], 7);
+    assert_eq!(v["pages"], 1);
+    assert_eq!(v["page_size"], 7);
+    assert_eq!(v["page"], 1);
+    // --no-page 忽略 --page/--page-size
+    let v = run_json(
+        &db,
+        &[
+            "list",
+            "--no-page",
+            "--page",
+            "2",
+            "--page-size",
+            "2",
+            "--json",
+        ],
+    );
+    assert_eq!(v["items"].as_array().unwrap().len(), 7);
+    assert_eq!(v["pages"], 1);
+    assert_eq!(v["page"], 1);
+}
+
+/// search --no-page：全量返回。
+#[test]
+fn st_search_no_page() {
+    let (_dir, db) = empty_db();
+    for title in [
+        "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf",
+    ] {
+        add_issue(&db, &format!("search me {title}"));
+    }
+    let v = run_json(&db, &["search", "search me", "--no-page", "--json"]);
+    assert_eq!(v["items"].as_array().unwrap().len(), 7);
+    assert_eq!(v["pages"], 1);
+}
+
+/// label list --no-page：全量返回。
+#[test]
+fn st_label_list_no_page() {
+    let (_dir, db) = empty_db();
+    for title in [
+        "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf",
+    ] {
+        run_json(&db, &["issue", "add", title, "--label", title, "--json"]);
+    }
+    let v = run_json(&db, &["label", "list", "--no-page", "--json"]);
+    assert_eq!(v["items"].as_array().unwrap().len(), 7);
+    assert_eq!(v["pages"], 1);
+}
+
+/// plan list --no-page：全量返回。
+#[test]
+fn st_plan_list_no_page() {
+    let (_dir, db) = empty_db();
+    for title in [
+        "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf",
+    ] {
+        run_json(&db, &["plan", "create", title, "--json"]);
+    }
+    let v = run_json(&db, &["plan", "list", "--no-page", "--json"]);
+    assert_eq!(v["items"].as_array().unwrap().len(), 7);
+    assert_eq!(v["pages"], 1);
+}
+
+/// milestone list --no-page：全量返回。
+#[test]
+fn st_milestone_list_no_page() {
+    let (_dir, db) = empty_db();
+    for (i, title) in [
+        "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf",
+    ]
+    .iter()
+    .enumerate()
+    {
+        run_json(
+            &db,
+            &[
+                "milestone",
+                "create",
+                title,
+                "--version",
+                &format!("0.{i}.0"),
+                "--json",
+            ],
+        );
+    }
+    let v = run_json(&db, &["milestone", "list", "--no-page", "--json"]);
+    assert_eq!(v["items"].as_array().unwrap().len(), 7);
+    assert_eq!(v["pages"], 1);
+}
+
+/// --no-page 人体输出 footer 显示全量单页。
+#[test]
+fn st_list_no_page_footer() {
+    let (_dir, db) = empty_db();
+    for title in [
+        "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf",
+    ] {
+        add_issue(&db, title);
+    }
+    let out = mint(&db).args(["list", "--no-page"]).assert().success();
+    let stdout = String::from_utf8_lossy(&out.get_output().stdout);
+    assert_eq!(stdout.lines().filter(|l| !l.trim().is_empty()).count(), 8); // header + 7 行
+}
+
 /// 显式 --status done 不叠加活跃过滤（参数化模板的微妙分支）。
 #[test]
 fn st_list_status_done_bypasses_active_filter() {

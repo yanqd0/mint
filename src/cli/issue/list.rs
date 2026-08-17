@@ -3,7 +3,7 @@
 use rusqlite::Connection;
 
 use crate::cli::issue::search_filter;
-use crate::cli::list_common::{paged_json, paginate, print_page_footer};
+use crate::cli::list_common::{effective_page_size, paged_json, paginate, print_page_footer};
 use crate::db;
 use crate::error::Error;
 use crate::label;
@@ -40,6 +40,9 @@ pub struct ListArgs {
     /// Items per page (default 5)
     #[arg(long, default_value = "5")]
     pub page_size: u32,
+    /// Do not paginate; show all results in one page (ignores --page/--page-size)
+    #[arg(long)]
+    pub no_page: bool,
     /// Filter by created_at >= 时间（支持前缀 2026/2026-08/2026-08-10）
     #[arg(long)]
     pub created_after: Option<String>,
@@ -70,6 +73,9 @@ pub struct SearchArgs {
     /// Items per page (default 5)
     #[arg(long, default_value = "5")]
     pub page_size: u32,
+    /// Do not paginate; show all results in one page (ignores --page/--page-size)
+    #[arg(long)]
+    pub no_page: bool,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -119,15 +125,20 @@ pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Er
     if let Some(q) = l.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         issues.retain(|i| search_filter::issue_matches(i, q));
     }
-    let (issues, total, page) = paginate(issues, l.page, l.page_size);
+    let (issues, total, page) = paginate(
+        issues,
+        l.page,
+        if l.no_page { None } else { Some(l.page_size) },
+    );
+    let page_size = effective_page_size(l.no_page, l.page_size, total);
 
     if l.json {
         let items: Vec<serde_json::Value> = issues.iter().map(issue_to_json).collect();
-        println!("{}", paged_json(&items, page, l.page_size, total));
+        println!("{}", paged_json(&items, page, page_size, total));
     } else {
         let (headers, rows) = crate::cli::list_common::issues(&issues);
         print!("{}", crate::output::format_tsv(&headers, &rows));
-        print_page_footer(page, l.page_size, total);
+        print_page_footer(page, page_size, total);
     }
     Ok(())
 }
@@ -229,15 +240,20 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
     if let Some(p) = priority {
         issues.retain(|i| i.priority == p);
     }
-    let (issues, total, page) = paginate(issues, s.page, s.page_size);
+    let (issues, total, page) = paginate(
+        issues,
+        s.page,
+        if s.no_page { None } else { Some(s.page_size) },
+    );
+    let page_size = effective_page_size(s.no_page, s.page_size, total);
 
     if s.json {
         let items: Vec<serde_json::Value> = issues.iter().map(issue_to_json).collect();
-        println!("{}", paged_json(&items, page, s.page_size, total));
+        println!("{}", paged_json(&items, page, page_size, total));
     } else {
         let (headers, rows) = crate::cli::list_common::issues(&issues);
         print!("{}", crate::output::format_tsv(&headers, &rows));
-        print_page_footer(page, s.page_size, total);
+        print_page_footer(page, page_size, total);
     }
     Ok(())
 }
