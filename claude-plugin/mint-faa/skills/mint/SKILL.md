@@ -123,6 +123,10 @@ mint plan attach 12 42              # single arg: one issue per call, repeat for
 
 See `references/commands.md` for the full command reference and `mint <sub> --help` for per-command details.
 
+## Debugging (host toolchain)
+
+- **Output swallowed / command rewritten** (e.g. `cargo build -vv` shows no verbose output, `grep` with `|`/`()` reports escaping errors): the host may have a token-optimizing proxy (e.g. rtk). For debugging, run `rtk proxy <cmd>` to execute verbatim and bypass the filter (or temporarily disable the global hook). This is a host toolchain issue, not a mint issue.
+
 ## Title & Body Templates (token-saving)
 
 Follow templates for issue/plan/milestone title & body, **record only what the LLM does not know**:

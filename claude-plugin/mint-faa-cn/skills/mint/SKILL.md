@@ -123,6 +123,10 @@ mint plan attach 12 42              # 单参：一次只挂一个 issue，多 is
 
 详细用法见 `references/commands.md` 及各子命令 `mint <sub> --help`。
 
+## 调试提示（宿主工具链）
+
+- **输出被吞/命令被改写**（如 `cargo build -vv` 无 verbose 输出、`grep` 带 `|`/`()` 报转义错误）：宿主可能挂了 token 优化代理（如 rtk）。调试时用 `rtk proxy <cmd>` 原样执行绕过过滤器（或临时禁用全局 hook）。这是宿主工具链问题，非 mint 问题。
+
 ## 标题与 body 模板（省 token）
 
 写 issue/plan/milestone 的标题与 body 时套模板，**只记 LLM 未知**：
