@@ -31,22 +31,45 @@ pub fn highlight_spans(text: &str, query: &str, base: Style) -> Vec<Span<'static
     if query.is_empty() {
         return vec![Span::styled(text.to_string(), base)];
     }
-    let q = query.to_lowercase();
-    let lower = text.to_lowercase();
+    // 在原文 char 序列上逐 char 小写匹配：避免 to_lowercase() 副本的字节偏移
+    // 与原文错位（如 'İ' 2 字节 → 小写 3 字节）导致切片 panic。
+    let q: Vec<char> = query.to_lowercase().chars().collect();
+    let chars: Vec<char> = text.chars().collect();
     let hl_style = base.add_modifier(Modifier::REVERSED);
     let mut spans = Vec::new();
+    let mut plain_start = 0;
     let mut pos = 0;
-    while let Some(rel) = lower[pos..].find(&q) {
-        let hit_start = pos + rel;
-        if hit_start > pos {
-            spans.push(Span::styled(text[pos..hit_start].to_string(), base));
+    while pos < chars.len() {
+        let mut k = 0;
+        while k < q.len() && pos + k < chars.len() {
+            let tc = chars[pos + k].to_lowercase().next().unwrap_or(chars[pos + k]);
+            if tc != q[k] {
+                break;
+            }
+            k += 1;
         }
-        let hit_end = hit_start + q.len();
-        spans.push(Span::styled(text[hit_start..hit_end].to_string(), hl_style));
-        pos = hit_end;
+        if k == q.len() && k > 0 {
+            if pos > plain_start {
+                spans.push(Span::styled(
+                    chars[plain_start..pos].iter().collect::<String>(),
+                    base,
+                ));
+            }
+            spans.push(Span::styled(
+                chars[pos..pos + k].iter().collect::<String>(),
+                hl_style,
+            ));
+            pos += k;
+            plain_start = pos;
+        } else {
+            pos += 1;
+        }
     }
-    if pos < text.len() {
-        spans.push(Span::styled(text[pos..].to_string(), base));
+    if plain_start < chars.len() {
+        spans.push(Span::styled(
+            chars[plain_start..].iter().collect::<String>(),
+            base,
+        ));
     }
     if spans.is_empty() {
         // query 非空但未命中：整段普通样式。
@@ -102,6 +125,16 @@ mod tests {
         let spans = highlight_spans("plain", "xyz", s);
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].content, "plain");
+    }
+
+    #[test]
+    fn highlight_unicode_lowercase_len_change_no_panic() {
+        // 'İ'（2 字节）小写为 'i̇'（3 字节）；旧实现按 lower 副本字节偏移切原文会 panic。
+        let s = Style::default();
+        let spans = highlight_spans("İstanbul", "i", s);
+        assert!(!spans.is_empty());
+        // 命中段为原文 'İ'（保持原文字节，非小写副本），无 panic 即通过。
+        assert_eq!(spans[0].content, "İ");
     }
 
     #[test]
