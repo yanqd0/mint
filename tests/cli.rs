@@ -2233,6 +2233,32 @@ fn st_plan_list_filter_milestone() {
     assert!(!s2.contains("free"), "未挂排除: {s2}");
 }
 
+/// milestone list --milestone 报错（#340：此前静默忽略）。
+#[test]
+fn st_milestone_list_milestone_flag_errors() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["milestone", "create", "m", "--version", "0.1.0", "--json"],
+    );
+    let err = run_fail(&db, &["milestone", "list", "--milestone", "1"]);
+    assert!(
+        err.contains("--milestone only applies to plan list"),
+        "应报错: {err}"
+    );
+}
+
+/// plan list --milestone 非数字报错（#346：此前静默空结果）。
+#[test]
+fn st_plan_list_milestone_non_numeric_errors() {
+    let (_dir, db) = empty_db();
+    let err = run_fail(&db, &["plan", "list", "--milestone", "abc"]);
+    assert!(
+        err.contains("milestone filter must be a numeric id or ''"),
+        "应报错: {err}"
+    );
+}
+
 /// plan list --status / --created-after：状态 + 时间混合筛选。
 #[test]
 fn st_plan_list_filter_status_time() {

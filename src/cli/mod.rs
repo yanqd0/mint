@@ -521,18 +521,28 @@ pub(crate) fn cmd_container_list(
 ) -> Result<(), Error> {
     let mut items = container::list(conn, kind, a.all, a.status)?;
     // --milestone 过滤（仅 plan）：id 筛指定；'' 筛未挂（milestone_id IS NULL）。
-    if kind == ContainerKind::Plan
-        && let Some(ms) = &a.milestone
-    {
+    if let Some(ms) = &a.milestone {
+        if kind != ContainerKind::Plan {
+            // --milestone 是 plan list 专属；milestone list 传此参数无意义，显式报错（#340）。
+            return Err(Error::Other("--milestone only applies to plan list".into()));
+        }
         let ms = ms.trim();
-        items.retain(|(c, _)| {
-            if ms.is_empty() {
-                c.milestone_id.is_none()
-            } else {
-                ms.parse::<i64>()
-                    .ok()
-                    .is_some_and(|mid| c.milestone_id == Some(mid))
+        // 非数字 id 报错而非静默空结果（#346）。
+        let ms_id = if ms.is_empty() {
+            None
+        } else {
+            match ms.parse::<i64>() {
+                Ok(id) => Some(id),
+                Err(_) => {
+                    return Err(Error::Other(
+                        "milestone filter must be a numeric id or ''".into(),
+                    ));
+                }
             }
+        };
+        items.retain(|(c, _)| match ms_id {
+            None => c.milestone_id.is_none(),
+            Some(mid) => c.milestone_id == Some(mid),
         });
     }
     // --created-after / --updated-after 过滤（时间前缀补全后比较）。
