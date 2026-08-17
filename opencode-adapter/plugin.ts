@@ -20,8 +20,8 @@ import type { Plugin } from "@opencode-ai/plugin"
 const MARKER = "[mint-adapter: opencode]"
 
 export const mint: Plugin = async ({ client, $ }) => {
-  // 本轮待注入信号（session.idle 批量清空）
-  const pending: Array<{ sessionID: string; text: string }> = []
+  // 本轮待注入信号（session.idle 批量清空；按 sessionID 路由，#343）
+  let pending: Array<{ sessionID: string; text: string }> = []
   // 每会话上下文只注入一次（含 marker）
   const contextInjected = new Set<string>()
 
@@ -104,12 +104,17 @@ export const mint: Plugin = async ({ client, $ }) => {
           break
         }
 
-        // D. 批次边界：idle 统一注入（pending 清空；下一次 turn 生效）
+        // D. 批次边界：idle 统一注入（pending 清空；下一次 turn 生效）。
+        // 只注入属于当前 idle session 的信号（多 session 并存时防错发，#343）。
         case "session.idle": {
           if (pending.length) {
-            const texts = pending.map((p) => p.text).join("\n")
-            pending.length = 0
-            await inject(sessionID, texts)
+            const mine = pending.filter((p) => p.sessionID === sessionID)
+            if (mine.length) {
+              const texts = mine.map((p) => p.text).join("\n")
+              await inject(sessionID, texts)
+            }
+            // 仅移除已注入当前 session 的项；其它 session 的信号保留待其 idle。
+            pending = pending.filter((p) => p.sessionID !== sessionID)
           }
           break
         }
