@@ -47,7 +47,9 @@ pub(crate) fn paginate<T>(
         return (items, total, 1); // --no-page：全量、page=1
     };
     let p = page.unwrap_or(1).max(1);
-    let offset = ((p - 1) * page_size) as usize;
+    // 用 u64 计算偏移避免 u32 溢出（--page 大值调试 panic / 发布静默错切）。
+    let page_size = page_size.max(1) as u64;
+    let offset = ((p as u64 - 1) * page_size) as usize;
     if offset >= total {
         return (Vec::new(), total, p);
     }
@@ -406,6 +408,16 @@ mod tests {
         assert!(got.is_empty());
         assert_eq!(total, 0);
         assert_eq!(page, 1);
+    }
+
+    #[test]
+    fn paginate_huge_page_no_overflow() {
+        // --page 极大值：u64 计算偏移避免 u32 溢出（旧实现 debug panic / release 静默错切）。
+        let items: Vec<i64> = (1..=10).collect();
+        let (got, total, page) = paginate(items, Some(u32::MAX / 2), Some(5));
+        assert!(got.is_empty()); // 偏移远超 total → 空页，不 panic
+        assert_eq!(total, 10);
+        assert_eq!(page, u32::MAX / 2);
     }
 
     #[test]
