@@ -7,16 +7,30 @@ use crate::error::Error;
 use crate::models::{Container, Issue, IssueSummary, Label};
 
 /// 时间前缀补全：`2026` → `2026-01-01 00:00:00`，`2026-08` → `2026-08-01 00:00:00`，
-/// `2026-08-10` → `2026-08-10 00:00:00`；完整格式（含时间）直接透传。
+/// `2026-08-10` → `2026-08-10 00:00:00`；完整格式（含时间）规范化后返回。
+/// `T` 分隔符规范化为空格（与存储 `datetime(col,'localtime')` 对齐，否则词法比较
+/// `' ' < 'T'` 使同日记录全被排除）；无秒的 `HH:MM` 补 `:00`。
 /// 用于 `--created-after`/`--updated-after` 筛选（SQLite datetime 比较）。
 pub(crate) fn parse_datetime_prefix(s: &str) -> Result<String, Error> {
     let s = s.trim();
     if s.is_empty() {
         return Err(Error::Other("time filter must not be empty".into()));
     }
-    // 已有时间部分（含空格或 T 分隔）→ 直接透传。
-    if s.contains(' ') || s.contains('T') {
-        return Ok(s.to_string());
+    // ISO `T` 分隔符 → 空格（存储格式）。
+    let s = s.replace('T', " ");
+    if s.contains(' ') {
+        // 含时间：无秒补 `:00`（如 `22:50` → `22:50:00`），避免与更长存储串比较歧义。
+        let (date, time) = s.split_once(' ').expect("contains space checked above");
+        let hhmmss = if let Some((h, m)) = time.split_once(':') {
+            if m.contains(':') {
+                time.to_string() // 已有秒
+            } else {
+                format!("{h}:{m}:00")
+            }
+        } else {
+            time.to_string()
+        };
+        return Ok(format!("{date} {hhmmss}"));
     }
     let parts: Vec<&str> = s.split('-').collect();
     match parts.len() {
@@ -381,6 +395,24 @@ mod tests {
         assert_eq!(rows[0][5], "#7"); // plan 只显 #N
         assert_eq!(rows[0][10], "1"); // links 数量
         assert_eq!(rows[0][13], "line1 line2 tab"); // body 末列，换行/tab 转空格
+    }
+
+    #[test]
+    fn parse_datetime_prefix_t_normalized_to_space() {
+        // ISO T 分隔符：规范化为空格，避免 ' ' < 'T' 词法比较排除同日记录（#332）。
+        assert_eq!(
+            parse_datetime_prefix("2026-08-17T22:50:00").unwrap(),
+            "2026-08-17 22:50:00"
+        );
+        // 无秒 HH:MM 补 :00。
+        assert_eq!(
+            parse_datetime_prefix("2026-08-17T22:50").unwrap(),
+            "2026-08-17 22:50:00"
+        );
+        assert_eq!(
+            parse_datetime_prefix("2026-08-17 22:50").unwrap(),
+            "2026-08-17 22:50:00"
+        );
     }
 
     #[test]
