@@ -567,6 +567,43 @@ fn st_list_filters() {
     assert_eq!(v["items"].as_array().unwrap().len(), 2);
 }
 
+/// issue list --kind / --plan / --created-after：新筛选字段。
+#[test]
+fn st_list_filter_kind_plan_time() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &[
+            "issue",
+            "add",
+            "req-item",
+            "--kind",
+            "requirement",
+            "--json",
+        ],
+    );
+    run_json(
+        &db,
+        &["issue", "add", "bug-item", "--kind", "problem", "--json"],
+    );
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    let iid = run_json(&db, &["issue", "add", "in-plan", "--json"])["id"]
+        .as_i64()
+        .unwrap();
+    run_json(&db, &["plan", "attach", "1", &iid.to_string(), "--json"]);
+    // --kind requirement
+    let v = run_json(&db, &["list", "--kind", "requirement", "--json"]);
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
+    assert_eq!(v["items"][0]["title"], "req-item");
+    // --plan 1
+    let v = run_json(&db, &["list", "--plan", "1", "--json"]);
+    assert_eq!(v["items"].as_array().unwrap().len(), 1);
+    assert_eq!(v["items"][0]["title"], "in-plan");
+    // --created-after 2020（过去时间 → 全量）
+    let v = run_json(&db, &["list", "--created-after", "2020", "--json"]);
+    assert_eq!(v["items"].as_array().unwrap().len(), 3);
+}
+
 /// JSON 输出形态：add 返回 {id,title,project,kind,status}；state 返回 {id,from,to}。
 #[test]
 fn st_json_output_shape() {

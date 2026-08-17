@@ -16,12 +16,18 @@ pub struct ListArgs {
     /// Show all statuses (including done/dropped)
     #[arg(long = "all-states", short = 'a')]
     pub all: bool,
+    /// Filter by kind (problem/requirement/task)
+    #[arg(long, value_enum)]
+    pub kind: Option<Kind>,
     /// Filter by status
     #[arg(long, value_enum)]
     pub status: Option<Status>,
     /// Filter by priority (0=highest, 3=lowest)
     #[arg(long, value_parser = clap::value_parser!(i64).range(0..=3))]
     pub priority: Option<i64>,
+    /// Filter by plan id
+    #[arg(long)]
+    pub plan: Option<i64>,
     /// Filter by label name
     #[arg(long)]
     pub label: Option<String>,
@@ -34,6 +40,12 @@ pub struct ListArgs {
     /// Items per page (default 5)
     #[arg(long, default_value = "5")]
     pub page_size: u32,
+    /// Filter by created_at >= 时间（支持前缀 2026/2026-08/2026-08-10）
+    #[arg(long)]
+    pub created_after: Option<String>,
+    /// Filter by updated_at >= 时间（支持前缀）
+    #[arg(long)]
+    pub updated_after: Option<String>,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -86,6 +98,23 @@ pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Er
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;
+    // --kind 过滤（problem/requirement/task）。
+    if let Some(k) = l.kind {
+        issues.retain(|i| i.kind == k);
+    }
+    // --plan 过滤（属指定 plan）。
+    if let Some(pid) = l.plan {
+        issues.retain(|i| i.plan_id == Some(pid));
+    }
+    // --created-after / --updated-after 过滤（时间前缀补全后比较）。
+    if let Some(t) = l.created_after.as_deref().filter(|t| !t.trim().is_empty()) {
+        let bound = crate::cli::list_common::parse_datetime_prefix(t)?;
+        issues.retain(|i| i.created_at >= bound);
+    }
+    if let Some(t) = l.updated_after.as_deref().filter(|t| !t.trim().is_empty()) {
+        let bound = crate::cli::list_common::parse_datetime_prefix(t)?;
+        issues.retain(|i| i.updated_at >= bound);
+    }
     // --search 过滤（#260/#262 统一：类型化筛选 + 兑底子串，与 `mint search` / TUI 一致）。
     if let Some(q) = l.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         issues.retain(|i| search_filter::issue_matches(i, q));
@@ -294,11 +323,7 @@ fn issue_to_json(i: &Issue) -> serde_json::Value {
     })
 }
 
-pub fn cmd_show(
-    conn: &Connection,
-    _project: &str,
-    s: &ShowArgs,
-) -> Result<(), Error> {
+pub fn cmd_show(conn: &Connection, _project: &str, s: &ShowArgs) -> Result<(), Error> {
     let id = s.id;
     let issue = conn
         .query_row(db::ISSUE_SHOW, rusqlite::params![id], issue_from_row)
