@@ -120,6 +120,26 @@ macOS（Mach-O）与 Linux musl（ELF，cargo-zigbuild）双平台实测：
 
 **结论**：**否决 build-std**（nightly 依赖 + 工具链复杂度远超预期收益，记录评估结论，不实施）（#311 close）。
 
+### SQLite OMIT 级联深挖（2026-08-17，plan #65）
+
+现有 -136KB 基础上再裁 8 项 OMIT（实测逐项固化，618 测试 + FTS 回归全绿 + deny 全绿）：
+
+| 宏 | 收益 | 说明 |
+|---|---|---|
+| `SQLITE_OMIT_JSON` | -48.9KB | JSON 函数模块（json_extract 等），mint 无 json SQL |
+| `SQLITE_OMIT_AUTOVACUUM` | -16.2KB | VACUUM 相关，mint 无使用 |
+| `SQLITE_OMIT_DESERIALIZE` | -16.2KB | serialize/deserialize API，rusqlite 不用 |
+| `SQLITE_OMIT_COMPOUND_SELECT` | -16.2KB | UNION/INTERSECT 复合查询，mint SQL 无 |
+| `SQLITE_OMIT_LOOKASIDE` | -16B | 小项，lto 已裁大部分 |
+| `SQLITE_OMIT_COMPILEOPTION_DIAGS` | -48B | 小项 |
+| `SQLITE_OMIT_SHARED_CACHE` | -32B | 共享缓存，rusqlite 不启用 |
+| `SQLITE_OMIT_AUTHORIZATION` | -32B | 授权回调，本地单机不用 |
+| **合计** | **-99.9KB（-5.7%）** | 1,742,688 → 1,642,832B |
+
+**否决项**（编译失败/SIGSEGV/无收益）：`AUTOINIT`（SIGSEGV，rusqlite 依赖初始化）、`DEPRECATED/TRACE/AUTORESET/HEX_INTEGER/PROGRESS_CALLBACK`（lto 已裁）、`CTE/UPSERT/ANALYZE/ATTACH/WINDOWFUNC`（编译失败，被依赖）、`JSON1/SOUNDEX`（-U 关特性 lto 已裁）。
+
+**关键经验**：`-D SQLITE_OMIT_*`（删功能模块）比 `-U SQLITE_ENABLE_*`（关特性）有效——OMIT 结构性移除 lto 无法消除的代码路径；但需逐项编译+测试验证（AUTOINIT 省 50KB 却 SIGSEGV）。
+
 ### 已应用的体积优化（历史）
 
 | commit | 优化 | 收益 |
