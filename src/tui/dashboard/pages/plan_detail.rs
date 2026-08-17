@@ -18,16 +18,6 @@ use crate::tui::text::truncate;
 /// kanban 面板总高（含 border）；内容区行数 = 面板高 - 2（#342 与 take 行数对齐）。
 const KANBAN_PANEL_H: u16 = 10;
 
-/// kanban 全列状态（6 态顺序）。
-const STATUSES: [Status; 6] = [
-    Status::Open,
-    Status::Planned,
-    Status::Dev,
-    Status::Test,
-    Status::Done,
-    Status::Dropped,
-];
-
 /// PlanDetail：basic / body / kanban / issue list 四个 panel。
 pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, plan_id: i64, area: Rect) {
     let Some((c, _)) = m.plans.iter().find(|(c, _)| c.id == plan_id) else {
@@ -104,19 +94,39 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, plan_id: i64, area
         ci += 1;
     }
 
-    // kanban panel（6 态分列，ID+截断标题；dropped 空列隐藏省宽）。
+    // kanban panel（状态分列，ID+截断标题；dropped 空列隐藏省宽）。
+    // 列合并（#348）：dev+test 都空合并为 `dev | test`；open+planned 都空且
+    // dropped 有内容时合并为 `open | planned`。空列也显示（标题占位，dropped 除外）。
     let plan_issues: Vec<&Issue> = m.visible_issues();
-    let kanban_cols: Vec<(String, Vec<String>)> = STATUSES
+    let has = |st: Status| plan_issues.iter().any(|i| i.status == st);
+    // (标题前缀, 成员状态列表)：合并规则应用到相邻状态。
+    let mut groups: Vec<(String, Vec<Status>)> = Vec::new();
+    if !has(Status::Open) && !has(Status::Planned) && has(Status::Dropped) {
+        groups.push(("open | planned".into(), vec![Status::Open, Status::Planned]));
+    } else {
+        groups.push(("open".into(), vec![Status::Open]));
+        groups.push(("planned".into(), vec![Status::Planned]));
+    }
+    if !has(Status::Dev) && !has(Status::Test) {
+        groups.push(("dev | test".into(), vec![Status::Dev, Status::Test]));
+    } else {
+        groups.push(("dev".into(), vec![Status::Dev]));
+        groups.push(("test".into(), vec![Status::Test]));
+    }
+    groups.push(("done".into(), vec![Status::Done]));
+    groups.push(("dropped".into(), vec![Status::Dropped]));
+
+    let kanban_cols: Vec<(String, Vec<String>)> = groups
         .iter()
-        .filter(|s| {
-            // dropped 无 issue 时不显示该列（把宽度省出来）。
-            **s != Status::Dropped || plan_issues.iter().any(|i| i.status == **s)
+        .filter(|(_, statuses)| {
+            // dropped 无 issue 时不显示该列（把宽度省出来）；其它组空列也显示。
+            !(statuses.contains(&Status::Dropped) && statuses.iter().all(|s| !has(*s)))
         })
-        .map(|s| {
+        .map(|(title, statuses)| {
             let items: Vec<&Issue> = plan_issues
                 .iter()
                 .copied()
-                .filter(|i| i.status == *s)
+                .filter(|i| statuses.contains(&i.status))
                 .collect();
             // title 存完整，渲染时按列宽顶格（右侧）省略。
             // 取行数 = kanban 内容区行数（面板高 - 2 border）；溢出 `…` 占用末行（#342）。
@@ -129,7 +139,7 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, plan_id: i64, area
             if items.len() > avail.saturating_sub(1) {
                 rows.push("…".into());
             }
-            (format!("{} ({})", s.as_str(), items.len()), rows)
+            (format!("{title} ({})", items.len()), rows)
         })
         .collect();
 
@@ -248,6 +258,101 @@ mod tests {
         assert!(text.contains('…'), "溢出应有 …: {text}");
         // 末 issue 不被显示（超出内容区 8 行），且第 8 行数据应显示（7 行数据 + …）。
         assert!(!text.contains("#12 open"), "超出内容区不应显示: {text}");
+    }
+
+    /// #348：dev+test 都空 → 合并一列 `dev | test (0)`；无独立 dev/test 列。
+    #[test]
+    fn kanban_merges_empty_dev_test() {
+        let mut m = model_full(
+            vec![mk_issue(1, "t", Status::Done, Some(7))],
+            vec![(mk_container(7, "tui plan", None, None), 0)],
+            vec![],
+        );
+        m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
+        let mut terminal = test_backend(120, 24);
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 7, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("dev | test (0)"), "合并列标题: {text}");
+        // 逐行断言无独立列（合并标题含子串 "test (0)"，不能直接用 contains 反向断言）。
+        assert!(
+            text.lines().all(|l| !l.trim_start().starts_with("dev (0)")),
+            "无独立 dev 列: {text}"
+        );
+        assert!(
+            text.lines()
+                .all(|l| !l.trim_start().starts_with("test (0)")),
+            "无独立 test 列: {text}"
+        );
+    }
+
+    /// #348：dev/test 非空 → 各自独立列（不合并）。
+    #[test]
+    fn kanban_dev_test_not_merged_when_nonempty() {
+        let mut m = model_full(
+            vec![mk_issue(1, "d", Status::Dev, Some(7))],
+            vec![(mk_container(7, "tui plan", None, None), 0)],
+            vec![],
+        );
+        m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
+        let mut terminal = test_backend(120, 24);
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 7, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("dev (1)"), "dev 独立列: {text}");
+        assert!(text.contains("test (0)"), "test 独立列: {text}");
+        assert!(!text.contains("dev | test"), "不应合并: {text}");
+    }
+
+    /// #348：open+planned 都空且 dropped 有内容 → 合并 `open | planned (0)`。
+    #[test]
+    fn kanban_merges_empty_open_planned_when_dropped_present() {
+        let mut m = model_full(
+            vec![mk_issue(1, "x", Status::Dropped, Some(7))],
+            vec![(mk_container(7, "tui plan", None, None), 0)],
+            vec![],
+        );
+        m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
+        let mut terminal = test_backend(120, 24);
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 7, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("open | planned (0)"), "合并列标题: {text}");
+        assert!(
+            text.lines()
+                .all(|l| !l.trim_start().starts_with("open (0)")),
+            "无独立 open 列: {text}"
+        );
+        assert!(
+            text.lines()
+                .all(|l| !l.trim_start().starts_with("planned (0)")),
+            "无独立 planned 列: {text}"
+        );
+        // dropped 有内容 → 显示 dropped 列。
+        assert!(text.contains("dropped (1)"), "dropped 列显示: {text}");
+    }
+
+    /// #348：dropped 空 → dropped 列隐藏（既有规则）；open+planned 空但 dropped 空 → 独立空列。
+    #[test]
+    fn kanban_dropped_empty_hidden() {
+        let mut m = model_full(
+            vec![mk_issue(1, "t", Status::Done, Some(7))],
+            vec![(mk_container(7, "tui plan", None, None), 0)],
+            vec![],
+        );
+        m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
+        let mut terminal = test_backend(120, 24);
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 7, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(!text.contains("dropped (0)"), "dropped 空列隐藏: {text}");
+        // dropped 空 → open+planned 独立空列（不满足规则2 的 dropped 有内容条件）。
+        assert!(text.contains("open (0)"), "open 独立列: {text}");
+        assert!(text.contains("planned (0)"), "planned 独立列: {text}");
     }
 
     #[test]
