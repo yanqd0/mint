@@ -44,8 +44,9 @@ pub(crate) fn parse_datetime_prefix(s: &str) -> Result<String, Error> {
 }
 
 /// 分页总页数（至少 1 页）。
+/// `page_size` 下限 1，避免 `--page-size 0` 除零 panic（#337）。
 pub(crate) fn page_count(total: usize, page_size: u32) -> u32 {
-    total.div_ceil(page_size as usize).max(1) as u32
+    total.div_ceil(page_size.max(1) as usize).max(1) as u32
 }
 
 /// Rust-side pagination：fetch all → slice。
@@ -457,6 +458,13 @@ mod tests {
         assert_eq!(effective_page_size(true, 5, 7), 7);
         assert_eq!(effective_page_size(true, 5, 0), 1); // 空集退化
         assert_eq!(effective_page_size(false, 5, 7), 5); // 非 no-page 原样
+    }
+
+    #[test]
+    fn page_count_zero_page_size_no_panic() {
+        // --page-size 0：除零防护（#337），至少 1 页。
+        assert_eq!(page_count(10, 0), 10); // 每页 1 条
+        assert_eq!(page_count(0, 0), 1);
     }
 
     #[test]
