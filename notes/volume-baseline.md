@@ -93,6 +93,22 @@ release 二进制（1.7M）各归档格式实测（`tar`，unix 平台）：
 
 **结论**：**否决 target-cpu=x86-64-v2**（收益 <2% 阈值 + 兼容风险，记录评估结论，不固化）。
 
+### gc-sections / force-unwind-tables 检查（2026-08-16，plan #66）
+
+macOS（Mach-O）与 Linux musl（ELF，cargo-zigbuild）双平台实测：
+
+| 平台 | 优化 | 体积变化 |
+|---|---|---|
+| macOS | `-Wl,-dead_strip` | 1,742,688 → 1,742,704（**+16B，噪声**） |
+| macOS | `-C force-unwind-tables=no` | 无变化 |
+| musl ELF | `-C force-unwind-tables=no` | 2,283,488 → 2,283,520（**+32B，噪声**） |
+
+- rustc release **默认已 `--gc-sections`**（ELF）+ `panic="abort"` 已去大部分 unwind 代码 → 增量优化空间≈0
+- macOS 的 `__eh_frame`/`__unwind_info` 段由 std 的 backtrace/libunwind 机制产生，`force-unwind-tables=no` 清不掉（std 强制生成）
+- 注：测试中发现的 16KB "收益"实为 `symbol-mangling-version=v0` 的差异（config 注入 bug，见 issue #312），非 unwind 优化
+
+**结论**：**gc-sections / force-unwind-tables 无增量收益**，保持 rustc 默认（#310 close）。
+
 ### 已应用的体积优化（历史）
 
 | commit | 优化 | 收益 |
