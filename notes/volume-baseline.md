@@ -109,6 +109,17 @@ macOS（Mach-O）与 Linux musl（ELF，cargo-zigbuild）双平台实测：
 
 **结论**：**gc-sections / force-unwind-tables 无增量收益**，保持 rustc 默认（#310 close）。
 
+### build-std 评估（2026-08-16，plan #66）
+
+实测 `cargo +nightly -Z build-std=core,std,panic_abort` 重编译 std（musl 交叉）：
+
+- 链路 5 轮失败，每轮不同层：E0152 lang item 冲突（build-std core vs 预编译 core）→ core 未显式构建 → panic_abort 缺失 → drop_glue 链接错误
+- 需 nightly + rust-src + 独立 target 目录 + 正确 `-Z build-std` 参数，且与 musl 交叉（zig CC）+ rust-lld 链接器多重叠加
+- 即便打通，收益存疑：std 占 9.9%，但 target-cpu 实测已证 std 层指令集优化收益 ~0（-0.18%）；build-std 的 std 优化（panic_immediate_abort 等）收益估计 <1%
+- CI 复杂度剧增（nightly 不可用于稳定发布链）
+
+**结论**：**否决 build-std**（nightly 依赖 + 工具链复杂度远超预期收益，记录评估结论，不实施）（#311 close）。
+
 ### 已应用的体积优化（历史）
 
 | commit | 优化 | 收益 |
