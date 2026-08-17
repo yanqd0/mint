@@ -68,6 +68,19 @@ mod tests {
         }
     }
 
+    fn mk_container(id: i64) -> crate::models::Container {
+        crate::models::Container {
+            id,
+            title: "m".into(),
+            version: None,
+            body: None,
+            milestone_id: None,
+            status: crate::models::ContainerStatus::Open,
+            created_at: "t".into(),
+            updated_at: "t".into(),
+        }
+    }
+
     #[test]
     fn execute_jump_requires_idle_gap() {
         let mut m = DashboardModel::new();
@@ -83,42 +96,34 @@ mod tests {
         assert_eq!(m.view, View::Plans);
     }
 
-    /// #336：idle≥60s 且本 tick 执行了 auto-jump 时，refresh 不撤销跳转。
-    /// prev 空 + next 有 plan → PlanAdded 事件 → queue 合并 → execute_jump，
-    /// 修复前同 tick 的 home_timeout（idle 达标且 queue 已空）会切回 Issues。
+    /// #336：idle≥HOME_TIMEOUT 且本 tick 执行了 auto-jump 时，refresh 不撤销跳转。
+    /// prev 无 direct + next 有 direct → MilestoneDirectChanged（单跳转 MilestoneDetail），
+    /// execute_jump 弹空 ready；修复前同 tick 的 home_timeout（idle 达标且 queue 已空）
+    /// 会切回 Issues 撤销跳转——修复后保持 MilestoneDetail。
     #[test]
     fn auto_jump_not_reverted_by_home_timeout_same_tick() {
-        use crate::models::Container;
-        use crate::tui::dashboard::types::View;
+        use crate::tui::dashboard::types::{HOME_TIMEOUT, View};
         let mut m = DashboardModel::new();
-        // prev：空快照。
-        m.init(snap());
-        // idle 已超 home 阈值（60s），且 auto-jump 条件满足。
-        m.user_idle = 100;
+        // prev：milestone #9 已存在但无 direct 挂载（只触发 MilestoneDirectChanged，无 MilestoneAdded）。
+        m.init(DashboardSnapshot {
+            milestones: vec![(mk_container(9), 0)],
+            ..snap()
+        });
+        // idle 达到 home 阈值（300），且 auto-jump 条件满足。
+        m.user_idle = HOME_TIMEOUT;
         m.auto_last = AUTO_SWITCH_GAP;
-        // next：新增一个 plan → PlanAdded 事件。
+        // next：milestone #9 新增一个 direct 挂载 → 单跳转 MilestoneDetail(9)。
         let next = DashboardSnapshot {
-            plans: vec![(
-                Container {
-                    id: 1,
-                    title: "sprint".into(),
-                    version: None,
-                    body: None,
-                    milestone_id: None,
-                    status: crate::models::ContainerStatus::Open,
-                    created_at: "t".into(),
-                    updated_at: "t".into(),
-                },
-                0,
-            )],
+            milestones: vec![(mk_container(9), 0)],
+            milestone_directs: vec![(9, 100)],
             ..snap()
         };
         let r = m.refresh(&next);
         assert!(r.jumped.is_some(), "应执行 auto-jump: {:?}", r.jumped);
-        // 修复前：home_timeout 在 jumped 后同 tick 切回 Issues；修复后保持 Plans。
+        // 修复前：home_timeout 在 jumped 后同 tick 切回 Issues；修复后保持 MilestoneDetail。
         assert_eq!(
             m.view,
-            View::Plans,
+            View::MilestoneDetail { milestone_id: 9 },
             "auto-jump 不应被同 tick home_timeout 撤销"
         );
     }

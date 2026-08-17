@@ -210,12 +210,15 @@ pub fn diff_snapshots(prev: &DashboardSnapshot, next: &DashboardSnapshot) -> Vec
         |v: &[(i64, i64)], mid: i64| -> usize { v.iter().filter(|(m, _)| *m == mid).count() };
     let prev_direct_ms: HashSet<i64> = prev.milestone_directs.iter().map(|(m, _)| *m).collect();
     let next_direct_ms: HashSet<i64> = next.milestone_directs.iter().map(|(m, _)| *m).collect();
-    for mid in prev_direct_ms.union(&next_direct_ms) {
-        let prev_c = direct_count(&prev.milestone_directs, *mid);
-        let next_c = direct_count(&next.milestone_directs, *mid);
+    // union 收集后按 milestone_id 排序，保证事件顺序确定（#335；HashSet 迭代无序）。
+    let mut changed_ms: Vec<i64> = prev_direct_ms.union(&next_direct_ms).copied().collect();
+    changed_ms.sort_unstable();
+    for mid in changed_ms {
+        let prev_c = direct_count(&prev.milestone_directs, mid);
+        let next_c = direct_count(&next.milestone_directs, mid);
         if prev_c != next_c {
             events.push(ChangeEvent::MilestoneDirectChanged {
-                milestone_id: *mid,
+                milestone_id: mid,
                 count: next_c as i64,
             });
         }
