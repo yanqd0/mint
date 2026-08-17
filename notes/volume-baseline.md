@@ -159,6 +159,17 @@ mint 只用 MATCH + rank（默认 bm25），但无编译期 flag 可裁这些未
 - append_csv 合并（git+abs_dir 一次查）：收益 ~0.05ms，复杂度增加，不做
 - 观察：带 `--project` 启动（3.31ms）比无（5.62ms）快 2.3ms，来源非 git 检测（0.02ms），疑似 --project 参数解析路径差异，非计划范围
 
+### TUI 功能优化指标评估（2026-08-17，plan #74）
+
+需求：①list panel 显示上级资源（plans 加 milestone version 列、issues 加 version 列）；②删除子命令 `--tui`（TUI 唯一入口为 `mint tui`）。
+
+| 指标 | 前后对比 | 结论 |
+|---|---|---|
+| release 体积 | 1,642,832 → 1,642,848B（**+16B 噪声**） | 几乎无影响（TUI 渲染代码 + CLI 参数删除） |
+| 热启动 | ~5.81-6.16ms → 6.38ms（正常波动） | 无影响（改动不在启动热路径） |
+
+**结论**：TUI 渲染层与 CLI 参数层改动对 size/启动影响可忽略，符合预期。
+
 ### 已应用的体积优化（历史）
 
 | commit | 优化 | 收益 |
