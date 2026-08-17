@@ -240,11 +240,12 @@ impl DashboardModel {
                 }
             }
             KeyCode::Esc => {
-                if let Some(s) = &self.search {
-                    self.page = s.revert.0;
-                    self.selected = s.revert.1;
-                }
+                // Esc 清空搜索：清当前 tab filter + 输入态 + 重置光标/翻页 → 回退无搜索。
+                let idx = self.tab_index();
+                self.tab_search[idx] = None;
                 self.search = None;
+                self.page = 0;
+                self.selected = 0;
                 self.clamp_page();
                 self.clamp_selected();
             }
@@ -387,6 +388,12 @@ impl DashboardModel {
                 View::IssueDetail { .. } => self.switch_tab_manual(View::Issues),
                 View::PlanDetail { .. } => self.switch_tab_manual(View::Plans),
                 View::MilestoneDetail { .. } => self.switch_tab_manual(View::Milestones),
+                // list tab 有活跃搜索：Esc 清除 → 回退无搜索 + 重置位置。
+                _ if self.tab_search[self.tab_index()].is_some() => {
+                    self.tab_search[self.tab_index()] = None;
+                    self.page = 0;
+                    self.selected = 0;
+                }
                 _ => {}
             },
             _ => {}

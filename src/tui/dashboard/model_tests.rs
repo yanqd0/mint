@@ -1024,9 +1024,9 @@ fn search_text_change_resets_page_selected() {
     assert_eq!(m.page, 0, "搜索输入重置 page");
 }
 
-/// Esc 取消搜索恢复原位置，search=None。
+/// Esc 清空搜索：search=None、当前 tab filter 清空、光标/翻页重置到 0（回退无搜索）。
 #[test]
-fn search_esc_cancels_restores_position() {
+fn search_esc_clears_filter_and_resets_position() {
     let mut m = DashboardModel::new();
     m.init(snap(
         (1..=6)
@@ -1041,8 +1041,46 @@ fn search_esc_cancels_restores_position() {
     m.handle_key(k(KeyCode::Char('a')));
     m.handle_key(k(KeyCode::Esc));
     assert_eq!(m.search, None, "Esc 清空搜索态");
-    assert_eq!(m.selected, 1, "Esc 恢复原位置");
-    assert_eq!(m.page, 2, "Esc 恢复原页");
+    assert_eq!(m.tab_search[0], None, "Esc 清空当前 tab filter");
+    assert_eq!(m.selected, 0, "Esc 重置光标到 0");
+    assert_eq!(m.page, 0, "Esc 重置翻页到 0");
+}
+
+/// 非输入态（已提交 filter）Esc 清除 → 列表恢复全部 + 位置重置。
+#[test]
+fn search_esc_committed_clears_filter() {
+    let mut m = DashboardModel::new();
+    m.init(snap(
+        (1..=6)
+            .map(|i| mk_issue(i, Status::Open, None, &i.to_string()))
+            .collect(),
+        vec![],
+    ));
+    m.page_size = 2;
+    // Enter 提交 filter "a"（非输入态，active=false）。
+    m.handle_key(k(KeyCode::Char('/')));
+    m.handle_key(k(KeyCode::Char('a')));
+    m.handle_key(k(KeyCode::Enter));
+    assert_eq!(m.tab_search[0].as_deref(), Some("a"), "Enter 提交 filter");
+    assert!(!m.search.as_ref().unwrap().active, "Enter 后非输入态");
+    m.page = 1;
+    m.selected = 1;
+    m.handle_key(k(KeyCode::Esc));
+    assert_eq!(m.tab_search[0], None, "非输入态 Esc 清除 filter");
+    assert_eq!(m.selected, 0, "Esc 重置光标");
+    assert_eq!(m.page, 0, "Esc 重置翻页");
+}
+
+/// 无搜索时 Esc 无操作（详情返回语义不干扰）。
+#[test]
+fn search_esc_no_filter_noop() {
+    let mut m = DashboardModel::new();
+    m.init(snap(vec![mk_issue(1, Status::Open, None, "1")], vec![]));
+    m.selected = 1;
+    m.page = 0;
+    m.handle_key(k(KeyCode::Esc));
+    assert_eq!(m.selected, 1, "无搜索 Esc 不重置");
+    assert_eq!(m.tab_search[0], None, "无 filter");
 }
 
 /// Enter 提交后 filter 持久，active=false。
