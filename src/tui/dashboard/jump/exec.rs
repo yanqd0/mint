@@ -83,6 +83,46 @@ mod tests {
         assert_eq!(m.view, View::Plans);
     }
 
+    /// #336：idle≥60s 且本 tick 执行了 auto-jump 时，refresh 不撤销跳转。
+    /// prev 空 + next 有 plan → PlanAdded 事件 → queue 合并 → execute_jump，
+    /// 修复前同 tick 的 home_timeout（idle 达标且 queue 已空）会切回 Issues。
+    #[test]
+    fn auto_jump_not_reverted_by_home_timeout_same_tick() {
+        use crate::models::Container;
+        use crate::tui::dashboard::types::View;
+        let mut m = DashboardModel::new();
+        // prev：空快照。
+        m.init(snap());
+        // idle 已超 home 阈值（60s），且 auto-jump 条件满足。
+        m.user_idle = 100;
+        m.auto_last = AUTO_SWITCH_GAP;
+        // next：新增一个 plan → PlanAdded 事件。
+        let next = DashboardSnapshot {
+            plans: vec![(
+                Container {
+                    id: 1,
+                    title: "sprint".into(),
+                    version: None,
+                    body: None,
+                    milestone_id: None,
+                    status: crate::models::ContainerStatus::Open,
+                    created_at: "t".into(),
+                    updated_at: "t".into(),
+                },
+                0,
+            )],
+            ..snap()
+        };
+        let r = m.refresh(&next);
+        assert!(r.jumped.is_some(), "应执行 auto-jump: {:?}", r.jumped);
+        // 修复前：home_timeout 在 jumped 后同 tick 切回 Issues；修复后保持 Plans。
+        assert_eq!(
+            m.view,
+            View::Plans,
+            "auto-jump 不应被同 tick home_timeout 撤销"
+        );
+    }
+
     #[test]
     fn execute_sets_flash_with_ticks() {
         let mut m = DashboardModel::new();

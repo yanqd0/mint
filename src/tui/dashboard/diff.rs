@@ -166,9 +166,7 @@ pub fn diff_snapshots(prev: &DashboardSnapshot, next: &DashboardSnapshot) -> Vec
                         to: plan.status,
                     });
                 } else if plan_fields_changed(p, plan) {
-                    events.push(ChangeEvent::PlanUpdated {
-                        plan: plan.clone(),
-                    });
+                    events.push(ChangeEvent::PlanUpdated { plan: plan.clone() });
                 }
             }
         }
@@ -208,9 +206,8 @@ pub fn diff_snapshots(prev: &DashboardSnapshot, next: &DashboardSnapshot) -> Vec
 
     // milestone 直属挂载变化（#335：direct attach/detach 不改 milestone 本体字段，
     // 需单独比较；count 变化即触发，跳转详情）。
-    let direct_count = |v: &[(i64, i64)], mid: i64| -> usize {
-        v.iter().filter(|(m, _)| *m == mid).count()
-    };
+    let direct_count =
+        |v: &[(i64, i64)], mid: i64| -> usize { v.iter().filter(|(m, _)| *m == mid).count() };
     let prev_direct_ms: HashSet<i64> = prev.milestone_directs.iter().map(|(m, _)| *m).collect();
     let next_direct_ms: HashSet<i64> = next.milestone_directs.iter().map(|(m, _)| *m).collect();
     for mid in prev_direct_ms.union(&next_direct_ms) {
@@ -432,7 +429,13 @@ mod tests {
         attached.milestone_directs = vec![(4, 100)];
         let ev = diff_snapshots(&base, &attached);
         assert!(
-            matches!(&ev[0], ChangeEvent::MilestoneDirectChanged { milestone_id: 4, count: 1 }),
+            matches!(
+                &ev[0],
+                ChangeEvent::MilestoneDirectChanged {
+                    milestone_id: 4,
+                    count: 1
+                }
+            ),
             "attach 应产生事件: {:?}",
             ev
         );

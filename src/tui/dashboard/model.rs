@@ -186,7 +186,11 @@ impl DashboardModel {
         // 详情指向的实体已删除 → 回对应 tab。
         self.prune_detail();
         // 规则 7：空闲 60s 回首页（不经 queue）。
-        self.home_timeout();
+        // 本 tick 刚执行 auto-jump 则跳过——否则同 tick 的 home_timeout
+        // （idle≥60s 且 pending/ready 空）会立即撤销刚完成的跳转（#336）。
+        if jumped.is_none() {
+            self.home_timeout();
+        }
         RefreshResult {
             new_events: n,
             jumped,
