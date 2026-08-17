@@ -15,6 +15,9 @@ use crate::tui::dashboard::pages::issues;
 use crate::tui::panel::{columns, render_panel, render_panel_tight, stack};
 use crate::tui::text::truncate;
 
+/// kanban 面板总高（含 border）；内容区行数 = 面板高 - 2（#342 与 take 行数对齐）。
+const KANBAN_PANEL_H: u16 = 10;
+
 /// kanban 全列状态（6 态顺序）。
 const STATUSES: [Status; 6] = [
     Status::Open,
@@ -74,12 +77,13 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, plan_id: i64, area
         })
         .unwrap_or_default();
 
-    // 布局：basic + body(≤10) + kanban(10) + issues(弹性) + footer。
+    // 布局：basic + body(≤10) + kanban(内容 8 行) + issues(弹性) + footer。
+    // kanban 面板总高 KANBAN_PANEL_H，内容区 = 总高 - 2（border），取行数与之对齐（#342）。
     let mut constraints: Vec<Constraint> = vec![Constraint::Length(basic_rows.len() as u16 + 2)];
     if !body_lines.is_empty() {
         constraints.push(Constraint::Length(body_lines.len() as u16 + 2));
     }
-    constraints.push(Constraint::Length(10));
+    constraints.push(Constraint::Length(KANBAN_PANEL_H));
     constraints.push(Constraint::Min(0));
     constraints.push(Constraint::Length(1));
     let chunks = stack(area, &constraints);
@@ -115,12 +119,14 @@ pub fn draw_detail(frame: &mut Frame, m: &mut DashboardModel, plan_id: i64, area
                 .filter(|i| i.status == *s)
                 .collect();
             // title 存完整，渲染时按列宽顶格（右侧）省略。
+            // 取行数 = kanban 内容区行数（面板高 - 2 border）；溢出 `…` 占用末行（#342）。
+            let avail = KANBAN_PANEL_H.saturating_sub(2) as usize;
             let mut rows: Vec<String> = items
                 .iter()
-                .take(10)
+                .take(avail.saturating_sub(1)) // 预留 `…` 行
                 .map(|i| format!("#{} {}", i.id, i.title))
                 .collect();
-            if items.len() > 10 {
+            if items.len() > avail.saturating_sub(1) {
                 rows.push("…".into());
             }
             (format!("{} ({})", s.as_str(), items.len()), rows)
@@ -217,6 +223,31 @@ mod tests {
         // 标题完整或右侧省略，不硬切缺字符/右角（如 "open (1" 缺 ")"）。
         assert!(header.contains("open (1)"), "open 标题应完整: {header}");
         assert!(header.contains('…'), "窄宽下列标题应右侧省略: {header}");
+    }
+
+    /// #342：kanban 行数对齐面板内容区（面板高 10 - 2 border = 8 行），
+    /// 溢出用 `…` 占用末行，不越界裁剪（此前取 10 行 + 独立 `…` 共 11 行被裁）。
+    #[test]
+    fn kanban_rows_fit_panel_height_with_ellipsis() {
+        // 12 个 open issue：内容区 8 行 → 显示 7 行 + `…`。
+        let issues: Vec<Issue> = (1..=12)
+            .map(|id| mk_issue(id, &format!("open-{id}"), Status::Open, Some(7)))
+            .collect();
+        let mut m = model_full(
+            issues,
+            vec![(mk_container(7, "tui plan", None, None), 0)],
+            vec![],
+        );
+        m.view = crate::tui::dashboard::types::View::PlanDetail { plan_id: 7 };
+        let mut terminal = test_backend(120, 24);
+        terminal
+            .draw(|f| draw_detail(f, &mut m, 7, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("open (12)"), "kanban 头显示总数: {text}");
+        assert!(text.contains('…'), "溢出应有 …: {text}");
+        // 末 issue 不被显示（超出内容区 8 行），且第 8 行数据应显示（7 行数据 + …）。
+        assert!(!text.contains("#12 open"), "超出内容区不应显示: {text}");
     }
 
     #[test]
