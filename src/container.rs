@@ -446,11 +446,12 @@ pub fn link_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Resul
     })
 }
 
-/// 解除 milestone 直接挂的 issue。milestone 不存在报错（与 attach 校验对齐）；issue 未挂则无行 no-op。
+/// 解除 milestone 直接挂的 issue。milestone/issue 不存在报错（与 attach 校验对齐）。
 pub fn unlink_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Result<(), Error> {
     if get(conn, ContainerKind::Milestone, milestone_id)?.is_none() {
         return Err(Error::Other(format!("milestone #{milestone_id} not found")));
     }
+    ensure_issue_exists(conn, issue_id)?;
     let (old_plans, old_milestones) = current_affiliations(conn, issue_id)?;
     reassign_container(conn, issue_id, &old_plans, &old_milestones, |conn| {
         conn.execute(db::MILESTONE_DETACH, params![milestone_id, issue_id])?;
@@ -463,13 +464,7 @@ pub fn set_issue_plan(conn: &Connection, issue_id: i64, plan_id: i64) -> Result<
     if get(conn, ContainerKind::Plan, plan_id)?.is_none() {
         return Err(Error::Other(format!("plan #{plan_id} not found")));
     }
-    let exists: Option<i64> = conn
-        .query_row(db::ISSUE_EXISTS, params![issue_id], |r| r.get(0))
-        .optional()
-        .map_err(Error::from)?;
-    if exists.is_none() {
-        return Err(Error::Other(format!("issue #{issue_id} not found")));
-    }
+    ensure_issue_exists(conn, issue_id)?;
     let (old_plans, old_milestones) = current_affiliations(conn, issue_id)?;
     reassign_container(conn, issue_id, &old_plans, &old_milestones, |conn| {
         // 若该 issue 已直接挂 milestone，需先解除（二选一）
@@ -479,13 +474,26 @@ pub fn set_issue_plan(conn: &Connection, issue_id: i64, plan_id: i64) -> Result<
     })
 }
 
-/// 解除 issue 的 plan 归属（plan_id 置 NULL）。
+/// 解除 issue 的 plan 归属（plan_id 置 NULL）。issue 不存在报错（#341 与 attach 对齐）。
 pub fn unset_issue_plan(conn: &Connection, issue_id: i64) -> Result<(), Error> {
+    ensure_issue_exists(conn, issue_id)?;
     let (old_plans, old_milestones) = current_affiliations(conn, issue_id)?;
     reassign_container(conn, issue_id, &old_plans, &old_milestones, |conn| {
         conn.execute(db::ISSUE_UNSET_PLAN, params![issue_id])?;
         Ok(())
     })
+}
+
+/// 校验 issue 存在；不存在报错（attach/detach 对称校验，#341）。
+fn ensure_issue_exists(conn: &Connection, issue_id: i64) -> Result<(), Error> {
+    let exists: Option<i64> = conn
+        .query_row(db::ISSUE_EXISTS, params![issue_id], |r| r.get(0))
+        .optional()
+        .map_err(Error::from)?;
+    if exists.is_none() {
+        return Err(Error::Other(format!("issue #{issue_id} not found")));
+    }
+    Ok(())
 }
 
 /// 写后级联同步：某 issue 状态/归属变化后，重算其所属 plan 与 milestone 的状态。
@@ -792,6 +800,37 @@ mod tests {
         let err = unlink_direct(&conn, 999, iid).unwrap_err();
         assert!(
             err.to_string().contains("milestone #999 not found"),
+            "err: {err}"
+        );
+    }
+
+    /// detach 不存在的 issue 报 not found（#341：此前静默报成功）。
+    #[test]
+    fn unlink_direct_missing_issue_errors() {
+        let (conn, _iid) = setup();
+        let rid = create(
+            &conn,
+            ContainerKind::Milestone,
+            "r",
+            Some("0.1.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let err = unlink_direct(&conn, rid, 999).unwrap_err();
+        assert!(
+            err.to_string().contains("issue #999 not found"),
+            "err: {err}"
+        );
+    }
+
+    /// unset_issue_plan 不存在的 issue 报 not found（#341）。
+    #[test]
+    fn unset_issue_plan_missing_issue_errors() {
+        let (conn, _iid) = setup();
+        let err = unset_issue_plan(&conn, 999).unwrap_err();
+        assert!(
+            err.to_string().contains("issue #999 not found"),
             "err: {err}"
         );
     }
