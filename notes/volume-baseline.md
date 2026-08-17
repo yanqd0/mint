@@ -79,6 +79,20 @@ release 二进制（1.7M）各归档格式实测（`tar`，unix 平台）：
 
 **结论**：**收益可忽略（<1KiB 阈值），不实施**，保留 cache feature 默认开启（#295 close）。
 
+### target-cpu=x86-64-v2 实测（2026-08-16，plan #66）
+
+用 cargo-zigbuild 交叉编译 `x86_64-unknown-linux-musl` release 对比：
+
+| 状态 | 体积 |
+|---|---|
+| baseline（默认 target-cpu） | 2,283,488 B |
+| `-C target-cpu=x86-64-v2` | 2,279,456 B（**-4,032B，-0.18%**） |
+
+- 收益 **-0.18%**，远低于 #293 阈值（≥2%），且 x86-64-v2 要求 2010+ CPU（SSE4.2），有兼容性代价
+- mint 代码无 x86 专属优化/SSE 依赖（无 `std::arch`/`target_arch`）→ 指令集优化收益微乎其微
+
+**结论**：**否决 target-cpu=x86-64-v2**（收益 <2% 阈值 + 兼容风险，记录评估结论，不固化）。
+
 ### 已应用的体积优化（历史）
 
 | commit | 优化 | 收益 |
