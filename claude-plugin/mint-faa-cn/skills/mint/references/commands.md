@@ -24,8 +24,13 @@ mint list                                    # 活跃 issue
 mint list --all                              # 含 done/dropped
 mint list --status open --priority 0         # 按优先级筛选
 mint list --label 0.4.0 --project mint       # 按 label + 项目筛选
+mint list --kind requirement --plan 7        # 按 kind / plan 筛选
+mint list --created-after 2026-08            # 按创建时间筛选（支持前缀 2026/2026-08/2026-08-10）
+mint list --updated-after 2026-08-10         # 按更新时间筛选
 mint list --search "登录"                    # 文本过滤（title/body/status/id/kind/label 子串，大小写不敏感）
 mint issue list --search running --json      # 容器/issue 均可 --search；与 TUI / 搜索同语义
+mint plan list --milestone ''                # 筛未挂 milestone 的 plan（空串）
+mint plan list --milestone 5 --status running # 按 milestone + 状态筛选（筛选可混合拼复杂条件）
 ```
 
 ## show

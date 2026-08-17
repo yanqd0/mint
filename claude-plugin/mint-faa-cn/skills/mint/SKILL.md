@@ -91,6 +91,9 @@ mint issue add "登录按钮点击无响应" --body "Firefox 上点击无反馈�
 
 # 查看与搜索
 mint list --status open --priority 0
+mint list --kind requirement --plan 7 --created-after 2026-08   # 筛选可混合（kind/plan/时间）
+mint plan list --milestone '' --status running                  # '' = 筛未挂 milestone 的 plan
+mint plan list --milestone 5 --updated-after 2026-08-10
 mint search "登录" --project mint --json
 mint issue get 42 body   # 详情正文走 get body（裸值最准；show 的 TSV 已含状态/标题等）
 

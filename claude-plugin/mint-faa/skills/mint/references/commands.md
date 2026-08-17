@@ -24,8 +24,13 @@ mint list                                    # active issues
 mint list --all                              # include done/dropped
 mint list --status open --priority 0         # filter by priority
 mint list --label 0.4.0 --project mint       # filter by label + project
+mint list --kind requirement --plan 7        # filter by kind / plan
+mint list --created-after 2026-08            # filter by created time (prefix: 2026/2026-08/2026-08-10)
+mint list --updated-after 2026-08-10         # filter by updated time
 mint list --search "login"                   # text filter (title/body/status/id/kind/label substring, case-insensitive)
 mint issue list --search running --json      # containers/issues both support --search; same semantics as TUI / search
+mint plan list --milestone ''                # plans not attached to any milestone (empty string)
+mint plan list --milestone 5 --status running # filter by milestone + status (filters combine into complex conditions)
 ```
 
 ## show
