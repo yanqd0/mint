@@ -218,6 +218,25 @@ pub fn query_id(conn: &Connection, name: &str) -> Result<Option<i64>, Error> {
         .map_err(Error::from)
 }
 
+/// 判断 git config 段头是否为 `[remote "origin"]` 形式（#339 精确匹配）。
+///
+/// 支持 `[remote "origin"]`、`[remote 'origin']`、`[remote.origin]`；
+/// 键必须恰为 `remote`、值恰为 `origin`（排除 `[remote "myorigin"]` 等误命中）。
+fn remote_section_is_origin(section: &str) -> bool {
+    let inner = section.trim().trim_start_matches('[').trim_end_matches(']');
+    let (key, val) = if let Some(dot) = inner.find('.') {
+        (&inner[..dot], inner[dot + 1..].trim_matches('"').trim_matches('\''))
+    } else {
+        // `remote "origin"` / `remote 'origin'`：空格分隔，值带引号。
+        let mut it = inner.split_whitespace();
+        match (it.next(), it.next()) {
+            (Some(k), Some(v)) => (k, v.trim_matches('"').trim_matches('\'')),
+            _ => return false,
+        }
+    };
+    key == "remote" && val == "origin"
+}
+
 /// 查询 git remote url（检测用，非关键路径可失败）。
 ///
 /// 读 `.git/config` 的 `[remote "origin"]` 段 `url =` 值，不调 git 子进程。
@@ -228,8 +247,9 @@ fn git_repo_url(cwd: &Path) -> Option<String> {
     for line in config.lines() {
         let line = line.trim();
         if line.starts_with('[') {
-            // `[remote "origin"]` / `[remote 'origin']` / `[remote.origin]`。
-            in_origin = line.contains("remote") && line.contains("origin");
+            // 精确匹配 `[remote "origin"]` / `[remote 'origin']` / `[remote.origin]`；
+            // 子串匹配会误判 `[remote "myorigin"]`/`[remote "origin2"]` 为 origin（#339）。
+            in_origin = remote_section_is_origin(line);
             continue;
         }
         if in_origin && line.starts_with("url =") {
@@ -306,6 +326,18 @@ mod tests {
         // git 名末段 `.git` 后缀去除
         write_config("https://host/user/repo.git");
         assert_eq!(detect_name(dir.path(), None), "repo");
+    }
+
+    /// remote 段头精确匹配：origin 命中、其它 remote 不误判（#339）。
+    #[rstest]
+    #[case::double_quoted("[remote \"origin\"]", true)]
+    #[case::single_quoted("[remote 'origin']", true)]
+    #[case::dot_syntax("[remote.origin]", true)]
+    #[case::suffix_name("[remote \"myorigin\"]", false)]
+    #[case::prefix_name("[remote \"origin2\"]", false)]
+    #[case::other_section("[branch \"main\"]", false)]
+    fn remote_section_origin_detection(#[case] section: &str, #[case] expect: bool) {
+        assert_eq!(remote_section_is_origin(section), expect, "{section}");
     }
 
     /// 兜底 default：无 basename 且无 git（根目录）。
