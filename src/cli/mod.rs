@@ -41,10 +41,6 @@ pub struct ListContainersArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
-    /// Table view (interactive on TTY, single page otherwise)
-    #[cfg(feature = "tui")]
-    #[arg(long, conflicts_with = "json")]
-    pub tui: bool,
 }
 
 #[derive(clap::Args)]
@@ -53,10 +49,6 @@ pub struct ContainerIdArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
-    /// TUI detail page (reuses the mint tui page)
-    #[cfg(feature = "tui")]
-    #[arg(long, conflicts_with = "json")]
-    pub tui: bool,
 }
 
 #[derive(clap::Args)]
@@ -505,26 +497,11 @@ fn container_matches_search(c: &Container, q: &str) -> bool {
 /// 容器 list：默认只显非 done，--all/-a 全列。
 pub(crate) fn cmd_container_list(
     conn: &Connection,
-    #[cfg_attr(not(feature = "tui"), allow(unused_variables))] project: &str,
+    _project: &str,
     kind: ContainerKind,
     a: &ListContainersArgs,
 ) -> Result<(), Error> {
     let mut items = container::list(conn, kind, a.all)?;
-    #[cfg(feature = "tui")]
-    if a.tui {
-        // list --tui 归一：复用 dashboard 列表页（带 --all-states 筛选）。
-        let filter = crate::tui::dashboard::types::IssueFilter {
-            all: a.all,
-            status: None,
-            label: None,
-            priority: None,
-        };
-        let view = match kind {
-            ContainerKind::Milestone => crate::tui::dashboard::types::View::Milestones,
-            ContainerKind::Plan => crate::tui::dashboard::types::View::Plans,
-        };
-        return crate::tui::run_dashboard_view(conn, project, view, Some(filter));
-    }
     // --search 文本过滤（title/body/status/#id，大小写不敏感子串）。
     if let Some(q) = a.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         items.retain(|(c, _)| container_matches_search(c, q));
@@ -554,20 +531,10 @@ pub(crate) fn cmd_container_list(
 /// 容器 show：详情 + 其下 issue。
 pub(crate) fn cmd_container_show(
     conn: &Connection,
-    #[cfg_attr(not(feature = "tui"), allow(unused_variables))] project: &str,
+    _project: &str,
     kind: ContainerKind,
     a: &ContainerIdArgs,
 ) -> Result<(), Error> {
-    #[cfg(feature = "tui")]
-    if a.tui {
-        let view = match kind {
-            ContainerKind::Plan => crate::tui::dashboard::types::View::PlanDetail { plan_id: a.id },
-            ContainerKind::Milestone => {
-                crate::tui::dashboard::types::View::MilestoneDetail { milestone_id: a.id }
-            }
-        };
-        return crate::tui::run_dashboard_view(conn, project, view, None);
-    }
     let c = container::get(conn, kind, a.id)?
         .ok_or_else(|| Error::Other(format!("{} #{} not found", kind_noun(kind), a.id)))?;
     let issues = container::issues_for(conn, kind, a.id)?;

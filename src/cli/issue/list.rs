@@ -37,10 +37,6 @@ pub struct ListArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
-    /// Table view (interactive on TTY, single page otherwise)
-    #[cfg(feature = "tui")]
-    #[arg(long, conflicts_with = "json")]
-    pub tui: bool,
 }
 
 #[derive(clap::Args)]
@@ -73,10 +69,6 @@ pub struct ShowArgs {
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
-    /// TUI detail page (reuses the mint tui page)
-    #[cfg(feature = "tui")]
-    #[arg(long, conflicts_with = "json")]
-    pub tui: bool,
 }
 
 pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Error> {
@@ -97,22 +89,6 @@ pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Er
     // --search 过滤（#260/#262 统一：类型化筛选 + 兑底子串，与 `mint search` / TUI 一致）。
     if let Some(q) = l.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         issues.retain(|i| search_filter::issue_matches(i, q));
-    }
-    #[cfg(feature = "tui")]
-    if l.tui {
-        // list --tui 归一：复用 dashboard Issues 页（带初始筛选）。
-        let filter = crate::tui::dashboard::types::IssueFilter {
-            all: l.all,
-            status: l.status,
-            label: l.label.clone(),
-            priority: l.priority,
-        };
-        return crate::tui::run_dashboard_view(
-            conn,
-            project,
-            crate::tui::dashboard::types::View::Issues,
-            Some(filter),
-        );
     }
     let (issues, total, page) = paginate(issues, l.page, l.page_size);
 
@@ -320,19 +296,10 @@ fn issue_to_json(i: &Issue) -> serde_json::Value {
 
 pub fn cmd_show(
     conn: &Connection,
-    #[cfg_attr(not(feature = "tui"), allow(unused_variables))] project: &str,
+    _project: &str,
     s: &ShowArgs,
 ) -> Result<(), Error> {
     let id = s.id;
-    #[cfg(feature = "tui")]
-    if s.tui {
-        return crate::tui::run_dashboard_view(
-            conn,
-            project,
-            crate::tui::dashboard::types::View::IssueDetail { id },
-            None,
-        );
-    }
     let issue = conn
         .query_row(db::ISSUE_SHOW, rusqlite::params![id], issue_from_row)
         .map_err(|e| match e {
