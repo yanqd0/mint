@@ -328,7 +328,6 @@ mod tests {
         m.search = Some(crate::tui::dashboard::types::SearchState {
             active: true,
             text: "foo".into(),
-            revert: (0, 0),
         });
         let mut terminal = test_backend(60, 10);
         terminal

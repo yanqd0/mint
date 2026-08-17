@@ -244,7 +244,7 @@ impl DashboardModel {
                 }
             }
             KeyCode::Esc => {
-                // Esc 清空搜索：清当前 tab filter + 输入态 + 重置光标/翻页 → 回退无搜索。
+                // Esc 清空搜索：清当前 tab filter + 输入态 + 重置光标/翻页 → 回退无搜索（#316 定案）。
                 let idx = self.tab_index();
                 self.tab_search[idx] = None;
                 self.search = None;
@@ -270,7 +270,6 @@ impl DashboardModel {
         self.search = Some(SearchState {
             active: true,
             text: self.tab_search[idx].clone().unwrap_or_default(),
-            revert: (self.page, self.selected),
         });
     }
 

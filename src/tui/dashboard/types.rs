@@ -56,8 +56,6 @@ pub struct SearchState {
     pub active: bool,
     /// 输入缓冲 / 生效筛选（空 = 不过滤）。
     pub text: String,
-    /// 打开搜索前的 (page, selected)，Esc 取消时恢复。
-    pub revert: (usize, usize),
 }
 
 /// 跳转目标视图。
