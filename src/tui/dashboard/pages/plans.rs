@@ -31,7 +31,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
         Constraint::Length(7),  // STATUS（running 7 字符）
         Constraint::Max(9),     // VERSION（所属 milestone version，如 v0.111.1，弹性上限 9）
         Constraint::Length(16), // PROGRESS（16 格进度条）
-        Constraint::Min(6),     // DONE/TOTAL（`{:>4}/{total}`，Min 弹性容纳 2-3 位数字）
+        Constraint::Min(10),    // DONE/TOTAL（header 10 字符 + `{:>4}/{total}` 数据，Min 弹性容纳）
         Constraint::Fill(1),    // TITLE（缓冲，Fill 优先级最低，最后拿剩余）
     ];
     let title_w = flex_col_width(area, &widths);
@@ -144,6 +144,7 @@ mod tests {
         assert!(text.contains("plans"), "标题: {text}");
         assert!(text.contains("ID"), "ID 表头: {text}");
         assert!(text.contains("STATUS"), "STATUS 表头: {text}");
+        assert!(text.contains("DONE/TOTAL"), "DONE/TOTAL 表头完整: {text}");
         assert!(
             text.contains("running"),
             "plan 状态（mk_container 默认 Running）: {text}"
