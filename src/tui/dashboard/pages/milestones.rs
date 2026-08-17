@@ -1,7 +1,7 @@
 //! milestones 页面：Milestones tab 列表 + MilestoneDetail（其下 plan 行）。
 
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Rect};
+use ratatui::layout::{Constraint, Flex, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
@@ -34,13 +34,13 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
     m.set_page_size(rows_avail as usize);
     // 列宽 + TITLE 弹性列实际宽（title 按此预截断、右侧省略，避免长文本溢出/换行）。
     let widths = [
-        Constraint::Length(2),
+        Constraint::Length(1), // 状态点 ●
         Constraint::Length(5),
         Constraint::Length(8), // STATUS
-        Constraint::Length(6), // VERSION（如 0.6.0）
+        Constraint::Max(9),    // VERSION（如 v0.111.1，弹性上限 9）
         Constraint::Length(6),
         Constraint::Length(10),
-        Constraint::Min(0),
+        Constraint::Fill(1), // TITLE（缓冲，Fill 优先级最低，最后拿剩余）
     ];
     let title_w = flex_col_width(area, &widths);
 
@@ -98,11 +98,14 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
     if rows.is_empty() {
         rows.push(Row::new(vec![Cell::from("(no milestones)")]));
     }
-    let table = Table::new(rows, widths).header(header).block(
-        Block::bordered()
-            .title(title)
-            .padding(Padding::horizontal(1)),
-    );
+    let table = Table::new(rows, widths)
+        .header(header)
+        .flex(Flex::Legacy) // Min/Max 列按内容预估，Fill(TITLE) 拿剩余（默认 Start 会拉伸 Min 列）
+        .block(
+            Block::bordered()
+                .title(title)
+                .padding(Padding::horizontal(1)),
+        );
     frame.render_widget(table, chunks[0]);
     frame.render_widget(Paragraph::new(footer), chunks[1]);
 }

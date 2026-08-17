@@ -144,7 +144,7 @@ pub fn flex_col_width(area: Rect, widths: &[Constraint]) -> u16 {
     let fixed: u16 = widths
         .iter()
         .filter_map(|c| match c {
-            Constraint::Length(n) => Some(*n),
+            Constraint::Length(n) | Constraint::Max(n) | Constraint::Min(n) => Some(*n),
             _ => None,
         })
         .sum();
