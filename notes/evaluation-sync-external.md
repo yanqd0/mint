@@ -22,6 +22,28 @@
 
 **关键判据**：mint 的接口只认「快照文件路径」，与具体存储后端**完全解耦**——换后端 = 换外部命令，mint 零改动。
 
+## 完整方案形态（二轮，issue #357-359）
+
+> 用户定案方向：完整方案 = 同步 + db 落地（路径/软链接）+ LWW 冲突策略。本机 db 保持在默认位置不变。
+
+**四步端到端（每机）**：
+1. **写**：本机 `local.db`（`$XDG_DATA_HOME/mint/mint.db`，默认位置不变）
+2. **导出**：`mint export` → 快照单文件（`VACUUM INTO`）
+3. **传输**：外部 CLI 推远端 / 拉取（rclone / rsync / git…）
+4. **合并 + 落地**：`mint merge` 按 `uid` + LWW 重建全局视图 → 落到本机生效位置
+
+**db 落地机制（#357，本机默认位置不变）**：
+- 同步产物放 `$XDG_DATA_HOME/mint/sync/`（`remote/<machine>.db` + `merged.db`）
+- 生效方式二选一（评估中）：
+  - **A. 软链接**：默认 `mint.db` → `sync/active.db`，同步命令切换链接目标（local ↔ merged）——对 CLI/TUI 全透明，但有"切换原子性/并发读写"细节
+  - **B. 路径切换**：读全局视图时 `--db sync/merged.db` / `MINT_DB_PATH`——显式但每命令带参
+- 倾向 A（软链接）：零感知，符合"本机 db 在默认位置"；落地细节进实现 plan 定案
+
+**LWW 冲突策略（#358）**：
+- 多机 `uid` 前缀不同（`mach-x:42`），id 天然不撞；仅同一 `uid` 被两端修改才算冲突
+- 冲突**不解决、取最新**：按 `updated_at` LWW 覆盖——**已确认各表存在 `updated_at`**（001_init.sql `TEXT NOT NULL DEFAULT datetime('now')`，UTC），**无需加列**
+- 比第一轮假设的 `INSERT OR IGNORE`（保留先到）更合理——先到 ≠ 更新；跨机时钟漂移是残余风险（UTC 存储 + 系统时钟同步缓解）
+
 ## 候选方案矩阵（四路）
 
 | 方案 | 工具 | 免费额度 | 国内可达 | 增量 | 历史 | 鉴权 | 评价 |
@@ -30,6 +52,24 @@
 | **国内网盘** (#351) | bypy / 坚果云 WebDAV | 百度限速 / 坚果云 1G·月 | ✓ | ✓ | ✗ | OAuth / WebDAV | 国内快；CLI 多第三方 |
 | **自建直连** (#352) | rsync/scp、Syncthing | 机器费用 | ✓ | ✓ | Syncthing 有版本 | SSH | 完全自控，需长期在线机器 |
 | **git+SQL** (#353) | sqlite 导出 SQL + git | GitHub/Gitee 私有免费 | Gitee ✓ | git delta | git log 天然 | SSH/HTTPS | 用户补充思路：等效 SQL 才合适 |
+
+## 新增候选（二轮，#355-356）
+
+| 候选 | 工具 | 国内外 | 说明 |
+|---|---|---|---|
+| 云厂商原生 CLI | aws cli / 阿里云 ossutil / 腾讯 coscli / MinIO mc | 各自地域 | 不依赖 rclone，各厂商 CLI 直连自家对象存储；国外 aws、国内 OSS/COS |
+| git 多宿主 | git | GitHub（海外）/ Gitee/GitLab（国内） | git+SQL 方案天然双覆盖，仓库按地域选 |
+| WebDAV 生态 | curl / rclone WebDAV | 跨地域标准 | Nextcloud / 坚果云 / box 等，单协议多服务 |
+
+## 国内外用户评估维度
+
+| 维度 | 海外用户 | 国内用户 |
+|---|---|---|
+| 直连可用 | R2 / Drive / Dropbox / OneDrive / B2 / GitHub | 需代理 |
+| 直连稳定 | 各海外后端 | OSS / COS / 坚果云 WebDAV / Gitee |
+| rclone 路线 | 后端任选 | S3 协议接 OSS/COS，或 WebDAV 后端 |
+| git+SQL 路线 | GitHub | Gitee / GitLab |
+| **结论** | **rclone + git 双核心跨地域**：同一 mint 契约，后端/宿主按用户地域选，无需 mint 侧区分国内外 |
 
 ## 传输契约（统一抽象）
 
@@ -90,8 +130,10 @@ mint merge --from pulled-snapshot.db             # 按 uid 去重重建全局视
 - [ ] bypy 现状是否仍可用 / 是否有更活跃的百度网盘 CLI
 - [ ] 增量导出（变更日志）在外部命令方案下是否仍需要，还是整库快照 + 外部增量已够（#302 对齐）
 
-## 结论方向（初步，待逐项定案）
+## 结论方向（初步，二轮补充）
 
 1. **传输契约统一**为「快照文件拷贝到远端 / 从远端拉取」——mint 侧接口与后端解耦，这是 D33 的最小代价实现。
-2. **rclone 为通用默认**，国内后端（WebDAV/OSS）也能被它覆盖；**git+SQL** 作为"增量+历史全免费"的强候选。
-3. 国内网盘特例收敛到坚果云 WebDAV；自建直连按用户现有机器择机采用。
+2. **rclone 为通用默认**（国内外后端统一入口：海外 R2 免 egress / 国内 OSS/COS/WebDAV）；**git+SQL** 为"增量+历史全免费"强候选，GitHub（海外）/Gitee（国内）双宿主。
+3. 国内网盘特例收敛坚果云 WebDAV；自建直连按用户现有机器择机。
+4. **完整方案** = 同步 + db 落地（默认位置不变，软链接/路径切换）+ **LWW 冲突**（`updated_at` 取最新，**已确认无需加列**）。
+5. 新增候选待定案：云厂商原生 CLI（aws/ossutil/coscli/mc）vs rclone、git 多宿主、WebDAV 生态。
