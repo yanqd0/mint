@@ -17,8 +17,20 @@ npm-package = "mint-faa"
 allow-dirty = ["ci"]
 # Target platforms to build apps for (Rust target-triple syntax)
 # Linux 走 musl 静态链接（单文件免依赖）；macOS/Windows 默认
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
+# #349：+aarch64-unknown-linux-musl（Linux ARM64）、+aarch64-pc-windows-msvc（Windows ARM64）
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+]
 
 # System packages to install on CI builders (musl-gcc for musl static linking)
 [dist.dependencies.apt]
 musl-tools = "*"
+
+# Windows ARM64 交叉编译：Linux runner 上经 cargo-xwin 容器构建（#349）
+[dist.github-custom-runners]
+aarch64-pc-windows-msvc.container = "messense/cargo-xwin"
