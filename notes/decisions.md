@@ -408,6 +408,21 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D34. uid 选型定案：machine_id:local_id（mach-prefix）
+
+**背景**：#301 收尾。多机同步需全局唯一 id（`uid`）作跨机合并幂等键；本地自增 id 跨机会撞（SQLite Cloud 最佳实践：本地整数键 + 全局 GUID 列）。
+
+**决策**：
+- **uid = `machine_id:local_id`**（如 `mach-a3f9:42`）。machine_id：`MINT_MACHINE_ID` env 优先，否则 `hostname+user` 的 FNV-1a 64 位哈希（`mach-<hex>`，FNV 稳定不随工具链变化，作持久身份键）。
+- **不选 UUID/ULID**：两者生成需随机源（`getrandom`/crate），违背零依赖精神；时间有序性非必需（增量排序由 `updated_at`/seq 承担，#302）；`machine_id` 前缀已天然区分多机（多机名称不同、uid 不撞），同机本地 id 自增唯一。
+- **schema 预埋已完成**（002 迁移，0.5.0「schema 一次定全」）：`machines` 表 + `issues.machine_id`/`uid` 列 + `idx_issues_uid` 唯一索引（允 NULL）。
+- **生成时机**：add 时补 uid（`ISSUE_SET_UID`）；DB 初始化注册本机 machine + 回填存量（`MACHINE_BACKFILL_UID`）。
+- 与 evaluation-sync.md 印证一致（SQLite Cloud「本地整数键 + 全局 GUID 列」变通）。
+
+**理由**：零依赖（守住 mint 轻量）；利用已预埋结构；uid 前缀语义可读（哪台机器）；多机 uid 天然不撞契合 LWW（冲突罕见，仅同 uid 两端修改）。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
