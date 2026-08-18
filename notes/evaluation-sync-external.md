@@ -80,6 +80,11 @@ mint sync pull（远端 → 本机全局视图）：
 | git 多宿主 | git | GitHub（海外）/ Gitee/GitLab（国内） | git+SQL 方案天然双覆盖，仓库按地域选 |
 | WebDAV 生态 | curl / rclone WebDAV | 跨地域标准 | Nextcloud / 坚果云 / box 等，单协议多服务 |
 
+**取舍定案（#355-356）**：
+- **rclone 为主**：统一契约，国内外后端一个工具（海外 R2 / 国内 OSS/COS/WebDAV 均走同一 CLI），符合"换后端 = 换配置非换工具"
+- **原生 CLI（aws/ossutil/coscli/mc）为降级路径**：无 rclone 环境、或单厂商深度集成时用；每厂商一个 CLI，多后端需装多个——不推荐为主
+- **国内实测经验**（Obsidian 同步社区）：OSS/COS + S3 兼容同步「速度很快很稳定」；坚果云**容量不限但限流量**（免费 1G 上行/月）；七牛云免费 10GB/月可作轻量同步源
+
 ## 国内外用户评估维度
 
 | 维度 | 海外用户 | 国内用户 |
@@ -89,6 +94,8 @@ mint sync pull（远端 → 本机全局视图）：
 | rclone 路线 | 后端任选 | S3 协议接 OSS/COS，或 WebDAV 后端 |
 | git+SQL 路线 | GitHub | Gitee / GitLab |
 | **结论** | **rclone + git 双核心跨地域**：同一 mint 契约，后端/宿主按用户地域选，无需 mint 侧区分国内外 |
+
+> **推荐组合（国内外同构）**：海外用户 → rclone + R2（免 egress）或 git+GitHub；国内用户 → rclone + OSS/COS 或坚果云 WebDAV，或 git+Gitee。同一 mint 契约，零 mint 侧差异。
 
 ## 传输契约（统一抽象）
 
