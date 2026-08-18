@@ -119,12 +119,20 @@
 
 **验收**：给出体积/性能评估报告，按结论实施优化；二进制大小目标明确化。
 
-## 0.7.0 — 多机同步 + 读写分离（外部命令化，评估中）
+## 0.7.0 — 多机同步 + 读写分离（外部命令化，实现规划中）
 
-> 背景调研（社区方案分类、uid 印证、借鉴点）见 `notes/evaluation-sync.md`。
-> **D33 新决策（2026-08-18）：同步绝不内化，传输层走外部 CLI**；候选评估见 `notes/evaluation-sync-external.md`（plan #81，挂 milestone #7，仅评估未定案）。
+> 背景调研见 `notes/evaluation-sync.md`；外部命令化评估见 `notes/evaluation-sync-external.md`（plan #81/#82 done；D33/D34/D35 定案）。
 
-**目标**：支持多台机器（基于 git 的开发场景）同步 db，读写分离。**传输层不内置，交由外部 CLI 完成**（候选：rclone 生态 / 国内网盘 / 自建直连 / git+SQL，评估中）。
+**目标**：支持多台机器（基于 git 的开发场景）同步 db，读写分离。**传输层不内置，外部 CLI 承担**（候选：rclone 生态 / 国内网盘 / 自建直连 / git+SQL）。
+
+**实现规划**（已拆 issues 待执行，plan #83-87 挂 milestone #7）：
+- plan #83 **rclone 生态**（快照→传输→合并→落地，主方案，5 issues）
+- plan #84 **git+SQL**（确定性导出 + 增量历史，4 issues）
+- plan #85 **国内网盘**（坚果云 WebDAV，3 issues）
+- plan #86 **自建直连**（rsync/Syncthing，3 issues）
+- plan #87 **skill 配合修改**（最后做，3 issues）
+
+> 同步架构（读写分离 + merged.db 派生视图 + 软链接落地 + uid/LWW）细节以 `notes/evaluation-sync-external.md` 为准。
 
 **架构（读写分离 + 派生视图）**：
 - **写**：只写本机 `local.db`（单一真相源，短 id 无歧义）
