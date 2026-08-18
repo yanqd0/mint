@@ -154,7 +154,7 @@ mint merge --from pulled-snapshot.db             # 按 uid 去重重建全局视
 - [x] `.dump` 幂等重放与 git 兼容性：确定性行序 + schema/data 分离 + 现成工具（gitsqlite/stfg/csvdb）
 - [ ] rclone 对国内 OSS/COS 的配置是否可脚本化（`rclone config` 交互 vs `--config` 文件直写）
 - [ ] bypy 现状是否仍可用 / 是否有更活跃的百度网盘 CLI
-- [ ] 增量导出（变更日志）在外部命令方案下是否仍需要，还是整库快照 + 外部增量已够（#302 对齐）
+- [x] 增量导出定案（D35）：不建变更日志，整库快照 + 外部增量已够；快照源 = VACUUM INTO 物理副本（SQL 文本供 git+SQL 路线）
 
 ## 结论方向（初步，二轮补充）
 
