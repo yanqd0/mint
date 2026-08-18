@@ -32,12 +32,31 @@
 3. **传输**：外部 CLI 推远端 / 拉取（rclone / rsync / git…）
 4. **合并 + 落地**：`mint merge` 按 `uid` + LWW 重建全局视图 → 落到本机生效位置
 
-**db 落地机制（#357，本机默认位置不变）**：
-- 同步产物放 `$XDG_DATA_HOME/mint/sync/`（`remote/<machine>.db` + `merged.db`）
-- 生效方式二选一（评估中）：
-  - **A. 软链接**：默认 `mint.db` → `sync/active.db`，同步命令切换链接目标（local ↔ merged）——对 CLI/TUI 全透明，但有"切换原子性/并发读写"细节
-  - **B. 路径切换**：读全局视图时 `--db sync/merged.db` / `MINT_DB_PATH`——显式但每命令带参
-- 倾向 A（软链接）：零感知，符合"本机 db 在默认位置"；落地细节进实现 plan 定案
+**db 落地机制（#357，已定案：软链接为主）**：
+- 同步产物放 `$XDG_DATA_HOME/mint/sync/`（`export/` + `remote/` + `merged.db`）
+- **A. 软链接（主方案）**：默认 `mint.db` → `sync/active.db`，同步命令切换链接目标（local ↔ merged）——**CLI/TUI 全透明**，默认位置与 `MINT_DB_PATH` 均无感知
+  - 风险与缓解：
+    1. **首次迁移**：默认位置是实体文件 → 同步首次执行 `mv mint.db sync/local.db && ln -sfn sync/local.db mint.db`（一次性）
+    2. **切换原子性**：`ln -sfn` 是原子 rename，但切换瞬间并发读可能读旧/新——同步为低频手动操作，切换由同步命令独占执行（非并发场景）即可
+    3. **写库与合并冲突**：先 merge 出 `merged.db` → 校验 → 原子切换链接；切回本机再 `ln -sfn sync/local.db`
+- **B. 路径切换（辅助）**：偶尔看全局视图用 `--db sync/merged.db` / `MINT_DB_PATH`，无需动链接
+- 结论：**A 为主**（零感知符合"本机 db 在默认位置"），B 作查览辅助；实现细节进实现 plan
+
+**端到端流程（#359）**：
+```
+mint sync push（本机 → 远端）：
+  1. export：local.db → sync/export/<ts>.db（VACUUM INTO 快照）
+  2. 外部命令：rclone copy sync/export/<ts>.db remote:mint/<machine>/（或 git add+commit+push SQL 文本）
+
+mint sync pull（远端 → 本机全局视图）：
+  1. 外部命令：rclone copy remote:mint/ sync/remote/（拉全部机器快照）
+  2. merge：mint merge --from sync/remote/ → sync/merged.db（uid 主键 + updated_at LWW）
+  3. 落地：ln -sfn sync/merged.db mint.db（软链接切换；或 --db 临时查览）
+
+目录布局：$XDG_DATA_HOME/mint/sync/{export/, remote/, merged.db}
+```
+- 触发：手动命令为主（低频场景）；未来可加 shell 别名/hook 半自动
+- 验收形态：push 后远端可读本机快照；pull 后本机默认 `mint` 读全局视图含其它机器 issue
 
 **LWW 冲突策略（#358）**：
 - 多机 `uid` 前缀不同（`mach-x:42`），id 天然不撞；仅同一 `uid` 被两端修改才算冲突
