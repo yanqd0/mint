@@ -476,6 +476,9 @@ pub struct SyncPushArgs {
     /// Git remote URL (initializes repo if absent)
     #[arg(long)]
     pub remote: Option<String>,
+    /// Sync all projects (iterate projects/ directory)
+    #[arg(long)]
+    pub all: bool,
 }
 
 #[derive(clap::Args)]
@@ -483,6 +486,9 @@ pub struct SyncPullArgs {
     /// Git remote URL (initializes repo if absent)
     #[arg(long)]
     pub remote: Option<String>,
+    /// Sync all projects (iterate projects/ directory)
+    #[arg(long)]
+    pub all: bool,
 }
 
 // ── Cli::run ──────────────────────────────────────────────────────
@@ -517,7 +523,7 @@ impl Cli {
             Commands::Tui => crate::tui::run_dashboard(&conn, &project),
             Commands::Export(a) => export::cmd_export(&conn, a),
             Commands::Import(a) => import::cmd_import(&mut conn, a),
-            Commands::Sync(s) => sync::cmd_sync(&mut conn, s),
+            Commands::Sync(s) => sync::cmd_sync(&mut conn, &self.data_dir(), s),
         }
     }
 

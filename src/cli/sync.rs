@@ -1,7 +1,8 @@
 //! sync 命令：git 私有仓库传输同步快照（push/pull），外部命令化（D33）。
 //!
-//! 工作目录 = `<db 父目录>/sync`（git 仓库懒初始化）；push 导出本机快照并
-//! commit/push，pull 拉取远端快照逐个 import 合并（uid/LWW + id 重映射）。
+//! 多 db 架构：每项目独立 db → 独立 sync 目录（`<db 父目录>/sync`）。
+//! push/pull 默认当前项目（origin HEAD）；`--all` 遍历 projects/ 目录，
+//! 每项目用**项目名分支**（`origin <project>`）避免共用一个 remote 时分支冲突。
 
 use std::path::{Path, PathBuf};
 
@@ -11,15 +12,27 @@ use crate::cli::{SyncArgs, SyncCmd, SyncPullArgs, SyncPushArgs};
 use crate::db::sync_import::MergeReport;
 use crate::error::Error;
 
-/// 执行 sync 分发。
-pub fn cmd_sync(conn: &mut Connection, a: &SyncArgs) -> Result<(), Error> {
+/// 执行 sync 分发（--all 遍历 projects/，需 data_dir）。
+pub fn cmd_sync(conn: &mut Connection, data_dir: &Path, a: &SyncArgs) -> Result<(), Error> {
     match &a.command {
-        SyncCmd::Push(p) => push(conn, p),
-        SyncCmd::Pull(p) => pull(conn, p),
+        SyncCmd::Push(p) => {
+            if p.all {
+                push_all(data_dir, p)
+            } else {
+                push(conn, p, None)
+            }
+        }
+        SyncCmd::Pull(p) => {
+            if p.all {
+                pull_all(data_dir, p)
+            } else {
+                pull(conn, p, None)
+            }
+        }
     }
 }
 
-/// 同步工作目录：<db 父目录>/sync（MINT_DB_PATH 覆盖时随 db 迁移，验证隔离）。
+/// 同步工作目录：<db 父目录>/sync（每项目独立；MINT_DB_PATH 覆盖时随 db 迁移）。
 fn sync_dir(conn: &Connection) -> Result<PathBuf, Error> {
     let db = conn
         .path()
@@ -30,8 +43,9 @@ fn sync_dir(conn: &Connection) -> Result<PathBuf, Error> {
         .join("sync"))
 }
 
-/// push：导出本机快照 → snapshots/<machine_id>.sql → git add/commit/push。
-fn push(conn: &Connection, a: &SyncPushArgs) -> Result<(), Error> {
+/// push 当前项目：导出本机快照 → snapshots/<machine_id>.sql → git add/commit/push。
+/// `branch` 为 Some 时 push 到 `origin <branch>`（--all 每项目独立分支）。
+fn push(conn: &Connection, a: &SyncPushArgs, branch: Option<&str>) -> Result<(), Error> {
     let dir = sync_dir(conn)?;
     ensure_git_repo(&dir, a.remote.as_deref())?;
     let snap = dir
@@ -42,19 +56,39 @@ fn push(conn: &Connection, a: &SyncPushArgs) -> Result<(), Error> {
     std::fs::write(&snap, sql)?;
     git(&dir, &["add", "-A"])?;
     git(&dir, &["commit", "-m", "sync snapshot", "--allow-empty"])?;
-    git(&dir, &["push", "origin", "HEAD"])?;
+    if let Some(b) = branch {
+        git(&dir, &["push", "origin", &format!("HEAD:{b}")])?;
+    } else {
+        git(&dir, &["push", "origin", "HEAD"])?;
+    }
     println!("pushed {}", snap.display());
     Ok(())
 }
 
-/// pull：git pull → 读取 snapshots/*.sql（非本机）逐个 import 合并。
-fn pull(conn: &mut Connection, a: &SyncPullArgs) -> Result<(), Error> {
+/// push --all：遍历 projects/ 目录，每项目独立 push（项目名分支）。
+fn push_all(data_dir: &Path, a: &SyncPushArgs) -> Result<(), Error> {
+    let mut pushed = 0;
+    for (name, conn) in each_project_db(data_dir)? {
+        push(&conn, a, Some(&name))?;
+        pushed += 1;
+    }
+    println!("pushed {pushed} project(s)");
+    Ok(())
+}
+
+/// pull 当前项目：git pull → 读取 snapshots/*.sql（非本机）逐个 import 合并。
+/// `branch` 为 Some 时从 `origin <branch>` 拉（--all 每项目独立分支）。
+fn pull(conn: &mut Connection, a: &SyncPullArgs, branch: Option<&str>) -> Result<(), Error> {
     let dir = sync_dir(conn)?;
     ensure_git_repo(&dir, a.remote.as_deref())?;
-    git(
-        &dir,
-        &["pull", "origin", "HEAD", "--allow-unrelated-histories"],
-    )?;
+    if let Some(b) = branch {
+        git(&dir, &["pull", "origin", b, "--allow-unrelated-histories"])?;
+    } else {
+        git(
+            &dir,
+            &["pull", "origin", "HEAD", "--allow-unrelated-histories"],
+        )?;
+    }
     let mut report = MergeReport::default();
     let snaps_dir = dir.join("snapshots");
     let mine = crate::db::machine_id();
@@ -80,6 +114,37 @@ fn pull(conn: &mut Connection, a: &SyncPullArgs) -> Result<(), Error> {
         report.inserted, report.updated, report.skipped
     );
     Ok(())
+}
+
+/// pull --all：遍历 projects/，每项目独立 pull（项目名分支）。
+fn pull_all(data_dir: &Path, a: &SyncPullArgs) -> Result<(), Error> {
+    let mut pulled = 0;
+    for (name, mut conn) in each_project_db(data_dir)? {
+        pull(&mut conn, a, Some(&name))?;
+        pulled += 1;
+    }
+    println!("pulled {pulled} project(s)");
+    Ok(())
+}
+
+/// 遍历 projects/ 目录，打开每项目的本机 db（machine_id.db）。
+fn each_project_db(data_dir: &Path) -> Result<Vec<(String, Connection)>, Error> {
+    let projects_dir = data_dir.join("projects");
+    let mut dbs = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&projects_dir) {
+        for e in entries.flatten() {
+            if !e.path().is_dir() {
+                continue;
+            }
+            let name = e.file_name().to_string_lossy().into_owned();
+            let db_path = e.path().join(format!("{}.db", crate::db::machine_id()));
+            if !db_path.exists() {
+                continue;
+            }
+            dbs.push((name, crate::db::open(&db_path)?));
+        }
+    }
+    Ok(dbs)
 }
 
 /// 确保 sync 目录是 git 仓库（懒初始化；--remote 提供时配置 origin）。

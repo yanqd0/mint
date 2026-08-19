@@ -3468,3 +3468,96 @@ fn st_migrate_split_legacy() {
     c.assert().success();
     assert!(!data.join("mint.db.bak.bak").exists(), "不应二次拆分");
 }
+
+/// sync --all：多项目遍历，项目名分支避免共用一个 remote 冲突；跨机器同步。
+#[test]
+fn st_sync_all_projects() {
+    let dir_a = TempDir::new().unwrap();
+    let dir_b = TempDir::new().unwrap();
+    let remote = dir_a.path().join("remote.git");
+    std::process::Command::new("git")
+        .args(["init", "--bare"])
+        .arg(&remote)
+        .output()
+        .unwrap();
+    let run = |dir: &TempDir, mid: &str, args: &[&str]| {
+        let mut c = Command::cargo_bin("mint").unwrap();
+        c.env("XDG_DATA_HOME", dir.path())
+            .env("MINT_MACHINE_ID", mid)
+            .args(args);
+        c
+    };
+    // A 机两项目 + push --all。
+    run(
+        &dir_a,
+        "mach-a",
+        &["--project", "alpha", "issue", "add", "alpha问题"],
+    )
+    .assert()
+    .success();
+    run(
+        &dir_a,
+        "mach-a",
+        &["--project", "beta", "issue", "add", "beta问题"],
+    )
+    .assert()
+    .success();
+    run(
+        &dir_a,
+        "mach-a",
+        &[
+            "sync",
+            "push",
+            "--all",
+            "--remote",
+            remote.to_str().unwrap(),
+        ],
+    )
+    .assert()
+    .success();
+    // B 机（独立 data 目录）建项目 + pull --all。
+    run(
+        &dir_b,
+        "mach-b",
+        &["--project", "alpha", "issue", "add", "b占位"],
+    )
+    .assert()
+    .success();
+    run(
+        &dir_b,
+        "mach-b",
+        &["--project", "beta", "issue", "add", "b占位2"],
+    )
+    .assert()
+    .success();
+    run(
+        &dir_b,
+        "mach-b",
+        &[
+            "sync",
+            "pull",
+            "--all",
+            "--remote",
+            remote.to_str().unwrap(),
+        ],
+    )
+    .assert()
+    .success();
+    // B 机各项目库含 A 机数据。
+    let out = run(&dir_b, "mach-b", &["--project", "alpha", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("alpha问题"), "B alpha 应含 A 数据: {text}");
+    let out = run(&dir_b, "mach-b", &["--project", "beta", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("beta问题"), "B beta 应含 A 数据: {text}");
+}
