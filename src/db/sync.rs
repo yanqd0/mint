@@ -121,32 +121,118 @@ struct Column {
 /// data 段：逐表按主键排序导出 INSERT（每行一条，git diff 友好）。
 fn export_data(conn: &Connection, out: &mut String) -> Result<(), Error> {
     for table in DATA_TABLES {
-        let cols = table_columns(conn, table)?;
-        let order = pk_clause(&cols);
-        let sel = format!("SELECT * FROM {table} ORDER BY {order}");
-        let mut stmt = conn.prepare(&sel)?;
-        let mut rows = stmt.query([])?;
-        while let Some(row) = rows.next()? {
-            out.push_str(&format!("INSERT INTO {table} ("));
-            out.push_str(
-                &cols
-                    .iter()
-                    .map(|c| c.name.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            );
-            out.push_str(") VALUES (");
-            for (i, _c) in cols.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                let v: Value = row.get(i)?;
-                out.push_str(&sql_value(&v));
-            }
-            out.push_str(");\n");
-        }
+        export_table(conn, out, table, None)?;
     }
     Ok(())
+}
+
+/// 导出单表（可选 WHERE 过滤；列序来自 PRAGMA table_info，行序按主键升序）。
+fn export_table(
+    conn: &Connection,
+    out: &mut String,
+    table: &str,
+    filter: Option<&str>,
+) -> Result<(), Error> {
+    let cols = table_columns(conn, table)?;
+    let order = pk_clause(&cols);
+    let where_sql = filter.map(|f| format!(" WHERE {f}")).unwrap_or_default();
+    let sel = format!("SELECT * FROM {table}{where_sql} ORDER BY {order}");
+    let mut stmt = conn.prepare(&sel)?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        out.push_str(&format!("INSERT INTO {table} ("));
+        out.push_str(
+            &cols
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+        out.push_str(") VALUES (");
+        for (i, _c) in cols.iter().enumerate() {
+            if i > 0 {
+                out.push_str(", ");
+            }
+            let v: Value = row.get(i)?;
+            out.push_str(&sql_value(&v));
+        }
+        out.push_str(");\n");
+    }
+    Ok(())
+}
+
+/// 按 project 导出自包含快照（migrate_split 用）：schema 全量 + 该项目数据过滤。
+/// 依赖序满足外键（machines→projects→labels→milestones→plans→issues→关联表）；
+/// machines 全量导出（机器级元数据每项目 db 保留一份；也是临时库 FK 检查的必要前置）。
+pub fn export_sql_for_project(conn: &Connection, project_id: i64) -> Result<String, Error> {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "-- mint sync snapshot v1 ({}) for project {project_id}\n",
+        crate::db::machine_id()
+    ));
+    out.push_str("-- schema\n");
+    export_schema(conn, &mut out)?;
+    out.push_str("-- data\n");
+    let pid = project_id.to_string();
+    // machines 全量（旧 db 的本机/历史机器）；labels 按引用该项目的 issues 复制（保留原 id）。
+    export_table(conn, &mut out, "machines", None)?;
+    export_table(conn, &mut out, "projects", Some(&format!("id = {pid}")))?;
+    export_table(
+        conn,
+        &mut out,
+        "labels",
+        Some(&format!(
+            "id IN (SELECT il.label_id FROM issue_labels il JOIN issues i ON i.id = il.issue_id WHERE i.project_id = {pid})"
+        )),
+    )?;
+    export_table(
+        conn,
+        &mut out,
+        "milestones",
+        Some(&format!(
+            "id IN (SELECT milestone_id FROM plans WHERE id IN (SELECT plan_id FROM issues WHERE project_id = {pid} AND plan_id IS NOT NULL)) \
+             OR id IN (SELECT milestone_id FROM milestone_direct_issues WHERE issue_id IN (SELECT id FROM issues WHERE project_id = {pid}))"
+        )),
+    )?;
+    export_table(
+        conn,
+        &mut out,
+        "plans",
+        Some(&format!(
+            "id IN (SELECT plan_id FROM issues WHERE project_id = {pid} AND plan_id IS NOT NULL)"
+        )),
+    )?;
+    export_table(
+        conn,
+        &mut out,
+        "issues",
+        Some(&format!("project_id = {pid}")),
+    )?;
+    export_table(
+        conn,
+        &mut out,
+        "issue_labels",
+        Some(&format!(
+            "issue_id IN (SELECT id FROM issues WHERE project_id = {pid})"
+        )),
+    )?;
+    export_table(
+        conn,
+        &mut out,
+        "issue_links",
+        Some(&format!(
+            "from_id IN (SELECT id FROM issues WHERE project_id = {pid}) AND to_id IN (SELECT id FROM issues WHERE project_id = {pid})"
+        )),
+    )?;
+    export_table(
+        conn,
+        &mut out,
+        "milestone_direct_issues",
+        Some(&format!(
+            "issue_id IN (SELECT id FROM issues WHERE project_id = {pid})"
+        )),
+    )?;
+    Ok(out)
 }
 
 /// 取表列（按定义顺序；name + pk 序号）。

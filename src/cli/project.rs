@@ -1,4 +1,7 @@
-//! Project CLI 子命令（create/list/show/get/set）。
+//! Project CLI 子命令（create/list/show/get/set）。多 db 架构下：
+//! list = 扫描 projects/ 目录；create = 建项目 db；show/get/set = 操作当前项目 db。
+
+use std::path::Path;
 
 use rusqlite::Connection;
 
@@ -9,31 +12,30 @@ use crate::error::Error;
 use crate::models::Project;
 use crate::project;
 
-/// Project create：名称 + 可选 description/git/abs_dir。
-pub fn cmd_project_create(conn: &Connection, a: &ProjectCreateArgs) -> Result<(), Error> {
+/// Project create：建 `projects/<name>/mint.db` 并注册 project 行（幂等）。
+pub fn cmd_project_create(data_dir: &Path, a: &ProjectCreateArgs) -> Result<(), Error> {
     if a.name.trim().is_empty() {
         return Err(Error::Other("project name must not be empty".to_string()));
     }
     let pname = a.name.trim();
-    // 幂等：已存在则不重复创建
-    if let Some(existing) = project::query_id(conn, pname)? {
+    let path = data_dir.join("projects").join(pname).join("mint.db");
+    if path.exists() {
         if a.json {
             println!(
                 "{}",
-                serde_json::to_string(&serde_json::json!({
-                    "id": existing, "name": pname, "exists": true
-                }))?
+                serde_json::to_string(&serde_json::json!({"name": pname, "exists": true}))?
             );
         } else {
             println!(
-                "Project '{}' already exists (id #{existing})",
+                "Project '{}' already exists",
                 crate::output::sanitize_terminal(pname)
             );
         }
         return Ok(());
     }
-    let id = project::create(
-        conn,
+    let conn = crate::db::open(&path)?;
+    project::create(
+        &conn,
         pname,
         a.description.as_deref(),
         a.git.as_deref(),
@@ -42,40 +44,41 @@ pub fn cmd_project_create(conn: &Connection, a: &ProjectCreateArgs) -> Result<()
     if a.json {
         println!(
             "{}",
-            serde_json::to_string(&serde_json::json!({
-                "id": id, "name": pname, "status": "created"
-            }))?
+            serde_json::to_string(&serde_json::json!({"name": pname, "status": "created"}))?
         );
     } else {
         println!(
-            "Created project '{}' (#{id})",
+            "Created project '{}'",
             crate::output::sanitize_terminal(pname)
         );
     }
     Ok(())
 }
 
-/// Project list。
-pub fn cmd_project_list(conn: &Connection, a: &ProjectListArgs) -> Result<(), Error> {
-    let projects = project::list(conn)?;
+/// Project list：扫描 projects/ 目录（多 db 架构下项目清单 = 目录列表）。
+pub fn cmd_project_list(data_dir: &Path, a: &ProjectListArgs) -> Result<(), Error> {
+    let projects_dir = data_dir.join("projects");
+    let mut names: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&projects_dir) {
+        for e in entries.flatten() {
+            if e.path().is_dir()
+                && let Some(n) = e.file_name().to_str()
+            {
+                names.push(n.to_string());
+            }
+        }
+    }
+    names.sort();
     if a.json {
-        println!("{}", serde_json::to_string(&projects)?);
+        let arr: Vec<serde_json::Value> = names
+            .iter()
+            .map(|n| serde_json::json!({"name": n}))
+            .collect();
+        println!("{}", serde_json::to_string(&arr)?);
     } else {
         // 默认 TSV（策略：全 TSV，AI/脚本稳定解析）。
-        let headers: Vec<String> = ["ID", "Name", "Description"]
-            .into_iter()
-            .map(String::from)
-            .collect();
-        let rows: Vec<Vec<String>> = projects
-            .iter()
-            .map(|p| {
-                vec![
-                    p.id.to_string(),
-                    p.name.clone(),
-                    p.description.clone().unwrap_or_default(),
-                ]
-            })
-            .collect();
+        let headers: Vec<String> = ["Name"].into_iter().map(String::from).collect();
+        let rows: Vec<Vec<String>> = names.iter().map(|n| vec![n.clone()]).collect();
         print!("{}", crate::output::format_tsv(&headers, &rows));
     }
     Ok(())
@@ -186,11 +189,11 @@ fn project_field(p: &Project, field: &str) -> Result<String, Error> {
     }
 }
 
-/// Project 命令分发。
-pub fn dispatch(conn: &Connection, cmd: &super::ProjectCmd) -> Result<(), Error> {
+/// Project 命令分发（create/list 用 data_dir；show/get/set 用当前项目 db）。
+pub fn dispatch(conn: &Connection, data_dir: &Path, cmd: &super::ProjectCmd) -> Result<(), Error> {
     match cmd {
-        super::ProjectCmd::Create(a) => cmd_project_create(conn, a),
-        super::ProjectCmd::List(a) => cmd_project_list(conn, a),
+        super::ProjectCmd::Create(a) => cmd_project_create(data_dir, a),
+        super::ProjectCmd::List(a) => cmd_project_list(data_dir, a),
         super::ProjectCmd::Show(a) => cmd_project_show(conn, a),
         super::ProjectCmd::Get(a) => cmd_project_get(conn, a),
         super::ProjectCmd::Set(a) => cmd_project_set(conn, a),

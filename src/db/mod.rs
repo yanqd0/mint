@@ -6,6 +6,7 @@ use crate::error::Error;
 
 pub use sql::*;
 
+pub mod migrate_split;
 pub mod sql;
 pub mod sync;
 pub mod sync_import;
