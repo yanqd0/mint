@@ -21,6 +21,10 @@ fn empty_db() -> (TempDir, String) {
 fn mint(db: &str) -> Command {
     let mut cmd = Command::cargo_bin("mint").unwrap();
     cmd.arg("--db").arg(db);
+    // 显式隔离：XDG_DATA_HOME 指向 --db 父目录（TempDir），双保险防缺省路径泄漏到真实 ~/.local/share。
+    if let Some(parent) = std::path::Path::new(db).parent() {
+        cmd.env("XDG_DATA_HOME", parent);
+    }
     cmd
 }
 
