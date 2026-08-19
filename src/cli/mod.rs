@@ -19,6 +19,7 @@ mod list_common;
 pub mod milestone;
 pub mod plan;
 pub mod project;
+pub mod sync;
 
 use issue::IssueArgs;
 use issue::list::{ListArgs, SearchArgs, ShowArgs};
@@ -331,6 +332,8 @@ pub enum Commands {
     Export(ExportArgs),
     /// Import a SQL snapshot, merging idempotently into this database (git+SQL sync)
     Import(ImportArgs),
+    /// Sync via external git repo: push local snapshot / pull & merge remote snapshots
+    Sync(SyncArgs),
     /// Delete data (DANGEROUS: permanent). Prefer `issue state drop` for issues
     Delete(DeleteArgs),
 }
@@ -454,6 +457,34 @@ pub struct ImportArgs {
     pub file: std::path::PathBuf,
 }
 
+#[derive(clap::Args)]
+pub struct SyncArgs {
+    #[command(subcommand)]
+    pub(crate) command: SyncCmd,
+}
+
+#[derive(Subcommand)]
+pub enum SyncCmd {
+    /// Push local snapshot to the sync git repo (export + commit + push)
+    Push(SyncPushArgs),
+    /// Pull remote snapshots and merge into this database
+    Pull(SyncPullArgs),
+}
+
+#[derive(clap::Args)]
+pub struct SyncPushArgs {
+    /// Git remote URL (initializes repo if absent)
+    #[arg(long)]
+    pub remote: Option<String>,
+}
+
+#[derive(clap::Args)]
+pub struct SyncPullArgs {
+    /// Git remote URL (initializes repo if absent)
+    #[arg(long)]
+    pub remote: Option<String>,
+}
+
 // ── Cli::run ──────────────────────────────────────────────────────
 
 impl Cli {
@@ -481,6 +512,7 @@ impl Cli {
             Commands::Tui => crate::tui::run_dashboard(&conn, &project),
             Commands::Export(a) => export::cmd_export(&conn, a),
             Commands::Import(a) => import::cmd_import(&mut conn, a),
+            Commands::Sync(s) => sync::cmd_sync(&mut conn, s),
         }
     }
 
