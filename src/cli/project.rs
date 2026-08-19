@@ -18,7 +18,10 @@ pub fn cmd_project_create(data_dir: &Path, a: &ProjectCreateArgs) -> Result<(), 
         return Err(Error::Other("project name must not be empty".to_string()));
     }
     let pname = a.name.trim();
-    let path = data_dir.join("projects").join(pname).join("mint.db");
+    let path = data_dir
+        .join("projects")
+        .join(pname)
+        .join(format!("{}.db", crate::db::machine_id()));
     if path.exists() {
         if a.json {
             println!(

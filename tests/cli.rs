@@ -3328,3 +3328,106 @@ fn st_sync_push_pull_dual() {
         "B pull 后应含 A 数据"
     );
 }
+
+// ── 多 db 架构（plan #78：每 project 独立 db + 一次性迁移）─────────
+
+/// 多项目隔离：缺省路径下每 project 独立 db（<machine_id>.db），数据互不可见。
+#[test]
+fn st_project_db_isolation() {
+    let rdir = TempDir::new().unwrap();
+    let run = |args: &[&str]| {
+        let mut c = Command::cargo_bin("mint").unwrap();
+        c.env("XDG_DATA_HOME", rdir.path())
+            .env("MINT_MACHINE_ID", "mach-a")
+            .args(args);
+        c
+    };
+    run(&["--project", "alpha", "issue", "add", "alpha的问题"])
+        .assert()
+        .success();
+    run(&["--project", "beta", "issue", "add", "beta的问题"])
+        .assert()
+        .success();
+
+    let out = run(&["--project", "alpha", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("alpha的问题"), "缺 alpha: {text}");
+    assert!(!text.contains("beta的问题"), "alpha 不应见 beta: {text}");
+
+    let out = run(&["--project", "beta", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("beta的问题"), "缺 beta: {text}");
+    assert!(!text.contains("alpha的问题"), "beta 不应见 alpha: {text}");
+
+    // project list 扫描目录：两项目都在。
+    let out = run(&["project", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("alpha"), "缺 alpha: {text}");
+    assert!(text.contains("beta"), "缺 beta: {text}");
+}
+
+/// 一次性迁移：旧单一 db 自动拆分到多项目 db + .bak 备份，只做一次。
+#[test]
+fn st_migrate_split_legacy() {
+    let rdir = TempDir::new().unwrap();
+    let data = rdir.path().join("mint");
+    let legacy = data.join("mint.db");
+    // 旧单一 db（--db 指向 mint.db，多项目）。
+    let old = |args: &[&str]| {
+        let mut c = Command::cargo_bin("mint").unwrap();
+        c.env("MINT_DB_PATH", &legacy)
+            .env("MINT_MACHINE_ID", "mach-a")
+            .args(args);
+        c
+    };
+    old(&["--project", "projA", "issue", "add", "A的issue"])
+        .assert()
+        .success();
+    old(&["--project", "projB", "issue", "add", "B的issue"])
+        .assert()
+        .success();
+
+    // 触发迁移：缺省路径（XDG_DATA_HOME）+ 无 --db。
+    let mut c = Command::cargo_bin("mint").unwrap();
+    c.env("XDG_DATA_HOME", rdir.path())
+        .env("MINT_MACHINE_ID", "mach-a")
+        .args(["--project", "projA", "list"]);
+    c.assert().success();
+
+    // 拆分产物：projects/projA、projB + .bak。
+    assert!(data.join("projects/projA").is_dir(), "缺 projA 目录");
+    assert!(data.join("projects/projB").is_dir(), "缺 projB 目录");
+    assert!(data.join("mint.db.bak").exists(), "缺 .bak 备份");
+
+    // projA list（缺省路径）应含 A 的 issue。
+    let mut c = Command::cargo_bin("mint").unwrap();
+    c.env("XDG_DATA_HOME", rdir.path())
+        .env("MINT_MACHINE_ID", "mach-a")
+        .args(["--project", "projA", "list"]);
+    let out = c.assert().success().get_output().stdout.clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("A的issue"), "projA 应含 A: {text}");
+
+    // 幂等：再触发迁移 no-op（.bak 已存在，不再拆）。
+    let mut c = Command::cargo_bin("mint").unwrap();
+    c.env("XDG_DATA_HOME", rdir.path())
+        .env("MINT_MACHINE_ID", "mach-a")
+        .args(["--project", "projB", "list"]);
+    c.assert().success();
+    assert!(!data.join("mint.db.bak.bak").exists(), "不应二次拆分");
+}

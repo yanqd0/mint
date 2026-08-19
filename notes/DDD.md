@@ -28,17 +28,17 @@ mint 的基本单位：一个可执行的问题（problem）或需求（requirem
 
 ### Project（项目）
 
-来源项目。**是标签而非隔离边界**——单一全局库，`project_id` 关联；未来跨项目经 `refs` 互引。
+来源项目。**多 db 架构下为隔离边界**（D36，0.7.0 起）——每项目独立 SQLite 文件 `$XDG_DATA_HOME/mint/projects/<name>/<machine_id>.db`（db 名含 machine，多机多 db 同步简洁），数据互不可见。旧单一库升级时自动拆分为多项目 db（原库 `.bak`，只做一次）。
 
 | 字段 | 含义 |
 |------|------|
-| `id` | 自增主键 |
+| `id` | 自增主键（每 db 单行本项目） |
 | `name` | UNIQUE，逻辑键 |
 | `description` | 描述 |
 | `git` | remote url（检测来源） |
 | `abs_dir` | 首次注册时的绝对路径 |
 
-**检测优先级**（0.1.0 实现）：自定义(`--project`) → git 库名 → dirname → 兜底 `default`。add 时自动注册到 projects 表。
+**检测优先级**（0.1.0 实现）：自定义(`--project`) → git 库名 → dirname → 兜底 `default`。命令运行时按当前 project 打开对应项目 db 并确保本项目行存在（`project::ensure`）；`project list` = 扫描 `projects/` 目录。
 
 ### Label（标签）
 

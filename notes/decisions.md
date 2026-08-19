@@ -438,6 +438,21 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 ---
 
+## D36. 每 project 独立 db（多 db 架构，推翻标签观）
+
+**背景**：plan #78 重定向。跨项目容器污染（#347/#333）用「容器加 project 字段」只能治标；用户提出**每 project 独立 db**，与多机 sync 多 db 统一复用。
+
+**决策**：
+- **project 成为隔离边界**：每项目独立 SQLite 文件 `$XDG_DATA_HOME/mint/projects/<name>/<machine_id>.db`（db 名含 machine，多机同步简洁），数据互不可见。**推翻**原「单一全局库、project 是标签、跨项目 refs 互引」约束。
+- **多 db 管理**：缺省路径按 project+machine 定位；`--db`/`MINT_DB_PATH` 显式单文件兼容。
+- **一次性迁移**：升级时旧单一 `mint.db` 自动按 project 拆分为多项目 db（复用 sync 的 `export_sql_for_project` + `import_sql`），原库 `.bak` 备份、只做一次、失败安全；label 每 db 复制且 ID 一致，其它数据按 issue 归属推定（含关联容器/链接）。
+- **与 sync 统一**：sync 快照/合并按项目隔离（阶段 4），复用 `sync_import` 合并骨架。
+- 阶段 3-4（拆 `project_id`、sync 对齐）后续实施。
+
+**理由**：根治容器污染；项目物理隔离（删项目=删目录）；与多机多 db 复用一套抽象；迁移复用 sync 合并能力（uid/LWW + id 重映射）。
+
+---
+
 ## 后续待定（暂未决策）
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
