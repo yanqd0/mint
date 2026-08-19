@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 
-use crate::cli::{SyncCmd, SyncPullArgs, SyncPushArgs, SyncArgs};
+use crate::cli::{SyncArgs, SyncCmd, SyncPullArgs, SyncPushArgs};
 use crate::db::sync_import::MergeReport;
 use crate::error::Error;
 

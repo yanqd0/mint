@@ -26,7 +26,11 @@ pub fn import_sql(conn: &mut Connection, sql: &str) -> Result<MergeReport, Error
     res
 }
 
-fn import_inner(conn: &mut Connection, sql: &str, path: &std::path::Path) -> Result<MergeReport, Error> {
+fn import_inner(
+    conn: &mut Connection,
+    sql: &str,
+    path: &std::path::Path,
+) -> Result<MergeReport, Error> {
     // 快照重放到独立临时库（标准 SQL 直接 execute_batch）。
     let tmp = Connection::open(path)?;
     tmp.execute_batch(sql)?;
@@ -49,14 +53,59 @@ fn merge_all(conn: &Connection, tmp: &Connection) -> Result<MergeReport, Error> 
     conn.execute_batch("BEGIN IMMEDIATE")?;
 
     merge_machines(conn, tmp, &mut report)?;
-    merge_keyed(conn, tmp, "projects", "name", &mut projects_map, &mut report)?;
+    merge_keyed(
+        conn,
+        tmp,
+        "projects",
+        "name",
+        &mut projects_map,
+        &mut report,
+    )?;
     merge_keyed(conn, tmp, "labels", "name", &mut labels_map, &mut report)?;
-    merge_keyed(conn, tmp, "milestones", "version", &mut milestones_map, &mut report)?;
+    merge_keyed(
+        conn,
+        tmp,
+        "milestones",
+        "version",
+        &mut milestones_map,
+        &mut report,
+    )?;
     merge_plans(conn, tmp, &milestones_map, &mut plans_map, &mut report)?;
-    merge_issues(conn, tmp, &projects_map, &plans_map, &mut issues_map, &mut report)?;
-    merge_assoc(conn, tmp, "issue_labels", &["issue_id", "label_id"], &issues_map, &labels_map, &mut report)?;
-    merge_assoc(conn, tmp, "issue_links", &["from_id", "to_id"], &issues_map, &issues_map, &mut report)?;
-    merge_assoc(conn, tmp, "milestone_direct_issues", &["milestone_id", "issue_id"], &milestones_map, &issues_map, &mut report)?;
+    merge_issues(
+        conn,
+        tmp,
+        &projects_map,
+        &plans_map,
+        &mut issues_map,
+        &mut report,
+    )?;
+    merge_assoc(
+        conn,
+        tmp,
+        "issue_labels",
+        &["issue_id", "label_id"],
+        &issues_map,
+        &labels_map,
+        &mut report,
+    )?;
+    merge_assoc(
+        conn,
+        tmp,
+        "issue_links",
+        &["from_id", "to_id"],
+        &issues_map,
+        &issues_map,
+        &mut report,
+    )?;
+    merge_assoc(
+        conn,
+        tmp,
+        "milestone_direct_issues",
+        &["milestone_id", "issue_id"],
+        &milestones_map,
+        &issues_map,
+        &mut report,
+    )?;
 
     conn.execute_batch("COMMIT")?;
     Ok(report)
@@ -65,12 +114,20 @@ fn merge_all(conn: &Connection, tmp: &Connection) -> Result<MergeReport, Error> 
 // ── 表专用合并 ──────────────────────────────────────────────
 
 /// machines：PK=machine_id（文本），存在即跳过。
-fn merge_machines(conn: &Connection, tmp: &Connection, report: &mut MergeReport) -> Result<(), Error> {
+fn merge_machines(
+    conn: &Connection,
+    tmp: &Connection,
+    report: &mut MergeReport,
+) -> Result<(), Error> {
     let cols = columns(tmp, "machines")?;
     for row in read_rows(tmp, "machines", &cols)? {
         let key = &row[col_idx(&cols, "machine_id")];
         let exists = conn
-            .query_row("SELECT 1 FROM machines WHERE machine_id = ?1", [key], |_| Ok(()))
+            .query_row(
+                "SELECT 1 FROM machines WHERE machine_id = ?1",
+                [key],
+                |_| Ok(()),
+            )
             .optional()?
             .is_some();
         if exists {
@@ -199,8 +256,11 @@ fn merge_issues(
                     .optional()?;
                 match existing {
                     Some(id) => {
-                        let cur: String = conn
-                            .query_row("SELECT updated_at FROM issues WHERE id = ?1", [id], |r| r.get(0))?;
+                        let cur: String = conn.query_row(
+                            "SELECT updated_at FROM issues WHERE id = ?1",
+                            [id],
+                            |r| r.get(0),
+                        )?;
                         let new_upd = match &row[col_idx(&cols, "updated_at")] {
                             Value::Text(s) => s.clone(),
                             _ => String::new(),
@@ -261,7 +321,10 @@ fn merge_assoc(
     let mut stmt = conn.prepare(&format!(
         "INSERT OR IGNORE INTO {table} ({}) VALUES ({})",
         cols.join(", "),
-        (1..=cols.len()).map(|i| format!("?{i}")).collect::<Vec<_>>().join(", ")
+        (1..=cols.len())
+            .map(|i| format!("?{i}"))
+            .collect::<Vec<_>>()
+            .join(", ")
     ))?;
     for mut row in read_rows(tmp, table, &cols)? {
         map_value(&mut row[col_idx(&cols, id_cols[0])], map_a);
@@ -282,10 +345,7 @@ fn temp_db_path() -> Result<std::path::PathBuf, Error> {
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| Error::Other(format!("clock error: {e}")))?
         .as_nanos();
-    Ok(std::env::temp_dir().join(format!(
-        "mint-sync-{}-{nanos}.db",
-        std::process::id()
-    )))
+    Ok(std::env::temp_dir().join(format!("mint-sync-{}-{nanos}.db", std::process::id())))
 }
 
 /// 取表列名（PRAGMA table_info，定义序）。
@@ -322,10 +382,7 @@ fn col_idx(cols: &[String], name: &str) -> usize {
 /// 目标库指定 id 是否已被占用。
 fn id_taken(conn: &Connection, table: &str, id: i64) -> Result<bool, Error> {
     let sql = format!("SELECT 1 FROM {table} WHERE id = ?1");
-    Ok(conn
-        .query_row(&sql, [id], |_| Ok(()))
-        .optional()?
-        .is_some())
+    Ok(conn.query_row(&sql, [id], |_| Ok(())).optional()?.is_some())
 }
 
 /// 目标库下一个自增 id。
@@ -349,17 +406,25 @@ fn row_id(row: &[Value], cols: &[String]) -> Option<i64> {
 
 /// 把 Value::Integer 按映射转换（引用列重映射）。
 fn map_value(v: &mut Value, map: &HashMap<i64, i64>) {
-    if let Value::Integer(i) = v {
-        if let Some(&new) = map.get(&i) {
-            *v = Value::Integer(new);
-        }
+    let i = match v {
+        Value::Integer(i) => *i,
+        _ => return,
+    };
+    if let Some(new) = map.get(&i) {
+        *v = Value::Integer(*new);
     }
 }
 
 /// 参数化 INSERT（cols 列，row 值）。
 fn insert_row(conn: &Connection, table: &str, cols: &[String], row: &[Value]) -> Result<(), Error> {
-    let placeholders = (1..=cols.len()).map(|i| format!("?{i}")).collect::<Vec<_>>().join(", ");
-    let sql = format!("INSERT INTO {table} ({}) VALUES ({placeholders})", cols.join(", "));
+    let placeholders = (1..=cols.len())
+        .map(|i| format!("?{i}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "INSERT INTO {table} ({}) VALUES ({placeholders})",
+        cols.join(", ")
+    );
     conn.execute(&sql, params_from_iter(row.iter()))?;
     Ok(())
 }
@@ -382,7 +447,11 @@ fn update_row(
         params.push(row[i].clone());
     }
     params.push(Value::Integer(id));
-    let sql = format!("UPDATE {table} SET {} WHERE id = ?{}", sets.join(", "), params.len());
+    let sql = format!(
+        "UPDATE {table} SET {} WHERE id = ?{}",
+        sets.join(", "),
+        params.len()
+    );
     conn.execute(&sql, params_from_iter(params.iter()))?;
     Ok(())
 }

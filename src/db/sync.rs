@@ -90,11 +90,19 @@ fn export_schema(conn: &Connection, out: &mut String) -> Result<(), Error> {
 /// 把 CREATE 语句改写为 IF NOT EXISTS（表/虚表/索引/触发器）。
 fn make_idempotent(sql: &str) -> String {
     if sql.starts_with("CREATE VIRTUAL TABLE") {
-        sql.replacen("CREATE VIRTUAL TABLE", "CREATE VIRTUAL TABLE IF NOT EXISTS", 1)
+        sql.replacen(
+            "CREATE VIRTUAL TABLE",
+            "CREATE VIRTUAL TABLE IF NOT EXISTS",
+            1,
+        )
     } else if sql.starts_with("CREATE TABLE") {
         sql.replacen("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
     } else if sql.starts_with("CREATE UNIQUE INDEX") {
-        sql.replacen("CREATE UNIQUE INDEX", "CREATE UNIQUE INDEX IF NOT EXISTS", 1)
+        sql.replacen(
+            "CREATE UNIQUE INDEX",
+            "CREATE UNIQUE INDEX IF NOT EXISTS",
+            1,
+        )
     } else if sql.starts_with("CREATE INDEX") {
         sql.replacen("CREATE INDEX", "CREATE INDEX IF NOT EXISTS", 1)
     } else if sql.starts_with("CREATE TRIGGER") {
@@ -120,7 +128,13 @@ fn export_data(conn: &Connection, out: &mut String) -> Result<(), Error> {
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
             out.push_str(&format!("INSERT INTO {table} ("));
-            out.push_str(&cols.iter().map(|c| c.name.as_str()).collect::<Vec<_>>().join(", "));
+            out.push_str(
+                &cols
+                    .iter()
+                    .map(|c| c.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
             out.push_str(") VALUES (");
             for (i, _c) in cols.iter().enumerate() {
                 if i > 0 {
@@ -172,6 +186,9 @@ fn sql_value(v: &Value) -> String {
         Value::Integer(i) => i.to_string(),
         Value::Real(f) => f.to_string(),
         Value::Text(s) => format!("'{}'", s.replace('\'', "''")),
-        Value::Blob(b) => format!("X'{}'", b.iter().map(|x| format!("{x:02x}")).collect::<String>()),
+        Value::Blob(b) => format!(
+            "X'{}'",
+            b.iter().map(|x| format!("{x:02x}")).collect::<String>()
+        ),
     }
 }
