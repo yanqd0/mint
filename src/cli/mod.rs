@@ -13,6 +13,7 @@ use list_common::{containers, effective_page_size, paged_json, paginate, print_p
 
 pub mod delete;
 pub mod export;
+pub mod import;
 pub mod issue;
 mod list_common;
 pub mod milestone;
@@ -328,6 +329,8 @@ pub enum Commands {
     Tui,
     /// Export all data (issues with labels/links + plans + milestones + labels) for backup/migration
     Export(ExportArgs),
+    /// Import a SQL snapshot, merging idempotently into this database (git+SQL sync)
+    Import(ImportArgs),
     /// Delete data (DANGEROUS: permanent). Prefer `issue state drop` for issues
     Delete(DeleteArgs),
 }
@@ -445,6 +448,12 @@ pub enum ExportFormat {
     Sql,
 }
 
+#[derive(clap::Args)]
+pub struct ImportArgs {
+    /// SQL snapshot file to merge into this database
+    pub file: std::path::PathBuf,
+}
+
 // ── Cli::run ──────────────────────────────────────────────────────
 
 impl Cli {
@@ -471,6 +480,7 @@ impl Cli {
             #[cfg(feature = "tui")]
             Commands::Tui => crate::tui::run_dashboard(&conn, &project),
             Commands::Export(a) => export::cmd_export(&conn, a),
+            Commands::Import(a) => import::cmd_import(&mut conn, a),
         }
     }
 
