@@ -820,29 +820,31 @@ fn st_add_fuzzy_duplicate() {
     assert_eq!(v["id"], id);
 }
 
-/// 去重：不同 project 同名不合并（同项目查重）。
+/// 去重：不同 project 同名不合并（多 db 下每项目独立库，天然隔离）。
 #[test]
 fn st_add_different_project_no_merge() {
-    let (_dir, db) = empty_db();
+    let (dir, db_a) = empty_db();
+    let db_b = dir.path().join("b.db").to_string_lossy().into_owned();
     let a = run_json(
-        &db,
+        &db_a,
         &["--project", "proj-a", "issue", "add", "fix login", "--json"],
     );
     let id_a = a["id"].as_i64().unwrap();
     let b = run_json(
-        &db,
+        &db_b,
         &["--project", "proj-b", "issue", "add", "fix login", "--json"],
     );
     let id_b = b["id"].as_i64().unwrap();
-    assert_ne!(id_a, id_b, "不同 project 不应合并");
-    // list 只列当前 project（auto-detected），跨 project 的 issue 各自在 --project 下列出
+    // 多 db 下 id 各自自增（可能相同）；不同 project 由独立库天然隔离，验证 list 各 1 条。
+    let _ = (id_a, id_b);
+    // 每项目独立库：各自 list 只列本项目。
     let v = run_json(
-        &db,
+        &db_a,
         &["--project", "proj-a", "list", "--all-states", "--json"],
     );
     assert_eq!(v["items"].as_array().unwrap().len(), 1);
     let v = run_json(
-        &db,
+        &db_b,
         &["--project", "proj-b", "list", "--all-states", "--json"],
     );
     assert_eq!(v["items"].as_array().unwrap().len(), 1);
@@ -948,9 +950,10 @@ fn st_search_trigger_sync() {
 /// search：project/label/status 过滤生效。
 #[test]
 fn st_search_filters() {
-    let (_dir, db) = empty_db();
+    let (dir, db_a) = empty_db();
+    let db_b = dir.path().join("b.db").to_string_lossy().into_owned();
     run_json(
-        &db,
+        &db_a,
         &[
             "--project",
             "proj-a",
@@ -962,9 +965,12 @@ fn st_search_filters() {
             "--json",
         ],
     );
-    // project 过滤：proj-b 不含
+    // project 隔离：proj-b 独立库不含。
     assert_eq!(
-        run_json(&db, &["--project", "proj-b", "search", "filter", "--json"])["items"]
+        run_json(
+            &db_b,
+            &["--project", "proj-b", "search", "filter", "--json"]
+        )["items"]
             .as_array()
             .unwrap()
             .len(),
@@ -973,7 +979,7 @@ fn st_search_filters() {
     // label 过滤
     assert_eq!(
         run_json(
-            &db,
+            &db_a,
             &[
                 "--project",
                 "proj-a",
@@ -990,7 +996,18 @@ fn st_search_filters() {
         1
     );
     assert_eq!(
-        run_json(&db, &["search", "filter", "--label", "other", "--json"])["items"]
+        run_json(
+            &db_a,
+            &[
+                "--project",
+                "proj-a",
+                "search",
+                "filter",
+                "--label",
+                "other",
+                "--json"
+            ]
+        )["items"]
             .as_array()
             .unwrap()
             .len(),
@@ -999,7 +1016,7 @@ fn st_search_filters() {
     // status 过滤：open 命中、done 不命中
     assert_eq!(
         run_json(
-            &db,
+            &db_a,
             &[
                 "--project",
                 "proj-a",
@@ -1017,7 +1034,7 @@ fn st_search_filters() {
     );
     assert_eq!(
         run_json(
-            &db,
+            &db_a,
             &[
                 "--project",
                 "proj-a",
@@ -1426,7 +1443,7 @@ fn st_list_on_seeded_db_perf() {
     let (dir, db) = empty_db();
     {
         let conn = mint_faa::db::open(std::path::Path::new(&db)).unwrap();
-        let pid = mint_faa::project::ensure(&conn, "perf", dir.path()).unwrap();
+        mint_faa::project::ensure(&conn, "perf", dir.path()).unwrap();
         for i in 0..200 {
             conn.execute(
                 mint_faa::db::ISSUE_INSERT,
@@ -1435,7 +1452,6 @@ fn st_list_on_seeded_db_perf() {
                     None::<String>,
                     "problem",
                     "open",
-                    pid,
                     None::<String>,
                     3i64,
                     mint_faa::db::machine_id(),
@@ -1484,11 +1500,8 @@ fn st_timestamps_local_under_tz() {
     {
         let conn = mint_faa::db::open(std::path::Path::new(&db)).unwrap();
         mint_faa::project::ensure(&conn, "tz", std::path::Path::new("/tmp")).unwrap();
-        conn.execute(
-            "INSERT INTO issues (title, project_id) VALUES ('tz', 1)",
-            [],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO issues (title) VALUES ('tz')", [])
+            .unwrap();
     }
 
     // 两种 TZ 下 show 的 created_at。
@@ -1853,16 +1866,16 @@ fn st_delete_milestone_detaches() {
     assert_eq!(v["id"].as_i64().unwrap(), i);
 }
 
-/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=3（001+002+003）。
+/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=4（001-004）。
 #[test]
-fn st_empty_db_initialized_v3() {
+fn st_empty_db_initialized_v4() {
     let (_dir, db) = empty_db();
     run_json(&db, &["list", "--json"]); // 首次运行触发 migrate
     let conn = mint_faa::db::open(std::path::Path::new(&db)).unwrap();
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
 }
 
 /// get/show 裸值输出净化终端控制字符（防转义注入回归，#196）。
@@ -2920,53 +2933,61 @@ fn st_plan_set_title_only() {
 /// delete：project 无 issue 删除 / 有 issue 拒绝；label 删除。
 #[test]
 fn st_delete_project_and_label() {
-    let (_dir, db) = empty_db();
-    run_json(&db, &["project", "create", "alpha", "--json"]);
-
+    let rdir = TempDir::new().unwrap();
+    let run = |args: &[&str]| {
+        let mut c = Command::cargo_bin("mint").unwrap();
+        c.env("XDG_DATA_HOME", rdir.path())
+            .env("MINT_MACHINE_ID", "mach-a")
+            .args(args);
+        c
+    };
+    // alpha 项目加 issue（多 db 下独立项目库）。
+    run(&["--project", "alpha", "issue", "add", "under-alpha"])
+        .assert()
+        .success();
     // 有 issue 时拒绝删除 project。
-    add_issue(&db, "x");
-    // 注意：add 默认 project 可能不是 alpha，先绑定到 alpha。
-    run_json(
-        &db,
-        &[
-            "--project",
-            "alpha",
-            "issue",
-            "add",
-            "under-alpha",
-            "--json",
-        ],
-    );
-    let stderr = run_fail(&db, &["delete", "project", "alpha"]);
-    assert!(stderr.contains("has 1 issue"), "stderr: {stderr}");
+    let out = run(&["delete", "project", "alpha"])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("has 1 issue"), "stderr: {text}");
 
-    // 清空 issue 后删除 project 成功（json + 非 json）。
-    let stderr = run_fail(&db, &["delete", "project", "nonexistent"]);
-    assert!(stderr.contains("not found"), "stderr: {stderr}");
+    // 不存在的 project。
+    let out = run(&["delete", "project", "nonexistent"])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("not found"), "stderr: {text}");
 
-    // label 删除。
-    run_json(
-        &db,
-        &[
-            "--project",
-            "alpha",
-            "issue",
-            "add",
-            "with-label",
-            "--label",
-            "ui",
-            "--json",
-        ],
-    );
-    run_json(&db, &["delete", "label", "ui", "--json"]);
-    let v = run_json(&db, &["label", "list", "--json"]);
-    let names: Vec<&str> = v["items"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|x| x["name"].as_str())
-        .collect();
-    assert!(!names.contains(&"ui"), "label 应已删除: {names:?}");
+    // label 删除（alpha 项目内）。
+    run(&[
+        "--project",
+        "alpha",
+        "issue",
+        "add",
+        "with-label",
+        "--label",
+        "ui",
+    ])
+    .assert()
+    .success();
+    run(&["--project", "alpha", "delete", "label", "ui"])
+        .assert()
+        .success();
+    let out = run(&["--project", "alpha", "label", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(!text.contains("ui"), "label 应已删除: {text}");
 }
 
 // ── export（全量备份/迁移导出）────────────────────────────────────
@@ -3244,7 +3265,7 @@ fn st_export_sql_snapshot() {
         .clone();
     let text = String::from_utf8_lossy(&out).to_string();
     assert!(
-        text.contains("CREATE TABLE IF NOT EXISTS issues"),
+        text.contains("CREATE TABLE IF NOT EXISTS"),
         "缺 schema: {text}"
     );
     assert!(text.contains("INSERT INTO issues"), "缺数据段");
@@ -3391,20 +3412,32 @@ fn st_migrate_split_legacy() {
     let rdir = TempDir::new().unwrap();
     let data = rdir.path().join("mint");
     let legacy = data.join("mint.db");
-    // 旧单一 db（--db 指向 mint.db，多项目）。
-    let old = |args: &[&str]| {
-        let mut c = Command::cargo_bin("mint").unwrap();
-        c.env("MINT_DB_PATH", &legacy)
-            .env("MINT_MACHINE_ID", "mach-a")
-            .args(args);
-        c
-    };
-    old(&["--project", "projA", "issue", "add", "A的issue"])
-        .assert()
-        .success();
-    old(&["--project", "projB", "issue", "add", "B的issue"])
-        .assert()
-        .success();
+    // 手动建 003 旧库（当前 mint 建 004 无 project_id，无法模拟旧版本多项目拆分）。
+    {
+        use rusqlite::Connection;
+        std::fs::create_dir_all(&data).unwrap();
+        let conn = Connection::open(&legacy).unwrap();
+        conn.execute_batch(include_str!("../src/db/migrations/001_init.sql"))
+            .unwrap();
+        conn.execute_batch(include_str!("../src/db/migrations/002_multi_field.sql"))
+            .unwrap();
+        conn.execute_batch(include_str!("../src/db/migrations/003_fts_multi_field.sql"))
+            .unwrap();
+        conn.execute("INSERT INTO projects (name) VALUES ('projA')", [])
+            .unwrap();
+        conn.execute("INSERT INTO projects (name) VALUES ('projB')", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO issues (title, project_id, uid) VALUES ('A的issue', 1, 'mach-a:1')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO issues (title, project_id, uid) VALUES ('B的issue', 2, 'mach-a:2')",
+            [],
+        )
+        .unwrap();
+    }
 
     // 触发迁移：缺省路径（XDG_DATA_HOME）+ 无 --db。
     let mut c = Command::cargo_bin("mint").unwrap();

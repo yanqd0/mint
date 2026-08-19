@@ -406,7 +406,6 @@ mod tests {
             kind,
             status,
             priority: 0,
-            project_id: 1,
             project: None,
             test_cmd: None,
             dropped_reason: None,

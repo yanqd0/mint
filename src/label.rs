@@ -281,14 +281,8 @@ mod tests {
         crate::db::migrate_for_test(&conn);
         conn.execute("INSERT INTO projects (name) VALUES ('p')", [])
             .unwrap();
-        let pid: i64 = conn
-            .query_row("SELECT id FROM projects WHERE name='p'", [], |r| r.get(0))
+        conn.execute("INSERT INTO issues (title) VALUES ('issue')", [])
             .unwrap();
-        conn.execute(
-            "INSERT INTO issues (title, project_id) VALUES ('issue', ?1)",
-            params![pid],
-        )
-        .unwrap();
         let iid: i64 = conn
             .query_row("SELECT id FROM issues", [], |r| r.get(0))
             .unwrap();

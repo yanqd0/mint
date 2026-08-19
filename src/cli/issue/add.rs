@@ -46,9 +46,10 @@ pub fn cmd_add(
     let test_cmd: Option<&str> = None;
 
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-    let pid = project::ensure(&tx, project_name, cwd)?;
+    // 每库单项目：确保当前项目行存在（多 db 下 issue 不写 project_id）。
+    project::ensure(&tx, project_name, cwd)?;
 
-    let cands = load_dup_candidates(&tx, pid)?;
+    let cands = load_dup_candidates(&tx)?;
     if let Some(hit) = dedup::find_duplicate(&a.title, &cands) {
         tx.execute(db::ISSUE_BUMP_HIT_COUNT, rusqlite::params![hit.id])?;
         let specs = label::parse_specs(&a.label);
@@ -67,7 +68,6 @@ pub fn cmd_add(
             a.body,
             kind,
             status,
-            pid,
             test_cmd,
             a.priority,
             crate::db::machine_id(),
@@ -102,12 +102,9 @@ pub fn cmd_add(
 }
 
 /// 加载同项目活跃 issue 作为去重候选（id/title/kind/status，仅非终态）。
-fn load_dup_candidates(
-    tx: &rusqlite::Transaction,
-    pid: i64,
-) -> Result<Vec<dedup::Candidate>, Error> {
+fn load_dup_candidates(tx: &rusqlite::Transaction) -> Result<Vec<dedup::Candidate>, Error> {
     let mut stmt = tx.prepare(db::ISSUE_ACTIVE_TITLES)?;
-    let rows = stmt.query_map(rusqlite::params![pid], |r| {
+    let rows = stmt.query_map([], |r| {
         Ok(dedup::Candidate {
             id: r.get(0)?,
             title: r.get(1)?,

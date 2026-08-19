@@ -121,22 +121,31 @@ struct Column {
 /// data 段：逐表按主键排序导出 INSERT（每行一条，git diff 友好）。
 fn export_data(conn: &Connection, out: &mut String) -> Result<(), Error> {
     for table in DATA_TABLES {
-        export_table(conn, out, table, None)?;
+        export_table(conn, out, table, None, &[])?;
     }
     Ok(())
 }
 
-/// 导出单表（可选 WHERE 过滤；列序来自 PRAGMA table_info，行序按主键升序）。
+/// 导出单表（可选 WHERE 过滤 + 排除列；列序来自 PRAGMA table_info，行序按主键升序）。
+/// `exclude` 用于旧库（003 含 project_id）导出到新 schema（004 无 project_id）时跳过列。
 fn export_table(
     conn: &Connection,
     out: &mut String,
     table: &str,
     filter: Option<&str>,
+    exclude: &[&str],
 ) -> Result<(), Error> {
-    let cols = table_columns(conn, table)?;
+    let mut cols = table_columns(conn, table)?;
+    cols.retain(|c| !exclude.contains(&c.name.as_str()));
     let order = pk_clause(&cols);
     let where_sql = filter.map(|f| format!(" WHERE {f}")).unwrap_or_default();
-    let sel = format!("SELECT * FROM {table}{where_sql} ORDER BY {order}");
+    // 显式列（非 SELECT *）：exclude 后行列序与 cols 一致，避免错位。
+    let col_list = cols
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sel = format!("SELECT {col_list} FROM {table}{where_sql} ORDER BY {order}");
     let mut stmt = conn.prepare(&sel)?;
     let mut rows = stmt.query([])?;
     while let Some(row) = rows.next()? {
@@ -175,8 +184,15 @@ pub fn export_sql_for_project(conn: &Connection, project_id: i64) -> Result<Stri
     out.push_str("-- data\n");
     let pid = project_id.to_string();
     // machines 全量（旧 db 的本机/历史机器）；labels 按引用该项目的 issues 复制（保留原 id）。
-    export_table(conn, &mut out, "machines", None)?;
-    export_table(conn, &mut out, "projects", Some(&format!("id = {pid}")))?;
+    // issues 导出排除 project_id 列（旧库 003 有该列，目标 004 无——列适配）。
+    export_table(conn, &mut out, "machines", None, &[])?;
+    export_table(
+        conn,
+        &mut out,
+        "projects",
+        Some(&format!("id = {pid}")),
+        &[],
+    )?;
     export_table(
         conn,
         &mut out,
@@ -184,6 +200,7 @@ pub fn export_sql_for_project(conn: &Connection, project_id: i64) -> Result<Stri
         Some(&format!(
             "id IN (SELECT il.label_id FROM issue_labels il JOIN issues i ON i.id = il.issue_id WHERE i.project_id = {pid})"
         )),
+        &[],
     )?;
     export_table(
         conn,
@@ -193,6 +210,7 @@ pub fn export_sql_for_project(conn: &Connection, project_id: i64) -> Result<Stri
             "id IN (SELECT milestone_id FROM plans WHERE id IN (SELECT plan_id FROM issues WHERE project_id = {pid} AND plan_id IS NOT NULL)) \
              OR id IN (SELECT milestone_id FROM milestone_direct_issues WHERE issue_id IN (SELECT id FROM issues WHERE project_id = {pid}))"
         )),
+        &[],
     )?;
     export_table(
         conn,
@@ -201,12 +219,14 @@ pub fn export_sql_for_project(conn: &Connection, project_id: i64) -> Result<Stri
         Some(&format!(
             "id IN (SELECT plan_id FROM issues WHERE project_id = {pid} AND plan_id IS NOT NULL)"
         )),
+        &[],
     )?;
     export_table(
         conn,
         &mut out,
         "issues",
         Some(&format!("project_id = {pid}")),
+        &["project_id"],
     )?;
     export_table(
         conn,
@@ -215,6 +235,7 @@ pub fn export_sql_for_project(conn: &Connection, project_id: i64) -> Result<Stri
         Some(&format!(
             "issue_id IN (SELECT id FROM issues WHERE project_id = {pid})"
         )),
+        &[],
     )?;
     export_table(
         conn,
@@ -223,6 +244,7 @@ pub fn export_sql_for_project(conn: &Connection, project_id: i64) -> Result<Stri
         Some(&format!(
             "from_id IN (SELECT id FROM issues WHERE project_id = {pid}) AND to_id IN (SELECT id FROM issues WHERE project_id = {pid})"
         )),
+        &[],
     )?;
     export_table(
         conn,
@@ -231,6 +253,7 @@ pub fn export_sql_for_project(conn: &Connection, project_id: i64) -> Result<Stri
         Some(&format!(
             "issue_id IN (SELECT id FROM issues WHERE project_id = {pid})"
         )),
+        &[],
     )?;
     Ok(out)
 }
@@ -294,7 +317,7 @@ mod tests {
 
     fn add_issue(conn: &Connection, id: i64, title: &str) {
         conn.execute(
-            "INSERT INTO issues (id, title, project_id) VALUES (?1, ?2, 1)",
+            "INSERT INTO issues (id, title) VALUES (?1, ?2)",
             params![id, title],
         )
         .unwrap();
@@ -319,7 +342,7 @@ mod tests {
         add_issue(&conn, 1, "a");
         let sql = export_sql(&conn).unwrap();
         assert!(
-            sql.contains("CREATE TABLE IF NOT EXISTS issues"),
+            sql.contains("CREATE TABLE IF NOT EXISTS"),
             "缺 schema: {sql}"
         );
         assert!(sql.contains("INSERT INTO issues"), "缺数据段");

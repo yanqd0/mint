@@ -15,13 +15,7 @@ use crate::tui::dashboard::diff::DashboardSnapshot;
 pub fn load_snapshot(conn: &Connection, project: &str) -> Result<DashboardSnapshot, Error> {
     let mut stmt = conn.prepare(db::ISSUE_LIST)?;
     let rows = stmt.query_map(
-        rusqlite::params![
-            1,
-            None::<Status>,
-            None::<String>,
-            Some(project),
-            None::<i64>
-        ],
+        rusqlite::params![1, None::<Status>, None::<String>, None::<i64>],
         issue_from_row,
     )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
@@ -73,14 +67,14 @@ mod tests {
     fn snapshot_collects_issues_and_plans() {
         let conn = db();
         conn.execute(
-            "INSERT INTO issues (title, kind, status, priority, project_id)
-             VALUES ('a', 'problem', 'open', 3, 1)",
+            "INSERT INTO issues (title, kind, status, priority)
+             VALUES ('a', 'problem', 'open', 3)",
             [],
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO issues (title, kind, status, priority, project_id)
-             VALUES ('b', 'requirement', 'done', 2, 1)",
+            "INSERT INTO issues (title, kind, status, priority)
+             VALUES ('b', 'requirement', 'done', 2)",
             [],
         )
         .unwrap();
@@ -123,14 +117,14 @@ mod tests {
     fn snapshot_fills_issue_links() {
         let conn = db();
         conn.execute(
-            "INSERT INTO issues (title, kind, status, priority, project_id)
-             VALUES ('a', 'problem', 'open', 3, 1)",
+            "INSERT INTO issues (title, kind, status, priority)
+             VALUES ('a', 'problem', 'open', 3)",
             [],
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO issues (title, kind, status, priority, project_id)
-             VALUES ('b', 'problem', 'open', 3, 1)",
+            "INSERT INTO issues (title, kind, status, priority)
+             VALUES ('b', 'problem', 'open', 3)",
             [],
         )
         .unwrap();

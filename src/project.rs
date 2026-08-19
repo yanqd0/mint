@@ -192,9 +192,31 @@ pub fn update(
 }
 
 /// 查询 project 下的 issue 数量。
-pub fn issue_count(conn: &Connection, id: i64) -> Result<i64, Error> {
-    conn.query_row(db::PROJECT_ISSUE_COUNT, params![id], |r| r.get(0))
+pub fn issue_count(conn: &Connection, _id: i64) -> Result<i64, Error> {
+    conn.query_row(db::PROJECT_ISSUE_COUNT, [], |r| r.get(0))
         .map_err(Error::from)
+}
+
+/// 删除 project（多 db 架构）：检查 `projects/<name>/` 项目库的 issue 数，无 issue 才删目录。
+pub fn delete_multi(data_dir: &Path, name: &str) -> Result<(), Error> {
+    let proj_dir = data_dir.join("projects").join(name);
+    if !proj_dir.is_dir() {
+        return Err(Error::Other(format!("project '{name}' not found")));
+    }
+    // 打开项目 db 查 issue 数（有 issue 拒绝，防误删）。
+    let db_path = proj_dir.join(format!("{}.db", crate::db::machine_id()));
+    if let Ok(conn) = Connection::open(&db_path) {
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM issues", [], |r| r.get(0))
+            .unwrap_or(0);
+        if count > 0 {
+            return Err(Error::Other(format!(
+                "project '{name}' has {count} issue(s); reassign or delete them first"
+            )));
+        }
+    }
+    std::fs::remove_dir_all(&proj_dir)?;
+    Ok(())
 }
 
 /// 删除 project（无 issue 关联时允许）。

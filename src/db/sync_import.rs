@@ -31,8 +31,10 @@ fn import_inner(
     sql: &str,
     path: &std::path::Path,
 ) -> Result<MergeReport, Error> {
-    // 快照重放到独立临时库（标准 SQL 直接 execute_batch）。
+    // 快照重放到独立临时库：先按当前版本建 schema（快照 schema 可能是旧版本
+    // 如 003 含 project_id，IF NOT EXISTS no-op；数据段按当前 schema 列 INSERT）。
     let tmp = Connection::open(path)?;
+    crate::db::migrate_to(&tmp, crate::db::CURRENT_VERSION)?;
     tmp.execute_batch(sql)?;
     tmp.execute_batch("PRAGMA foreign_keys = ON")?;
 
@@ -71,14 +73,7 @@ fn merge_all(conn: &Connection, tmp: &Connection) -> Result<MergeReport, Error> 
         &mut report,
     )?;
     merge_plans(conn, tmp, &milestones_map, &mut plans_map, &mut report)?;
-    merge_issues(
-        conn,
-        tmp,
-        &projects_map,
-        &plans_map,
-        &mut issues_map,
-        &mut report,
-    )?;
+    merge_issues(conn, tmp, &plans_map, &mut issues_map, &mut report)?;
     merge_assoc(
         conn,
         tmp,
@@ -238,7 +233,6 @@ fn merge_plans(
 fn merge_issues(
     conn: &Connection,
     tmp: &Connection,
-    projects_map: &HashMap<i64, i64>,
     plans_map: &HashMap<i64, i64>,
     id_map: &mut HashMap<i64, i64>,
     report: &mut MergeReport,
@@ -247,7 +241,6 @@ fn merge_issues(
     for mut row in read_rows(tmp, "issues", &cols)? {
         let orig_id = row_id(&row, &cols);
         let uid = row[col_idx(&cols, "uid")].clone();
-        map_value(&mut row[col_idx(&cols, "project_id")], projects_map);
         map_value(&mut row[col_idx(&cols, "plan_id")], plans_map);
         let target_id = match uid {
             Value::Text(u) => {
@@ -481,8 +474,8 @@ mod tests {
         let mid = uid.split(':').next().unwrap();
         seed_machine(conn, mid);
         conn.execute(
-            "INSERT INTO issues (id, title, project_id, machine_id, uid, created_at, updated_at) \
-             VALUES (?1, ?2, 1, ?3, ?4, '2026-01-01 00:00:00', ?5)",
+            "INSERT INTO issues (id, title, machine_id, uid, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, '2026-01-01 00:00:00', ?5)",
             params![id, title, mid, uid, updated],
         )
         .unwrap();

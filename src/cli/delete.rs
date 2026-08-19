@@ -1,5 +1,7 @@
 //! delete 命令分发（危险操作：物理删除，默认不使用）。
 
+use std::path::Path;
+
 use rusqlite::Connection;
 
 use crate::container;
@@ -15,8 +17,8 @@ pub(crate) fn print_deleted(kind: &str, id: i64, json: bool) -> Result<(), Error
     Ok(())
 }
 
-/// Delete 命令分发。
-pub fn dispatch(conn: &Connection, cmd: &super::DeleteCmd) -> Result<(), Error> {
+/// Delete 命令分发（project 删除按多 db 目录，需 data_dir）。
+pub fn dispatch(conn: &Connection, data_dir: &Path, cmd: &super::DeleteCmd) -> Result<(), Error> {
     match cmd {
         super::DeleteCmd::Issue(a) => {
             container::delete_issue(conn, a.id)?;
@@ -46,7 +48,7 @@ pub fn dispatch(conn: &Connection, cmd: &super::DeleteCmd) -> Result<(), Error> 
             Ok(())
         }
         super::DeleteCmd::Project(a) => {
-            crate::project::delete(conn, &a.name)?;
+            crate::project::delete_multi(data_dir, &a.name)?;
             if a.json {
                 println!(
                     "{}",

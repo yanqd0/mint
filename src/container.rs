@@ -606,14 +606,8 @@ mod tests {
         let conn = db::open(std::path::Path::new(":memory:")).unwrap();
         conn.execute("INSERT INTO projects (name) VALUES ('p')", [])
             .unwrap();
-        let pid: i64 = conn
-            .query_row("SELECT id FROM projects WHERE name='p'", [], |r| r.get(0))
+        conn.execute("INSERT INTO issues (title) VALUES ('a')", [])
             .unwrap();
-        conn.execute(
-            "INSERT INTO issues (title, project_id) VALUES ('a', ?1)",
-            params![pid],
-        )
-        .unwrap();
         let iid: i64 = conn
             .query_row("SELECT id FROM issues", [], |r| r.get(0))
             .unwrap();
@@ -991,15 +985,9 @@ mod tests {
         set_issue_plan(&conn, iid, pid).unwrap();
         set_status(&conn, iid, "planned");
         // 追加 dev/test/done/dropped 4 个 issue 挂同一 plan。
-        let pid0: i64 = conn
-            .query_row("SELECT id FROM projects", [], |r| r.get(0))
-            .unwrap();
         for (t, st) in [("d", "dev"), ("t", "test"), ("n", "done"), ("r", "dropped")] {
-            conn.execute(
-                "INSERT INTO issues (title, project_id) VALUES (?1, ?2)",
-                params![t, pid0],
-            )
-            .unwrap();
+            conn.execute("INSERT INTO issues (title) VALUES (?1)", params![t])
+                .unwrap();
             let id = conn.last_insert_rowid();
             set_issue_plan(&conn, id, pid).unwrap();
             set_status(&conn, id, st);

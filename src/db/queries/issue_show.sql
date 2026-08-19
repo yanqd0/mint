@@ -8,8 +8,7 @@ SELECT
     i.kind,
     i.status,
     i.priority,
-    i.project_id,
-    p.name AS project,
+    (SELECT name FROM projects LIMIT 1) AS project,
     i.test_cmd,
     i.dropped_reason,
     i.last_commit_id,
@@ -20,5 +19,4 @@ SELECT
     datetime(i.created_at, 'localtime') AS created_at,
     datetime(i.updated_at, 'localtime') AS updated_at
 FROM issues i
-JOIN projects p ON p.id = i.project_id
 WHERE i.id = ?1;

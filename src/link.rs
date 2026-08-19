@@ -189,19 +189,10 @@ mod tests {
         let conn = db::open(std::path::Path::new(":memory:")).unwrap();
         conn.execute("INSERT INTO projects (name) VALUES ('p')", [])
             .unwrap();
-        let pid: i64 = conn
-            .query_row("SELECT id FROM projects WHERE name='p'", [], |r| r.get(0))
+        conn.execute("INSERT INTO issues (title) VALUES ('a')", [])
             .unwrap();
-        conn.execute(
-            "INSERT INTO issues (title, project_id) VALUES ('a', ?1)",
-            params![pid],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO issues (title, project_id) VALUES ('b', ?1)",
-            params![pid],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO issues (title) VALUES ('b')", [])
+            .unwrap();
         let a: i64 = conn
             .query_row("SELECT id FROM issues WHERE title='a'", [], |r| r.get(0))
             .unwrap();
@@ -388,11 +379,8 @@ mod tests {
     #[test]
     fn links_for_multi_types_ordered() {
         let (conn, a, b) = setup();
-        conn.execute(
-            "INSERT INTO issues (title, project_id) VALUES ('c', ?1)",
-            params![1],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO issues (title) VALUES ('c')", [])
+            .unwrap();
         let c: i64 = conn
             .query_row("SELECT id FROM issues WHERE title='c'", [], |r| r.get(0))
             .unwrap();

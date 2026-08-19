@@ -13,12 +13,17 @@ pub mod sync_import;
 
 /// 有序迁移：每项 (目标版本, 迁移 SQL)。从当前 user_version 逐级升到最新。
 /// 每个迁移 SQL 自带 BEGIN/COMMIT，末尾 `PRAGMA user_version = <目标版本>`，失败整体回滚。
-const MIGRATIONS: &[(i32, &str)] = &[(1, MIGRATION_001), (2, MIGRATION_002), (3, MIGRATION_003)];
+const MIGRATIONS: &[(i32, &str)] = &[
+    (1, MIGRATION_001),
+    (2, MIGRATION_002),
+    (3, MIGRATION_003),
+    (4, MIGRATION_004),
+];
 
 /// 数据库当前 schema 版本（须与 MIGRATIONS 最后一个目标版本一致）。
 /// 开发期默认写增量 migration（002/003…每逻辑变更独立）；发布前夕合并回 001 后重定基线，
 /// 见 src/db/CLAUDE.md 迁移哲学。
-const CURRENT_VERSION: i32 = 3;
+const CURRENT_VERSION: i32 = 4;
 
 /// 打开（必要时创建）SQLite 数据库并迁移到最新版本。
 /// 父目录不存在时自动创建（首次运行的真实场景）。
@@ -135,6 +140,19 @@ fn migrate(conn: &rusqlite::Connection) -> Result<(), Error> {
     Ok(())
 }
 
+/// 按目标版本执行迁移（不强制到最新）。用于：
+/// - `import_sql` 临时库：先建当前 schema（快照 schema 可能是旧版本，IF NOT EXISTS no-op）。
+pub fn migrate_to(conn: &rusqlite::Connection, target: i32) -> Result<(), Error> {
+    let mut version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    for (ver, sql) in MIGRATIONS {
+        if version < *ver && *ver <= target {
+            conn.execute_batch(sql)?;
+            version = *ver;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,7 +170,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
 
         let tables: Vec<String> = conn
             .prepare(
@@ -197,7 +215,7 @@ mod tests {
 
     /// 既有 v1 库升级：migrate 从 user_version=1 自动跑 002/003（machines/列/color/FTS 扩展），不崩溃（#1 回归）。
     #[test]
-    fn migrate_upgrades_v1_to_v3() {
+    fn migrate_upgrades_v1_to_v4() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         // 仅建 v1 schema（001）
         conn.execute_batch(MIGRATION_001).unwrap();
@@ -206,7 +224,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3, "v1 库应升级到 v3");
+        assert_eq!(version, 4, "v1 库应升级到 v4");
 
         let tables: Vec<String> = conn
             .prepare(
@@ -265,7 +283,7 @@ mod tests {
 
     /// 既有 v2 库升级：migrate 从 user_version=2 自动跑 003（FTS 扩展），存量数据回填。
     #[test]
-    fn migrate_upgrades_v2_to_v3() {
+    fn migrate_upgrades_v2_to_v4() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         // 建 v2 schema（001 + 002）
         conn.execute_batch(MIGRATION_001).unwrap();
@@ -296,7 +314,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3, "v2 库应升级到 v3");
+        assert_eq!(version, 4, "v2 库应升级到 v4");
         // 存量 labels 可搜（回填子查询聚合）。
         let hit: i64 = conn
             .query_row(
@@ -336,10 +354,7 @@ mod tests {
         migrate(&conn).unwrap();
 
         let err = conn
-            .execute(
-                "INSERT INTO issues (title, project_id) VALUES ('x', 999)",
-                [],
-            )
+            .execute("INSERT INTO issues (title, plan_id) VALUES ('x', 999)", [])
             .unwrap_err();
         assert!(err.to_string().contains("FOREIGN KEY"));
     }
@@ -363,22 +378,16 @@ mod tests {
             .unwrap();
 
         // task 可插入并回读（去 CHECK 的目标）
-        conn.execute(
-            "INSERT INTO issues (title, kind, project_id) VALUES ('t', 'task', 1)",
-            [],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO issues (title, kind) VALUES ('t', 'task')", [])
+            .unwrap();
         let got: crate::models::Kind = conn
             .query_row("SELECT kind FROM issues WHERE id = 1", [], |r| r.get(0))
             .unwrap();
         assert_eq!(got, crate::models::Kind::Task);
 
         // 非法值 DB 放行，但 FromSql 读取报 invalid kind（应用层兜底）
-        conn.execute(
-            "INSERT INTO issues (title, kind, project_id) VALUES ('b', 'bogus', 1)",
-            [],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO issues (title, kind) VALUES ('b', 'bogus')", [])
+            .unwrap();
         let err = conn
             .query_row::<crate::models::Kind, _, _>(
                 "SELECT kind FROM issues WHERE id = 2",

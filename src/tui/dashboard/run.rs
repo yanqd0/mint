@@ -153,10 +153,9 @@ mod tests {
         let conn = db::open(&dir.path().join("t.db")).unwrap();
         conn.execute("INSERT INTO projects (name) VALUES ('mint')", [])
             .unwrap();
-        let pid = conn.last_insert_rowid();
         conn.execute(
-            "INSERT INTO issues (title, project_id, kind, status, priority) VALUES ('t', ?1, 'problem', 'open', 3)",
-            rusqlite::params![pid],
+            "INSERT INTO issues (title, kind, status, priority) VALUES ('t', 'problem', 'open', 3)",
+            [],
         )
         .unwrap();
         let id = conn.last_insert_rowid();
@@ -234,8 +233,8 @@ mod tests {
         // 模拟 list --tui：初始 view=Issues + filter（仅 open）。
         let (_db_dir, conn, _id) = db_with_open_issue();
         conn.execute(
-            "INSERT INTO issues (title, kind, status, priority, project_id)
-             VALUES ('done one', 'problem', 'done', 3, 1)",
+            "INSERT INTO issues (title, kind, status, priority)
+             VALUES ('done one', 'problem', 'done', 3)",
             [],
         )
         .unwrap();

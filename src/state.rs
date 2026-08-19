@@ -164,10 +164,9 @@ mod tests {
         db::migrate_for_test(&conn);
         conn.execute("INSERT INTO projects (name) VALUES ('mint')", [])
             .unwrap();
-        let project_id = conn.last_insert_rowid();
         conn.execute(
-            "INSERT INTO issues (title, project_id, kind, status, priority) VALUES ('t', ?1, ?2, ?3, 3)",
-            rusqlite::params![project_id, kind, status.to_string()],
+            "INSERT INTO issues (title, kind, status, priority) VALUES ('t', ?1, ?2, 3)",
+            rusqlite::params![kind, status.to_string()],
         )
         .unwrap();
         let id = conn.last_insert_rowid();

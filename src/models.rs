@@ -121,7 +121,6 @@ pub struct Issue {
     pub kind: Kind,
     pub status: Status,
     pub priority: i64,
-    pub project_id: i64,
     pub project: Option<String>,
     pub test_cmd: Option<String>,
     pub dropped_reason: Option<String>,

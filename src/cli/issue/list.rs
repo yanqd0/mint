@@ -89,16 +89,15 @@ pub struct ShowArgs {
     pub json: bool,
 }
 
-pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Error> {
+pub fn cmd_list(conn: &Connection, _project: &str, l: &ListArgs) -> Result<(), Error> {
     let all: i64 = if l.all { 1 } else { 0 };
     let status = l.status;
     let label: Option<&str> = l.label.as_deref();
-    let project_param: Option<&str> = Some(project);
     let priority = l.priority;
 
     let mut stmt = conn.prepare(db::ISSUE_LIST)?;
     let rows = stmt.query_map(
-        rusqlite::params![all, status, label, project_param, priority],
+        rusqlite::params![all, status, label, priority],
         issue_from_row,
     )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
@@ -143,7 +142,7 @@ pub fn cmd_list(conn: &Connection, project: &str, l: &ListArgs) -> Result<(), Er
     Ok(())
 }
 
-/// 行 → Issue 映射（15 列，与 issue_list/issue_show/issue_search 列序一致）。
+/// 行 → Issue 映射（16 列，与 issue_list/issue_show/issue_search 列序一致）。
 pub(crate) fn issue_from_row(r: &rusqlite::Row) -> rusqlite::Result<Issue> {
     Ok(Issue {
         id: r.get(0)?,
@@ -152,20 +151,19 @@ pub(crate) fn issue_from_row(r: &rusqlite::Row) -> rusqlite::Result<Issue> {
         kind: r.get(3)?,
         status: r.get(4)?,
         priority: r.get(5)?,
-        project_id: r.get(6)?,
-        project: r.get(7)?,
-        test_cmd: r.get(8)?,
-        dropped_reason: r.get(9)?,
-        last_commit_id: r.get(10)?,
-        plan_id: r.get(11)?,
-        machine_id: r.get(12)?,
-        uid: r.get(13)?,
-        hit_count: r.get(14)?,
+        project: r.get(6)?,
+        test_cmd: r.get(7)?,
+        dropped_reason: r.get(8)?,
+        last_commit_id: r.get(9)?,
+        plan_id: r.get(10)?,
+        machine_id: r.get(11)?,
+        uid: r.get(12)?,
+        hit_count: r.get(13)?,
         labels: Vec::new(),
         label_colors: std::collections::HashMap::new(),
         links: Vec::new(),
-        created_at: r.get(15)?,
-        updated_at: r.get(16)?,
+        created_at: r.get(14)?,
+        updated_at: r.get(15)?,
     })
 }
 
@@ -262,7 +260,7 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
 fn fts_search(
     conn: &Connection,
     q: &str,
-    project: Option<&str>,
+    _project: Option<&str>,
     label: Option<&str>,
     status: Option<Status>,
     priority: Option<i64>,
@@ -273,7 +271,6 @@ fn fts_search(
             db::ISSUE_SEARCH_LIKE,
             vec![
                 Box::new(like),
-                Box::new(project.map(|s| s.to_owned())),
                 Box::new(label.map(|s| s.to_owned())),
                 Box::new(status),
                 Box::new(priority),
@@ -284,7 +281,6 @@ fn fts_search(
             db::ISSUE_SEARCH,
             vec![
                 Box::new(fts_phrase(q)),
-                Box::new(project.map(|s| s.to_owned())),
                 Box::new(label.map(|s| s.to_owned())),
                 Box::new(status),
                 Box::new(priority),
@@ -300,7 +296,7 @@ fn fts_search(
 /// 类型化搜索：旁路 FTS，直接按 id（精确+前缀）/status/kind 查库（#260）。
 fn typed_search(
     conn: &Connection,
-    project: Option<&str>,
+    _project: Option<&str>,
     id_exact: Option<i64>,
     id_prefix: Option<String>,
     status: Option<Status>,
@@ -310,13 +306,7 @@ fn typed_search(
     let prefix_like = id_prefix.map(|p| format!("{}%", escape_like(&p)));
     let mut stmt = conn.prepare(db::ISSUE_SEARCH_TYPED)?;
     let rows = stmt.query_map(
-        rusqlite::params![
-            id_exact,
-            prefix_like,
-            status,
-            kind,
-            project.map(|s| s.to_string()),
-        ],
+        rusqlite::params![id_exact, prefix_like, status, kind],
         issue_from_row,
     )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
@@ -331,7 +321,7 @@ fn typed_search(
 fn issue_to_json(i: &Issue) -> serde_json::Value {
     serde_json::json!({
         "id": i.id, "title": i.title, "kind": i.kind, "status": i.status,
-        "priority": i.priority, "project_id": i.project_id, "project": i.project,
+        "priority": i.priority, "project": i.project,
         "test_cmd": i.test_cmd, "dropped_reason": i.dropped_reason,
         "last_commit_id": i.last_commit_id, "plan_id": i.plan_id,
         "hit_count": i.hit_count, "labels": i.labels, "links": i.links,

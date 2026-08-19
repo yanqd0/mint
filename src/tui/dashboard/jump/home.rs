@@ -45,7 +45,6 @@ mod tests {
             kind: Kind::Problem,
             status: Status::Open,
             priority: 3,
-            project_id: 1,
             project: Some("mint".into()),
             test_cmd: None,
             dropped_reason: None,

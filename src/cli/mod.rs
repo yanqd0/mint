@@ -512,7 +512,7 @@ impl Cli {
             Commands::Project(p) => project::dispatch(&conn, &self.data_dir(), &p.command),
             Commands::Milestone(r) => milestone::dispatch(&conn, &project, &r.command),
             Commands::Plan(p) => plan::dispatch(&conn, &project, &p.command),
-            Commands::Delete(d) => delete::dispatch(&conn, &d.command),
+            Commands::Delete(d) => delete::dispatch(&conn, &self.data_dir(), &d.command),
             #[cfg(feature = "tui")]
             Commands::Tui => crate::tui::run_dashboard(&conn, &project),
             Commands::Export(a) => export::cmd_export(&conn, a),

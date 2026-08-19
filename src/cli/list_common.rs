@@ -296,7 +296,6 @@ mod tests {
             kind: Kind::Problem,
             status,
             priority: 2,
-            project_id: 1,
             project: Some("mint".into()),
             test_cmd: None,
             dropped_reason: None,

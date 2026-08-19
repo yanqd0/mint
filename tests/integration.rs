@@ -20,10 +20,10 @@ fn setup() -> (rusqlite::Connection, TempDir, i64) {
 }
 
 /// add 一个 issue，返回 id。
-fn add_issue(conn: &rusqlite::Connection, pid: i64, title: &str) -> i64 {
+fn add_issue(conn: &rusqlite::Connection, _pid: i64, title: &str) -> i64 {
     conn.execute(
-        "INSERT INTO issues (title, kind, status, project_id) VALUES (?1, 'problem', 'open', ?2)",
-        rusqlite::params![title, pid],
+        "INSERT INTO issues (title, kind, status) VALUES (?1, 'problem', 'open')",
+        rusqlite::params![title],
     )
     .unwrap();
     conn.last_insert_rowid()
@@ -203,7 +203,7 @@ fn migration_is_idempotent() {
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
 }
 
 /// link 数据流：create → links_for → remove → 表空。
