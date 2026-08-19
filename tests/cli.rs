@@ -3238,3 +3238,109 @@ fn st_tui_list_title_shows_size() {
     );
     assert!(text.contains("alpha-one"), "缺 issue 行: {text}");
 }
+
+// ── sync（git+SQL 同步，plan #84）────────────────────────────
+
+/// export --format sql：确定性快照（schema IF NOT EXISTS + 数据 INSERT + 主键升序）。
+#[test]
+fn st_export_sql_snapshot() {
+    let (_dir, db) = empty_db();
+    add_issue(&db, "b");
+    add_issue(&db, "a");
+    let out = mint(&db)
+        .args(["export", "--format", "sql"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(
+        text.contains("CREATE TABLE IF NOT EXISTS issues"),
+        "缺 schema: {text}"
+    );
+    assert!(text.contains("INSERT INTO issues"), "缺数据段");
+    assert!(
+        text.find("'b'").unwrap() < text.find("'a'").unwrap(),
+        "主键升序：b(id=1) 应在 a(id=2) 前"
+    );
+}
+
+/// import：A 库快照导入 B 库合并（双机 MINT_MACHINE_ID 区分）。
+#[test]
+fn st_import_merge_dual_machine() {
+    let (_da, a) = empty_db();
+    mint(&a)
+        .env("MINT_MACHINE_ID", "mach-a")
+        .args(["issue", "add", "A问题", "--json"])
+        .assert()
+        .success();
+    let out = mint(&a)
+        .args(["export", "--format", "sql"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let snap = _da.path().join("a.sql");
+    std::fs::write(&snap, &out).unwrap();
+
+    let (_db, b) = empty_db();
+    mint(&b)
+        .env("MINT_MACHINE_ID", "mach-b")
+        .args(["issue", "add", "B问题", "--json"])
+        .assert()
+        .success();
+    mint(&b)
+        .args(["import", snap.to_str().unwrap()])
+        .assert()
+        .success();
+    let v = run_json(&b, &["list", "--json"]);
+    assert_eq!(
+        v["items"].as_array().unwrap().len(),
+        2,
+        "B 应含 A+B 两机数据"
+    );
+}
+
+/// sync push/pull：临时 bare remote 双机同步。
+#[test]
+fn st_sync_push_pull_dual() {
+    let rdir = tempfile::TempDir::new().unwrap();
+    let remote = rdir.path().join("remote.git");
+    std::process::Command::new("git")
+        .args(["init", "--bare"])
+        .arg(&remote)
+        .output()
+        .unwrap();
+
+    let (_da, a) = empty_db();
+    mint(&a)
+        .env("MINT_MACHINE_ID", "mach-a")
+        .args(["issue", "add", "A问题"])
+        .assert()
+        .success();
+    mint(&a)
+        .env("MINT_MACHINE_ID", "mach-a")
+        .args(["sync", "push", "--remote", remote.to_str().unwrap()])
+        .assert()
+        .success();
+
+    let (_db, b) = empty_db();
+    mint(&b)
+        .env("MINT_MACHINE_ID", "mach-b")
+        .args(["issue", "add", "B问题"])
+        .assert()
+        .success();
+    mint(&b)
+        .env("MINT_MACHINE_ID", "mach-b")
+        .args(["sync", "pull", "--remote", remote.to_str().unwrap()])
+        .assert()
+        .success();
+    let v = run_json(&b, &["list", "--json"]);
+    assert_eq!(
+        v["items"].as_array().unwrap().len(),
+        2,
+        "B pull 后应含 A 数据"
+    );
+}
