@@ -429,9 +429,12 @@ pub struct DeleteLabelArgs {
 
 #[derive(clap::Args)]
 pub struct ExportArgs {
-    /// Output format: json (default) or tsv
+    /// Output format: json (default), tsv, or sql (sync snapshot)
     #[arg(long, value_enum, default_value = "json")]
     pub format: ExportFormat,
+    /// Write SQL snapshot to this file (sql format only; default stdout)
+    #[arg(long)]
+    pub out: Option<std::path::PathBuf>,
 }
 
 /// export 输出格式。
@@ -439,6 +442,7 @@ pub struct ExportArgs {
 pub enum ExportFormat {
     Json,
     Tsv,
+    Sql,
 }
 
 // ── Cli::run ──────────────────────────────────────────────────────

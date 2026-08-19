@@ -7,6 +7,7 @@ use crate::error::Error;
 pub use sql::*;
 
 pub mod sql;
+pub mod sync;
 
 /// 有序迁移：每项 (目标版本, 迁移 SQL)。从当前 user_version 逐级升到最新。
 /// 每个迁移 SQL 自带 BEGIN/COMMIT，末尾 `PRAGMA user_version = <目标版本>`，失败整体回滚。

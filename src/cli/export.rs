@@ -12,6 +12,10 @@ use crate::output;
 
 /// 执行 export：全量 issues（含 labels/links）+ plans + milestones + labels + milestone 直属挂载。
 pub fn cmd_export(conn: &Connection, a: &ExportArgs) -> Result<(), Error> {
+    // SQL 快照：确定性导出整个库，短路逻辑 export 查询（不占内存聚合）。
+    if let ExportFormat::Sql = a.format {
+        return print_sql(conn, a);
+    }
     // 全量 issue（含终态）：复用 issue_from_row + 批量聚合 labels/links。
     let mut stmt = conn.prepare(crate::db::ISSUE_LIST)?;
     // ?1=all(1), ?2..?5 过滤全关（NULL）→ 无过滤全量。
@@ -41,7 +45,19 @@ pub fn cmd_export(conn: &Connection, a: &ExportArgs) -> Result<(), Error> {
     match a.format {
         ExportFormat::Json => print_json(&issues, &plans, &milestones, &labels, &milestone_directs),
         ExportFormat::Tsv => print_tsv(&issues, &plans, &milestones, &labels, &milestone_directs),
+        ExportFormat::Sql => unreachable!("Sql 已短路"),
     }?;
+    Ok(())
+}
+
+/// SQL 确定性快照导出（git+SQL 同步用；--out 写文件，否则 stdout）。
+fn print_sql(conn: &Connection, a: &ExportArgs) -> Result<(), Error> {
+    let text = crate::db::sync::export_sql(conn)?;
+    if let Some(path) = &a.out {
+        std::fs::write(path, text)?;
+    } else {
+        println!("{text}");
+    }
     Ok(())
 }
 
