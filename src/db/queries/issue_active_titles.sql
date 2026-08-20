@@ -4,7 +4,8 @@ SELECT
     id,
     title,
     kind,
-    status
+    status,
+    plan_id
 FROM issues
 WHERE status IN ('open', 'planned', 'dev', 'test')
 ORDER BY id;

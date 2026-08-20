@@ -62,7 +62,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
    - **挂入即排期锁定**：对该 plan 下全部 open issue `mint plan plan <plan_id>`（或逐个 `mint issue state plan <id>`；宿主退出 plan 模式、进入执行/auto 模式时统一 planned，plan 的 issue 不留 open）
 2. **每完成一个逻辑变更（对应一次或多次 commit）**：
    - `mint issue state plan <id>`（排入计划；同 plan 批量排期见 step 1「挂入即排期锁定」）
-   - **改码前门禁（强制）**：修改某 issue 对应代码前必须先 `mint issue state start <id>`（planned → dev）；改动期间该 issue 必须处于 `dev`（open/planned 直接改码 = 流程违反）
+   - **改码前门禁（强制）**：修改某 issue 对应代码前必须先 `mint issue state start <id>`（planned → dev）；改动期间该 issue 必须处于 `dev`（open/planned 直接改码 = 流程违反）。**自查**：每个 phase 改码前确认该 issue 已 `start`（dev）；实现后 `mint list --plan <id>` 复查各 issue 状态与阶段匹配。**补救**：若已改码才发现未 start，先 `state start` 再 `state commit`（避免 invalid transition）
    - 修改代码 → **git commit 后立即** `mint issue state commit <id> --sha $(git rev-parse --short=7 HEAD)`（前 7 位，dev → test）
    - 同一 issue 有多个 commit 时，**每次 commit 都执行一次 `state commit`**（只记最后一个 SHA，但流程上每次都要走）
 3. **统一测试模式**（同 plan 多 issue，避免逐个 close 致中间态瞬移）：
@@ -84,6 +84,8 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
 4. **声明接管**：后续 session 直接描述意图即可，skill 自动走 mint 流程。
 
 ## 常用命令
+
+> **多 db 路径**：缺省 `$XDG_DATA_HOME/mint/projects/<project>/<machine_id>.db`（每项目独立库，`--project`/cwd 定位）；`--db`/`MINT_DB_PATH` 显式时为**单文件模式**（不做多项目目录）。查当前项目 `mint project show 1`。
 
 ```bash
 # 记录 issue（去重内置）

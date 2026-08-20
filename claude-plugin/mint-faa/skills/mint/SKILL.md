@@ -62,7 +62,7 @@ Before any flow, determine the current host agent and `Read` **only** the matchi
    - **Schedule on attach**: `mint plan plan <plan_id>` for all open issues of that plan (or `mint issue state plan <id>` one by one; when the host leaves plan mode and enters execution/auto mode, all issues are uniformly `planned` — no open issues left under a plan)
 2. **For each logical change (one or more commits)**:
    - `mint issue state plan <id>` (schedule; for a whole plan see step 1 "schedule on attach")
-   - **Pre-edit gate (mandatory)**: before editing code for an issue, you MUST `mint issue state start <id>` (planned → dev); the issue must stay `dev` while its code is being changed (editing while open/planned = workflow violation)
+   - **Pre-edit gate (mandatory)**: before editing code for an issue, you MUST `mint issue state start <id>` (planned → dev); the issue must stay `dev` while its code is being changed (editing while open/planned = workflow violation). **Self-check**: confirm the issue is `start`ed (dev) before editing; after the phase, `mint list --plan <id>` to verify statuses match. **Remedy**: if you already edited without `start`, run `state start` first then `state commit` (avoid invalid transition)
    - Edit code → **immediately after git commit**, `mint issue state commit <id> --sha $(git rev-parse --short=7 HEAD)` (first 7 chars, dev → test)
    - When an issue has multiple commits, run `state commit` for EACH commit (only the last SHA is stored, but the workflow requires each one)
 3. **Unified testing** (multiple issues in the same plan; avoid closing one-by-one which makes intermediate states invisible):
@@ -84,6 +84,8 @@ When called without `<description>`, enters takeover mode to replace initial thi
 4. **Declare takeover**: Subsequent sessions can describe intent directly; the skill auto-follows the mint flow.
 
 ## Common Commands
+
+> **Multi-db paths**: default `$XDG_DATA_HOME/mint/projects/<project>/<machine_id>.db` (one db per project, located by `--project`/cwd); explicit `--db`/`MINT_DB_PATH` = **single-file mode** (no per-project directory). Inspect current project: `mint project show 1`.
 
 ```bash
 # Record issue (built-in dedup)

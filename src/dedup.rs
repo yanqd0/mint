@@ -11,12 +11,14 @@ use crate::models::{Kind, Status};
 pub const DEDUP_THRESHOLD: f64 = 0.8;
 
 /// 查重候选：同项目活跃 issue 的标识与标题（find_duplicate 的输入项）。
+/// `plan_id` 用于跨 plan 保护：已挂 plan 的候选不参与合并（不同 plan 允许同名）。
 #[derive(Debug, Clone)]
 pub struct Candidate {
     pub id: i64,
     pub title: String,
     pub kind: Kind,
     pub status: Status,
+    pub plan_id: Option<i64>,
 }
 
 /// 标题归一化：trim + 小写 + 连续空白折叠为单空格。
@@ -95,6 +97,7 @@ mod tests {
             title: title.into(),
             kind: Kind::Problem,
             status: Status::Open,
+            plan_id: None,
         }
     }
 

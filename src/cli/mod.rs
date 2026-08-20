@@ -295,7 +295,7 @@ pub struct LabelSetArgs {
 #[derive(Parser)]
 #[command(name = "mint", version, about = "Minimal Issue & Needs Tracker")]
 pub struct Cli {
-    /// Override DB path (default: $XDG_DATA_HOME/mint/mint.db)
+    /// Override DB path (default: multi-db $XDG_DATA_HOME/mint/projects/<project>/<machine_id>.db; set to use a single-file db)
     #[arg(long, env = "MINT_DB_PATH")]
     db: Option<PathBuf>,
 
