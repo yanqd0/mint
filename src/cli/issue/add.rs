@@ -50,18 +50,16 @@ pub fn cmd_add(
     project::ensure(&tx, project_name, cwd)?;
 
     let cands = load_dup_candidates(&tx)?;
-    if let Some(hit) = dedup::find_duplicate(&a.title, &cands) {
-        if hit.plan_id.is_none() {
-            tx.execute(db::ISSUE_BUMP_HIT_COUNT, rusqlite::params![hit.id])?;
-            let specs = label::parse_specs(&a.label);
-            if !specs.is_empty() {
-                label::attach(&tx, hit.id, &specs)?;
-            }
-            tx.commit()?;
-            print_merge(a, project_name, hit)?;
-            return Ok(());
+    if let Some(hit) = dedup::find_duplicate(&a.title, &cands).filter(|h| h.plan_id.is_none()) {
+        // 仅未挂 plan 的候选合并；已挂 plan（不同 plan 同名）跳过，防规划阶段跨 plan 误合并。
+        tx.execute(db::ISSUE_BUMP_HIT_COUNT, rusqlite::params![hit.id])?;
+        let specs = label::parse_specs(&a.label);
+        if !specs.is_empty() {
+            label::attach(&tx, hit.id, &specs)?;
         }
-        // 候选已挂 plan：不同 plan 允许同名，不合并（继续新建，防规划阶段跨 plan 误合并）。
+        tx.commit()?;
+        print_merge(a, project_name, hit)?;
+        return Ok(());
     }
 
     tx.execute(
