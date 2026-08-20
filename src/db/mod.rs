@@ -1,6 +1,6 @@
 //! SQLite 连接与迁移。
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::error::Error;
 
@@ -76,9 +76,50 @@ pub fn machine_id() -> String {
     }) {
         return mid.trim().to_string();
     }
+    // 持久化 machine_id.json：已存在则复用（hostname 变化不再重算，避免同项目 db 碎片）。
+    let path = machine_info_path();
+    if let Ok(text) = std::fs::read_to_string(&path) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
+            if let Some(id) = v.get("machine_id").and_then(serde_json::Value::as_str) {
+                return id.to_string();
+            }
+        }
+    }
+    // 首次：基于 hostname+user 生成，写 json（含可简单获取的机器信息，参考用），后续读文件。
     let hostname = whoami::fallible::hostname().unwrap_or_default();
-    let s = format!("{hostname}|{}", whoami::username());
-    format!("mach-{:08x}", fnv1a(&s) & 0xffff_ffff)
+    let username = whoami::username();
+    let id = format!("mach-{:08x}", fnv1a(&format!("{hostname}|{username}")) & 0xffff_ffff);
+    persist_machine_info(&id, &hostname, &username);
+    id
+}
+
+/// machine_id.json 路径（数据目录下，与 db 同级；零新依赖，serde_json 已有）。
+fn machine_info_path() -> PathBuf {
+    let dir = std::env::var("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| PathBuf::from(h).join(".local/share"))
+                .unwrap_or_else(|_| PathBuf::from("."))
+        })
+        .join("mint");
+    dir.join("machine_id.json")
+}
+
+/// 首次生成 machine_id 时持久化：写 JSON（machine_id + 机器信息，供参考；仅首次）。
+fn persist_machine_info(id: &str, hostname: &str, username: &str) {
+    let path = machine_info_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let info = serde_json::json!({
+        "machine_id": id,
+        "hostname": hostname,
+        "username": username,
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+    });
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(&info).unwrap_or_default());
 }
 
 /// FNV-1a 64 位哈希（稳定：不随 Rust 工具链/release 变化，作持久身份键用）。
