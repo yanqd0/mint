@@ -81,7 +81,7 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
             row
         })
         .collect();
-    // size 取填充空行前的实际行数。
+    // size 取实际行数。
     let size = rows.len();
     let footer = footer_line(m, "j/k ↑↓ row · ←/→ page · 1/2/3 tab · / search · q quit");
     let title = format!(
@@ -94,9 +94,20 @@ pub fn draw_milestones_panel(frame: &mut Frame, m: &mut DashboardModel, area: Re
             m.visible_milestones().len(),
         )
     );
-    let mut rows = rows;
     if rows.is_empty() {
-        rows.push(Row::new(vec![Cell::from("(no milestones)")]));
+        // 空列表：block + 居中提示。不复用 Table 占位行——占位 Cell 会落在窄列被截断
+        //（曾显示裸 `(`），且 Legacy flex 下 Fill 列空行宽度不稳，显式空状态更可靠。
+        let block = Block::bordered()
+            .title(title)
+            .padding(Padding::horizontal(1));
+        frame.render_widget(
+            Paragraph::new(Line::from("(no milestones)"))
+                .block(block)
+                .centered(),
+            chunks[0],
+        );
+        frame.render_widget(Paragraph::new(footer), chunks[1]);
+        return;
     }
     let table = Table::new(rows, widths)
         .header(header)
@@ -142,6 +153,25 @@ mod tests {
             cell_fg(terminal.backend().buffer(), "running"),
             Some(Color::Yellow),
             "STATUS 列 running 应按容器状态色着色"
+        );
+    }
+
+    #[test]
+    fn empty_milestones_placeholder_not_truncated() {
+        let mut m = model_full(vec![], vec![], vec![]);
+        m.view = View::Milestones;
+        let mut terminal = test_backend(60, 8);
+        terminal
+            .draw(|f| draw_milestones_panel(f, &mut m, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(
+            text.contains("(no milestones)"),
+            "占位文本应完整显示: {text}"
+        );
+        assert!(
+            !text.lines().any(|l| l.trim_end() == "("),
+            "不应出现裸 `(`: {text}"
         );
     }
 

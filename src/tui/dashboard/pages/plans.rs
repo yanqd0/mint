@@ -47,7 +47,7 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
     ])
     .style(Style::new().add_modifier(Modifier::BOLD));
 
-    let mut rows: Vec<Row> = m
+    let rows: Vec<Row> = m
         .page_plans()
         .iter()
         .enumerate()
@@ -89,12 +89,8 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
             row
         })
         .collect();
-    // size 取填充空行前的实际行数（空列表时 size 0/N，不把占位行计入）。
+    // size 取实际行数。
     let size = rows.len();
-    if rows.is_empty() {
-        rows.push(Row::new(vec![Cell::from("(no plans)")]));
-    }
-
     let footer = footer_line(m, "j/k ↑↓ plan · ←/→ page · 1/2/3 tab · / search · q quit");
     let title = format!(
         "─{}",
@@ -106,6 +102,21 @@ pub fn draw_plans_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) {
             m.visible_plans().len(),
         )
     );
+    if rows.is_empty() {
+        // 空列表：block + 居中提示。不复用 Table 占位行——占位 Cell 会落在窄列被截断
+        //（曾显示裸 `(`），且 Legacy flex 下 Fill 列空行宽度不稳，显式空状态更可靠。
+        let block = Block::bordered()
+            .title(title)
+            .padding(Padding::horizontal(1));
+        frame.render_widget(
+            Paragraph::new(Line::from("(no plans)"))
+                .block(block)
+                .centered(),
+            chunks[0],
+        );
+        frame.render_widget(Paragraph::new(footer), chunks[1]);
+        return;
+    }
     let table = Table::new(rows, widths)
         .header(header)
         .flex(Flex::Legacy) // Min/Max 列按内容预估，Fill(TITLE) 拿剩余（默认 Start 会拉伸 Min 列）
@@ -160,6 +171,22 @@ mod tests {
             cell_fg(terminal.backend().buffer(), "running"),
             Some(Color::Yellow),
             "STATUS 列 running 应按容器状态色着色"
+        );
+    }
+
+    #[test]
+    fn empty_plans_placeholder_not_truncated() {
+        let mut m = model_full(vec![], vec![], vec![]);
+        m.view = View::Plans;
+        let mut terminal = test_backend(60, 8);
+        terminal
+            .draw(|f| draw_plans_panel(f, &mut m, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        assert!(text.contains("(no plans)"), "占位文本应完整显示: {text}");
+        assert!(
+            !text.lines().any(|l| l.trim_end() == "("),
+            "不应出现裸 `(`: {text}"
         );
     }
 

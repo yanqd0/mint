@@ -173,7 +173,15 @@ fn export_table(
 /// 按 project 导出自包含快照（migrate_split 用）：schema 全量 + 该项目数据过滤。
 /// 依赖序满足外键（machines→projects→labels→milestones→plans→issues→关联表）；
 /// machines 全量导出（机器级元数据每项目 db 保留一份；也是临时库 FK 检查的必要前置）。
-pub fn export_sql_for_project(conn: &Connection, project_id: i64) -> Result<String, Error> {
+///
+/// `include_orphans`：主项目迁移时传 true——把**无任何引用**的孤儿 milestone/plan
+/// （及孤儿 plan 挂载的 milestone）一并导出，避免全局规划容器（如 0.1.0/1.0.0
+/// 里程碑、尚无 issue 的 plan）在拆分中静默丢失。
+pub fn export_sql_for_project(
+    conn: &Connection,
+    project_id: i64,
+    include_orphans: bool,
+) -> Result<String, Error> {
     let mut out = String::new();
     out.push_str(&format!(
         "-- mint sync snapshot v1 ({}) for project {project_id}\n",
@@ -202,25 +210,30 @@ pub fn export_sql_for_project(conn: &Connection, project_id: i64) -> Result<Stri
         )),
         &[],
     )?;
-    export_table(
-        conn,
-        &mut out,
-        "milestones",
-        Some(&format!(
-            "id IN (SELECT milestone_id FROM plans WHERE id IN (SELECT plan_id FROM issues WHERE project_id = {pid} AND plan_id IS NOT NULL)) \
-             OR id IN (SELECT milestone_id FROM milestone_direct_issues WHERE issue_id IN (SELECT id FROM issues WHERE project_id = {pid}))"
-        )),
-        &[],
-    )?;
-    export_table(
-        conn,
-        &mut out,
-        "plans",
-        Some(&format!(
-            "id IN (SELECT plan_id FROM issues WHERE project_id = {pid} AND plan_id IS NOT NULL)"
-        )),
-        &[],
-    )?;
+    // milestones/plans 的"被本项目 issue 引用"基准条件。
+    let ref_milestones = format!(
+        "id IN (SELECT milestone_id FROM plans WHERE id IN (SELECT plan_id FROM issues WHERE project_id = {pid} AND plan_id IS NOT NULL)) \
+         OR id IN (SELECT milestone_id FROM milestone_direct_issues WHERE issue_id IN (SELECT id FROM issues WHERE project_id = {pid}))"
+    );
+    let ref_plans = format!(
+        "id IN (SELECT plan_id FROM issues WHERE project_id = {pid} AND plan_id IS NOT NULL)"
+    );
+    // 孤儿容器：无任何引用（孤儿 plan 挂载的 milestone 一并算孤儿，保证外键自洽）。
+    let orphan_milestones = "id IN (SELECT milestone_id FROM plans WHERE id NOT IN (SELECT plan_id FROM issues WHERE plan_id IS NOT NULL) AND milestone_id IS NOT NULL) \
+        OR (id NOT IN (SELECT DISTINCT milestone_id FROM plans) AND id NOT IN (SELECT DISTINCT milestone_id FROM milestone_direct_issues))";
+    let orphan_plans = "id NOT IN (SELECT plan_id FROM issues WHERE plan_id IS NOT NULL)";
+    let milestones_where = if include_orphans {
+        format!("({ref_milestones}) OR ({orphan_milestones})")
+    } else {
+        ref_milestones
+    };
+    let plans_where = if include_orphans {
+        format!("({ref_plans}) OR ({orphan_plans})")
+    } else {
+        ref_plans
+    };
+    export_table(conn, &mut out, "milestones", Some(&milestones_where), &[])?;
+    export_table(conn, &mut out, "plans", Some(&plans_where), &[])?;
     export_table(
         conn,
         &mut out,
