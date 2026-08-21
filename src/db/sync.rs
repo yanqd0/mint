@@ -8,7 +8,8 @@ use rusqlite::{Connection, types::Value};
 use crate::error::Error;
 
 /// 参与导出的数据表（FTS 虚表由触发器维护，跳过）。
-const DATA_TABLES: &[&str] = &[
+/// pub(crate)：`sync_import` 的导入语句白名单校验复用同一集合（#394）。
+pub(crate) const DATA_TABLES: &[&str] = &[
     "machines",
     "projects",
     "labels",
@@ -19,6 +20,13 @@ const DATA_TABLES: &[&str] = &[
     "issue_links",
     "milestone_direct_issues",
 ];
+
+/// 判断快照是否为当前格式（首行 v1 头部标记）。pull 导入前校验，旧/异常快照跳过而非卡死（#400）。
+pub fn is_snapshot_v1(sql: &str) -> bool {
+    sql.lines()
+        .next()
+        .is_some_and(|l| l.starts_with("-- mint sync snapshot v1"))
+}
 
 /// 导出确定性 SQL 快照文本（标准 SQL，可直接被 sqlite3 执行）。
 pub fn export_sql(conn: &Connection) -> Result<String, Error> {

@@ -23,6 +23,25 @@ pub fn detect_name(cwd: &Path, explicit: Option<&str>) -> String {
         .unwrap_or_else(|| DEFAULT_PROJECT.to_string())
 }
 
+/// 校验 project 名可安全用作文件系统路径段 / git 分支名。
+/// 拒绝：空、`.`、`..`、路径分隔符（/ 反斜杠）、控制字符。
+/// 用于 `resolve_project`/`create`/`delete_multi` 等一切把名字拼入路径的入口。
+pub fn validate_project_name(name: &str) -> Result<(), Error> {
+    let t = name.trim();
+    if t.is_empty() {
+        return Err(Error::Other("project name must not be empty".to_string()));
+    }
+    if t == "." || t == ".." {
+        return Err(Error::Other(format!("invalid project name: '{t}'")));
+    }
+    if t.chars().any(|c| c == '/' || c == '\\' || c.is_control()) {
+        return Err(Error::Other(format!(
+            "invalid project name: '{t}' (must not contain path separators or control characters)"
+        )));
+    }
+    Ok(())
+}
+
 /// 从 `git remote get-url origin` 提取库名（末段去 .git 后缀）。
 fn git_repo_name(cwd: &Path) -> Option<String> {
     let url = git_repo_url(cwd)?;
@@ -198,22 +217,51 @@ pub fn issue_count(conn: &Connection, _id: i64) -> Result<i64, Error> {
 }
 
 /// 删除 project（多 db 架构）：检查 `projects/<name>/` 项目库的 issue 数，无 issue 才删目录。
+///
+/// 安全约束：名字先 `validate_project_name`；`canonicalize` 后断言落在 `projects/` 内
+/// （防 `..` 逃逸与 symlink 指向外部）；open/查询失败一律传播错误（不按 0 issue 放行）；
+/// issue 计数扫目录内**全部** `<machine>.db`（多 db 同步后可能有多台机器的库，防漏删他机数据）。
 pub fn delete_multi(data_dir: &Path, name: &str) -> Result<(), Error> {
-    let proj_dir = data_dir.join("projects").join(name);
+    validate_project_name(name)?;
+    let projects_root = data_dir.join("projects");
+    let proj_dir = projects_root.join(name);
     if !proj_dir.is_dir() {
         return Err(Error::Other(format!("project '{name}' not found")));
     }
-    // 打开项目 db 查 issue 数（有 issue 拒绝，防误删）。
-    let db_path = proj_dir.join(format!("{}.db", crate::db::machine_id()));
-    if let Ok(conn) = Connection::open(&db_path) {
+    let root_canon = std::fs::canonicalize(&projects_root)?;
+    let canon = std::fs::canonicalize(&proj_dir)?;
+    if !canon.starts_with(&root_canon) {
+        return Err(Error::Other(format!(
+            "project '{name}' resolves outside projects/; refusing to delete"
+        )));
+    }
+    let mut total: i64 = 0;
+    for entry in std::fs::read_dir(&proj_dir)? {
+        let e = entry?;
+        let is_db = e.path().extension().and_then(|x| x.to_str()) == Some("db");
+        if !is_db {
+            continue;
+        }
+        let conn = Connection::open(e.path()).map_err(|err| {
+            Error::Other(format!(
+                "cannot open project db '{}': {err}",
+                e.path().display()
+            ))
+        })?;
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM issues", [], |r| r.get(0))
-            .unwrap_or(0);
-        if count > 0 {
-            return Err(Error::Other(format!(
-                "project '{name}' has {count} issue(s); reassign or delete them first"
-            )));
-        }
+            .map_err(|err| {
+                Error::Other(format!(
+                    "cannot read project db '{}': {err}",
+                    e.path().display()
+                ))
+            })?;
+        total += count;
+    }
+    if total > 0 {
+        return Err(Error::Other(format!(
+            "project '{name}' has {total} issue(s) in its database(s); reassign or delete them first"
+        )));
     }
     std::fs::remove_dir_all(&proj_dir)?;
     Ok(())
@@ -437,5 +485,50 @@ mod tests {
             vec!["/path/with,comma".to_string()],
             "含逗号值应只存一次: {stored}"
         );
+    }
+
+    /// 项目名校验：拒绝路径穿越/分隔符/控制字符，接受正常名（#393）。
+    #[test]
+    fn validate_project_name_rejects_traversal() {
+        for bad in ["..", ".", "", "  ", "a/b", "a\\b", "a\nb", "a\tb"] {
+            assert!(validate_project_name(bad).is_err(), "应拒绝: {bad:?}");
+        }
+        for good in ["mint", "my project", "mint-faa", "a.b"] {
+            assert!(validate_project_name(good).is_ok(), "应接受: {good:?}");
+        }
+    }
+
+    /// delete_multi：名字 `..` 被拒，不误删数据目录（#393）。
+    #[test]
+    fn delete_multi_rejects_traversal_name() {
+        let dir = TempDir::new().unwrap();
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(data.join("projects/mint")).unwrap();
+        let err = delete_multi(&data, "..").unwrap_err();
+        assert!(err.to_string().contains("invalid project name"), "{err}");
+        assert!(data.join("projects/mint").is_dir(), "不应删除任何目录");
+    }
+
+    /// delete_multi：空项目（0 issue）可删；有 issue 拒绝（#393）。
+    #[test]
+    fn delete_multi_guards_issue_count() {
+        let dir = TempDir::new().unwrap();
+        let data = dir.path().join("data");
+        let proj = data.join("projects/p");
+        std::fs::create_dir_all(&proj).unwrap();
+        // 空库：可删。
+        crate::db::open(&proj.join("mach-a.db")).unwrap();
+        delete_multi(&data, "p").unwrap();
+        assert!(!proj.exists(), "空项目应被删除");
+
+        // 有 issue：拒绝删除。
+        std::fs::create_dir_all(&proj).unwrap();
+        let conn = crate::db::open(&proj.join("mach-a.db")).unwrap();
+        conn.execute("INSERT INTO issues (title) VALUES ('x')", [])
+            .unwrap();
+        drop(conn);
+        let err = delete_multi(&data, "p").unwrap_err();
+        assert!(err.to_string().contains("1 issue"), "{err}");
+        assert!(proj.exists(), "非空项目不应被删");
     }
 }

@@ -44,7 +44,8 @@ fn sync_dir(conn: &Connection) -> Result<PathBuf, Error> {
 }
 
 /// push 当前项目：导出本机快照 → snapshots/<machine_id>.sql → git add/commit/push。
-/// `branch` 为 Some 时 push 到 `origin <branch>`（--all 每项目独立分支）。
+/// 分支统一走 `project/<safe>`（`branch` 为 --all 传的已映射分支；None 时从 db 路径推导），
+/// 与默认分支区分且 --all/非 --all 一致（#398）。快照无变化不产生空提交（#402）。
 fn push(conn: &Connection, a: &SyncPushArgs, branch: Option<&str>) -> Result<(), Error> {
     let dir = sync_dir(conn)?;
     ensure_git_repo(&dir, a.remote.as_deref())?;
@@ -55,21 +56,24 @@ fn push(conn: &Connection, a: &SyncPushArgs, branch: Option<&str>) -> Result<(),
     let sql = crate::db::sync::export_sql(conn)?;
     std::fs::write(&snap, sql)?;
     git(&dir, &["add", "-A"])?;
-    git(&dir, &["commit", "-m", "sync snapshot", "--allow-empty"])?;
-    if let Some(b) = branch {
-        git(&dir, &["push", "origin", &format!("HEAD:{b}")])?;
-    } else {
-        git(&dir, &["push", "origin", "HEAD"])?;
+    // 快照内容未变则不 commit（--allow-empty 会堆无意义空提交）。
+    if has_changes(&dir)? {
+        git(&dir, &["commit", "-m", "sync snapshot"])?;
     }
+    let b = branch
+        .map(str::to_string)
+        .or_else(|| current_branch(conn))
+        .ok_or_else(|| Error::Other("no db path".to_string()))?;
+    git(&dir, &["push", "origin", &format!("HEAD:{b}")])?;
     println!("pushed {}", snap.display());
     Ok(())
 }
 
-/// push --all：遍历 projects/ 目录，每项目独立 push（项目名分支）。
+/// push --all：遍历 projects/ 目录，每项目独立 push（git-safe 项目分支）。
 fn push_all(data_dir: &Path, a: &SyncPushArgs) -> Result<(), Error> {
     let mut pushed = 0;
     for (name, conn) in each_project_db(data_dir)? {
-        push(&conn, a, Some(&name))?;
+        push(&conn, a, Some(&git_branch_for(&name)))?;
         pushed += 1;
     }
     println!("pushed {pushed} project(s)");
@@ -77,17 +81,17 @@ fn push_all(data_dir: &Path, a: &SyncPushArgs) -> Result<(), Error> {
 }
 
 /// pull 当前项目：git pull → 读取 snapshots/*.sql（非本机）逐个 import 合并。
-/// `branch` 为 Some 时从 `origin <branch>` 拉（--all 每项目独立分支）。
+/// 分支统一走 `project/<safe>`（#398）；坏/旧快照 warn 跳过而非整体失败（#400）。
 fn pull(conn: &mut Connection, a: &SyncPullArgs, branch: Option<&str>) -> Result<(), Error> {
     let dir = sync_dir(conn)?;
     ensure_git_repo(&dir, a.remote.as_deref())?;
-    if let Some(b) = branch {
-        git(&dir, &["pull", "origin", b, "--allow-unrelated-histories"])?;
-    } else {
-        git(
+    let b = branch.map(str::to_string).or_else(|| current_branch(conn));
+    match b {
+        Some(b) => git(&dir, &["pull", "origin", &b, "--allow-unrelated-histories"])?,
+        None => git(
             &dir,
             &["pull", "origin", "HEAD", "--allow-unrelated-histories"],
-        )?;
+        )?,
     }
     let mut report = MergeReport::default();
     let snaps_dir = dir.join("snapshots");
@@ -102,11 +106,27 @@ fn pull(conn: &mut Connection, a: &SyncPullArgs, branch: Option<&str>) -> Result
             if name.to_str().is_some_and(|n| n.starts_with(&mine)) {
                 continue; // 本机快照，跳过
             }
-            let sql = std::fs::read_to_string(&path)?;
-            let r = crate::db::sync_import::import_sql(conn, &sql)?;
-            report.inserted += r.inserted;
-            report.updated += r.updated;
-            report.skipped += r.skipped;
+            let sql = match std::fs::read_to_string(&path) {
+                Ok(s) => s,
+                Err(err) => {
+                    eprintln!("mint: warning: skip {}: {err}", path.display());
+                    continue;
+                }
+            };
+            if !crate::db::sync::is_snapshot_v1(&sql) {
+                eprintln!("mint: warning: skip {}: not a v1 snapshot", path.display());
+                continue;
+            }
+            match crate::db::sync_import::import_sql(conn, &sql) {
+                Ok(r) => {
+                    report.inserted += r.inserted;
+                    report.updated += r.updated;
+                    report.skipped += r.skipped;
+                }
+                Err(err) => {
+                    eprintln!("mint: warning: skip {}: {err}", path.display());
+                }
+            }
         }
     }
     println!(
@@ -116,11 +136,64 @@ fn pull(conn: &mut Connection, a: &SyncPullArgs, branch: Option<&str>) -> Result
     Ok(())
 }
 
-/// pull --all：遍历 projects/，每项目独立 pull（项目名分支）。
+/// 项目名 → git-safe 分支名：ASCII 特殊字符（空格/`~^:?*[\` 等）替换为 '-'，
+/// 非 ASCII（中文/emoji）保留（git ref 支持 UTF-8，且保留可读性与唯一性）。
+/// trim 首尾特殊字符，空兜底 "project"。统一 `project/<safe>` 前缀（#398）。
+fn git_branch_for(name: &str) -> String {
+    let safe: String = name
+        .chars()
+        .map(|c| {
+            if !c.is_ascii() || c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let safe = safe.trim_matches(['-', '.', '/']);
+    let safe = if safe.is_empty() { "project" } else { safe };
+    format!("project/{safe}")
+}
+
+/// 非 --all 时推导同步分支：
+/// - 项目模式（db 路径 `<data>/projects/<name>/<machine>.db`）：父目录名 = 项目名 → git-safe 分支，跨机一致；
+/// - `--db` 单文件模式：父目录是任意路径，不能当分支名（跨机随机）→ 用固定分支 `project/current`（#398）。
+fn current_branch(conn: &Connection) -> Option<String> {
+    let db = conn.path()?;
+    let parent = Path::new(db).parent()?;
+    let in_projects = parent
+        .parent()
+        .and_then(|g| g.file_name())
+        .and_then(|s| s.to_str())
+        == Some("projects");
+    if in_projects {
+        let name = parent.file_name()?.to_str()?;
+        Some(git_branch_for(name))
+    } else {
+        Some("project/current".to_string())
+    }
+}
+
+/// git 工作区是否有未提交变更（快照无变化时不 commit，#402）。
+fn has_changes(dir: &Path) -> Result<bool, Error> {
+    let out = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(dir)
+        .output()?;
+    if !out.status.success() {
+        return Err(Error::Other(format!(
+            "git status failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+    Ok(!out.stdout.is_empty())
+}
+
+/// pull --all：遍历 projects/，每项目独立 pull（git-safe 项目分支）。
 fn pull_all(data_dir: &Path, a: &SyncPullArgs) -> Result<(), Error> {
     let mut pulled = 0;
     for (name, mut conn) in each_project_db(data_dir)? {
-        pull(&mut conn, a, Some(&name))?;
+        pull(&mut conn, a, Some(&git_branch_for(&name)))?;
         pulled += 1;
     }
     println!("pulled {pulled} project(s)");
@@ -173,4 +246,44 @@ fn git(dir: &Path, args: &[&str]) -> Result<(), Error> {
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 项目名 → git-safe 分支：空格/中文/非法 ref 字符映射为 '-'，统一 project/ 前缀（#398）。
+    #[test]
+    fn git_branch_for_is_safe_and_stable() {
+        assert_eq!(git_branch_for("mint"), "project/mint");
+        assert_eq!(git_branch_for("my project"), "project/my-project");
+        assert_eq!(git_branch_for("mint-faa"), "project/mint-faa");
+        // 中文保留（git ref 支持 UTF-8，且不同中文名不冲突）。
+        assert_eq!(git_branch_for("测试"), "project/测试");
+        assert_ne!(git_branch_for("测试"), git_branch_for("其他"));
+        assert_eq!(git_branch_for(".."), "project/project"); // 全非法 ASCII → 兜底
+        // 不含 git ref 非法 ASCII 字符（空格/~^:?*[\ 等）。
+        for b in ["project/mint", "project/my-project", "project/测试"] {
+            assert!(
+                !b.chars()
+                    .any(|c| c.is_ascii_whitespace() || "~^:?*[\\".contains(c)),
+                "非法字符: {b}"
+            );
+        }
+    }
+
+    /// 非 --all 分支推导：项目模式用项目名分支；--db 单文件模式用固定分支（跨机一致，#398）。
+    #[test]
+    fn current_branch_from_db_path() {
+        let dir = tempfile::TempDir::new().unwrap();
+        // 项目模式：<data>/projects/<name>/<machine>.db
+        let db = dir.path().join("projects/my proj").join("mach-a.db");
+        std::fs::create_dir_all(db.parent().unwrap()).unwrap();
+        let conn = crate::db::open(&db).unwrap();
+        assert_eq!(current_branch(&conn).as_deref(), Some("project/my-proj"));
+        // --db 单文件模式：父目录为任意路径，固定分支（不依赖目录名）。
+        let db2 = dir.path().join("st.db");
+        let conn2 = crate::db::open(&db2).unwrap();
+        assert_eq!(current_branch(&conn2).as_deref(), Some("project/current"));
+    }
 }

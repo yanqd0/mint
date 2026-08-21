@@ -623,10 +623,7 @@ fn st_add_rejects_empty_title_and_project() {
         "stderr: {stderr}"
     );
     let stderr = run_fail(&db, &["--project", "", "issue", "add", "ok"]);
-    assert!(
-        stderr.contains("--project must not be empty"),
-        "stderr: {stderr}"
-    );
+    assert!(stderr.contains("must not be empty"), "stderr: {stderr}");
 }
 
 /// close 必填 --test-cmd。
@@ -3576,6 +3573,61 @@ fn st_migrate_split_retries_after_partial_dir() {
     )
     .to_string();
     assert!(out.contains("A的issue"), "projA 应含数据: {out}");
+}
+
+/// 旧库无任何 issue 但含孤儿 milestone/plan（纯规划态）：孤儿应归第一个项目，不丢失（#396）。
+#[test]
+fn st_migrate_split_orphan_containers_without_issues() {
+    let rdir = TempDir::new().unwrap();
+    let data = rdir.path().join("mint");
+    let legacy = data.join("mint.db");
+    {
+        use rusqlite::Connection;
+        std::fs::create_dir_all(&data).unwrap();
+        let conn = Connection::open(&legacy).unwrap();
+        conn.execute_batch(include_str!("../src/db/migrations/001_init.sql"))
+            .unwrap();
+        conn.execute_batch(include_str!("../src/db/migrations/002_multi_field.sql"))
+            .unwrap();
+        conn.execute_batch(include_str!("../src/db/migrations/003_fts_multi_field.sql"))
+            .unwrap();
+        conn.execute("INSERT INTO projects (name) VALUES ('projA')", [])
+            .unwrap();
+        conn.execute("INSERT INTO projects (name) VALUES ('projB')", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO milestones (title, version) VALUES ('planning', 'v1')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO plans (title, milestone_id) VALUES ('p1', 1)",
+            [],
+        )
+        .unwrap();
+    }
+    let mut c = Command::cargo_bin("mint").unwrap();
+    c.env("XDG_DATA_HOME", rdir.path())
+        .env("MINT_MACHINE_ID", "mach-a")
+        .args(["--project", "projA", "list"]);
+    c.assert().success();
+
+    let out = String::from_utf8_lossy(
+        &Command::cargo_bin("mint")
+            .unwrap()
+            .env("XDG_DATA_HOME", rdir.path())
+            .env("MINT_MACHINE_ID", "mach-a")
+            .args(["--project", "projA", "milestone", "list"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .to_string();
+    assert!(
+        out.contains("planning"),
+        "无 issue 时孤儿 milestone 应归第一个项目 projA: {out}"
+    );
 }
 
 /// sync --all：多项目遍历，项目名分支避免共用一个 remote 冲突；跨机器同步。

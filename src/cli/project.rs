@@ -14,15 +14,40 @@ use crate::project;
 
 /// Project create：建 `projects/<name>/mint.db` 并注册 project 行（幂等）。
 pub fn cmd_project_create(data_dir: &Path, a: &ProjectCreateArgs) -> Result<(), Error> {
-    if a.name.trim().is_empty() {
-        return Err(Error::Other("project name must not be empty".to_string()));
-    }
     let pname = a.name.trim();
+    // 名字将拼入 projects/<name>/ 目录路径：校验拒绝 .. / 分隔符（#393）。
+    crate::project::validate_project_name(pname)?;
     let path = data_dir
         .join("projects")
         .join(pname)
         .join(format!("{}.db", crate::db::machine_id()));
     if path.exists() {
+        // db 已存在但 project 行可能缺失（多 db 每库单行；同步来的目录仅建库未注册行）：
+        // 补行而非一律误报 already exists（#402）。
+        let conn = crate::db::open(&path)?;
+        if project::query_id(&conn, pname)?.is_none() {
+            project::create(
+                &conn,
+                pname,
+                a.description.as_deref(),
+                a.git.as_deref(),
+                a.abs_dir.as_deref(),
+            )?;
+            if a.json {
+                println!(
+                    "{}",
+                    serde_json::to_string(
+                        &serde_json::json!({"name": pname, "status": "created"})
+                    )?
+                );
+            } else {
+                println!(
+                    "Created project '{}'",
+                    crate::output::sanitize_terminal(pname)
+                );
+            }
+            return Ok(());
+        }
         if a.json {
             println!(
                 "{}",

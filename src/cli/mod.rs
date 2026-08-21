@@ -501,10 +501,27 @@ impl Cli {
         let project = self.resolve_project(&cwd)?;
         // 一次性迁移：旧单一 db → 多项目 db（仅缺省路径；显式 --db 不迁移）。
         self.maybe_split_legacy()?;
-        let path = self.db_path(&project);
-        let mut conn = crate::db::open(&path)?;
-        // 当前项目 db 内确保 project 行（每 db 单行本项目）。
-        crate::project::ensure(&conn, &project, &cwd)?;
+        // 不需要当前项目 db 的命令（project create/list、sync --all）在任意目录运行
+        // 不应物化假项目（open+ensure 会新建 projects/<dirname>/<machine>.db 并注册行，#399）。
+        let needs_conn = match &self.command {
+            Commands::Project(p) => {
+                !matches!(p.command, ProjectCmd::Create(_) | ProjectCmd::List(_))
+            }
+            Commands::Sync(s) => {
+                !(matches!(&s.command, SyncCmd::Push(p) if p.all)
+                    || matches!(&s.command, SyncCmd::Pull(p) if p.all))
+            }
+            _ => true,
+        };
+        let mut conn = if needs_conn {
+            let path = self.db_path(&project);
+            let c = crate::db::open(&path)?;
+            // 当前项目 db 内确保 project 行（每 db 单行本项目）。
+            crate::project::ensure(&c, &project, &cwd)?;
+            c
+        } else {
+            Connection::open_in_memory()?
+        };
 
         match &self.command {
             Commands::Issue(i) => issue::dispatch(&mut conn, &cwd, &project, &i.command),
@@ -533,9 +550,8 @@ impl Cli {
             .project
             .clone()
             .unwrap_or_else(|| crate::project::detect_name(cwd, None));
-        if name.trim().is_empty() {
-            return Err(Error::Other("--project must not be empty".to_string()));
-        }
+        // 名字将拼入 projects/<name>/<machine>.db 路径：校验拒绝 .. / 分隔符（#393）。
+        crate::project::validate_project_name(&name)?;
         Ok(name)
     }
 

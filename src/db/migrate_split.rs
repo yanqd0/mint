@@ -35,6 +35,7 @@ fn split_legacy(legacy: &Path, projects_dir: &Path) -> Result<(), Error> {
         .collect::<Result<_, _>>()?;
     // 主项目 = issue 最多的项目：孤儿 milestone/plan（无任何引用）归它，
     // 避免全局规划容器在拆分中丢失（旧库无 project_id，孤儿无法靠引用推导归属）。
+    // 旧库无 issue 时（纯规划态），孤儿归第一个项目（id 最小），避免全部丢失（#396）。
     let main_id: Option<i64> = src
         .query_row(
             "SELECT project_id FROM issues \
@@ -42,7 +43,22 @@ fn split_legacy(legacy: &Path, projects_dir: &Path) -> Result<(), Error> {
             [],
             |r| r.get(0),
         )
-        .optional()?;
+        .optional()?
+        .or_else(|| projects.first().map(|(id, _)| *id));
+    // 跨项目 issue_link 在新架构（每项目独立 db）下无法表达，导出时被 from/to 双过滤——
+    // 告警提示而非静默丢（#396）。
+    let cross_links: i64 = src
+        .query_row(
+            "SELECT count(*) FROM issue_links l \
+             JOIN issues f ON f.id = l.from_id JOIN issues t ON t.id = l.to_id \
+             WHERE f.project_id != t.project_id",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    if cross_links > 0 {
+        eprintln!("mint: warning: {cross_links} cross-project issue link(s) dropped during split");
+    }
     for (pid, name) in projects {
         // db 名含 machine_id（多机多 db 同步：项目目录下每机器一个 db 文件）。
         let new_path = projects_dir

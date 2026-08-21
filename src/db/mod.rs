@@ -67,23 +67,21 @@ pub fn open(path: &Path) -> Result<rusqlite::Connection, Error> {
 /// （接受；CI/容器/VM 克隆用 MINT_MACHINE_ID 显式固定）。env 值需为 [A-Za-z0-9_-]
 /// 且不含 ':'（否则破坏 uid 格式），非法则忽略回退机器特征。
 pub fn machine_id() -> String {
-    if let Some(mid) = std::env::var("MINT_MACHINE_ID").ok().filter(|m| {
-        let m = m.trim();
-        !m.is_empty()
-            && !m.contains(':')
-            && m.chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-    }) {
+    if let Some(mid) = std::env::var("MINT_MACHINE_ID")
+        .ok()
+        .filter(|m| is_valid_machine_id(m.trim()))
+    {
         return mid.trim().to_string();
     }
     // 持久化 machine.json：已存在则复用（hostname 变化不再重算，避免同项目 db 碎片）。
     let path = machine_info_path();
-    if let Ok(text) = std::fs::read_to_string(&path) {
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
-            if let Some(id) = v.get("machine_id").and_then(serde_json::Value::as_str) {
-                return id.to_string();
-            }
-        }
+    if let Some(text) = std::fs::read_to_string(&path).ok()
+        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&text)
+        && let Some(id) = v.get("machine_id").and_then(serde_json::Value::as_str)
+        && is_valid_machine_id(id)
+    {
+        // 读回同样校验字符集：非法值（文件被篡改/手工编辑）忽略回退重生成，防污染路径（#397）。
+        return id.to_string();
     }
     // 首次：基于 hostname+user 生成，写 json（含可简单获取的机器信息，参考用），后续读文件。
     let hostname = whoami::fallible::hostname().unwrap_or_default();
@@ -96,8 +94,19 @@ pub fn machine_id() -> String {
     id
 }
 
-/// machine.json 路径（数据目录下，与 db 同级；零新依赖，serde_json 已有）。
-/// 内容 = machine_id + 可简单获取的机器信息（hostname/username/os/arch，仅首次记录，供参考）。
+/// machine_id 字符集约束（env 与 machine.json 读回共用）：`[A-Za-z0-9_-]`、非空、不含 ':'。
+/// machine_id 会拼入 db 文件名 / 快照文件名，非法字符可破坏路径或逃逸目录（#397）。
+fn is_valid_machine_id(id: &str) -> bool {
+    !id.is_empty()
+        && !id.contains(':')
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// machine.json 路径（`$XDG_DATA_HOME/mint/` 下，projects/ 的父级，machine 级共享；
+/// 零新依赖，serde_json 已有）。内容 = machine_id + 可简单获取的机器信息
+/// （hostname/username/os/arch，仅首次记录，供参考）。
 fn machine_info_path() -> PathBuf {
     let dir = std::env::var("XDG_DATA_HOME")
         .map(PathBuf::from)
@@ -111,10 +120,27 @@ fn machine_info_path() -> PathBuf {
 }
 
 /// 首次生成 machine_id 时持久化：写 JSON（machine_id + 机器信息，供参考；仅首次）。
+/// 权限与 db 一致（目录 0700 / 文件 0600），防本地其他用户读取 hostname/username（#397）；
+/// 旧文件损坏时保留为 `.json.bak`（防覆盖致 machine_id 漂移、旧 db 变孤儿）。
 fn persist_machine_info(id: &str, hostname: &str, username: &str) {
     let path = machine_info_path();
     if let Some(parent) = path.parent() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            let _ = std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(parent);
+        }
+        #[cfg(not(unix))]
         let _ = std::fs::create_dir_all(parent);
+    }
+    // 旧文件存在但不可解析（损坏）：保留备份再写新值。
+    if let Ok(existing) = std::fs::read_to_string(&path)
+        && serde_json::from_str::<serde_json::Value>(&existing).is_err()
+    {
+        let _ = std::fs::rename(&path, path.with_extension("json.bak"));
     }
     let info = serde_json::json!({
         "machine_id": id,
@@ -123,10 +149,18 @@ fn persist_machine_info(id: &str, hostname: &str, username: &str) {
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
     });
-    let _ = std::fs::write(
-        &path,
-        serde_json::to_string_pretty(&info).unwrap_or_default(),
-    );
+    let content = serde_json::to_string_pretty(&info).unwrap_or_default();
+    #[cfg(unix)]
+    {
+        // tmp + rename 原子写，落 0600（rename 保留目标权限，tmp 先设好）。
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = path.with_extension("json.tmp");
+        let _ = std::fs::write(&tmp, &content);
+        let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600));
+        let _ = std::fs::rename(&tmp, &path);
+    }
+    #[cfg(not(unix))]
+    let _ = std::fs::write(&path, &content);
 }
 
 /// FNV-1a 64 位哈希（稳定：不随 Rust 工具链/release 变化，作持久身份键用）。
@@ -458,6 +492,47 @@ mod tests {
         assert_eq!(super::machine_id(), "mach-test");
         unsafe { std::env::remove_var("MINT_MACHINE_ID") };
         assert_eq!(super::machine_id(), a, "移除 env 后回退机器特征");
+    }
+
+    /// machine_id 字符集约束：拼入 db/快照文件名，非法字符应拒绝（#397）。
+    #[test]
+    fn machine_id_charset_constraints() {
+        assert!(super::is_valid_machine_id("mach-123abc"));
+        assert!(super::is_valid_machine_id("mach_AB"));
+        assert!(!super::is_valid_machine_id(""));
+        assert!(!super::is_valid_machine_id("a:b"));
+        assert!(!super::is_valid_machine_id("../evil"));
+    }
+
+    /// machine.json 权限 0600 + 目录 0700；损坏文件保留 .bak 且 id 稳定（#397）。
+    #[test]
+    fn machine_info_permissions_and_corrupt_backup() {
+        let _g = MACHINE_TEST_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("XDG_DATA_HOME", dir.path()) };
+        let id = super::machine_id();
+        let path = super::machine_info_path();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "machine.json 应为 0600: {mode:o}");
+            let dir_mode = std::fs::metadata(dir.path().join("mint"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(dir_mode, 0o700, "mint 目录应为 0700: {dir_mode:o}");
+        }
+        // 损坏文件：重算时应保留旧文件为 .bak，且 id 稳定（hostname 未变）。
+        std::fs::write(&path, "{broken json").unwrap();
+        let id2 = super::machine_id();
+        assert_eq!(id, id2, "hostname 未变时 id 应稳定");
+        assert!(
+            path.with_extension("json.bak").exists(),
+            "损坏文件应留 .bak"
+        );
+        unsafe { std::env::remove_var("XDG_DATA_HOME") };
     }
 
     /// open/register 后 machines 表注册本机行（hostname/user 如实记录）。

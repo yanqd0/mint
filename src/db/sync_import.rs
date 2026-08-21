@@ -5,6 +5,7 @@
 //! 取新）、id 冲突重映射（uid 是稳定跨机键，本地 id 可重排）并修正全部引用。
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, params_from_iter, types::Value};
 
@@ -21,9 +22,31 @@ pub struct MergeReport {
 /// 把 SQL 快照幂等合并进目标库（整事务；临时库用 std 临时文件，零新增依赖）。
 pub fn import_sql(conn: &mut Connection, sql: &str) -> Result<MergeReport, Error> {
     let path = temp_db_path()?;
-    let res = import_inner(conn, sql, &path);
-    let _ = std::fs::remove_file(&path);
-    res
+    // RAII 清理：即使 panic/出错也删除临时库与伴生文件（#401）。
+    let _guard = TempDb::new(&path);
+    import_inner(conn, sql, &path)
+}
+
+/// 临时库清理守卫：Drop 时删除主文件与 SQLite 伴生文件（-journal/-wal/-shm）。
+struct TempDb {
+    path: PathBuf,
+}
+
+impl TempDb {
+    fn new(path: &Path) -> Self {
+        Self {
+            path: path.to_path_buf(),
+        }
+    }
+}
+
+impl Drop for TempDb {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+        for ext in ["-journal", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{}", self.path.display(), ext));
+        }
+    }
 }
 
 fn import_inner(
@@ -31,11 +54,14 @@ fn import_inner(
     sql: &str,
     path: &std::path::Path,
 ) -> Result<MergeReport, Error> {
+    // 快照可来自外部（sync remote / import 文件）：清洗并校验——剔除触发器定义、
+    // 只保留白名单 CREATE/INSERT，杜绝任意 SQL 执行面与 ATTACH/DETACH/PRAGMA/DROP 逃逸（#394）。
+    let clean = sanitize_snapshot(sql)?;
     // 快照重放到独立临时库：先按当前版本建 schema（快照 schema 可能是旧版本
     // 如 003 含 project_id，IF NOT EXISTS no-op；数据段按当前 schema 列 INSERT）。
     let tmp = Connection::open(path)?;
     crate::db::migrate_to(&tmp, crate::db::CURRENT_VERSION)?;
-    tmp.execute_batch(sql)?;
+    tmp.execute_batch(&clean)?;
     tmp.execute_batch("PRAGMA foreign_keys = ON")?;
 
     conn.execute_batch(&format!("ATTACH DATABASE '{}' AS tmp", path.display()))?;
@@ -44,15 +70,143 @@ fn import_inner(
     res
 }
 
+/// 清洗并校验快照 SQL：剔除触发器定义（merge 不依赖 FTS 触发器；杜绝触发器体内嵌任意 SQL），
+/// 只保留 schema `CREATE`（IF NOT EXISTS，临时库上无副作用）与白名单数据表的 `INSERT`；
+/// 拒绝 ATTACH/DETACH/PRAGMA/DROP/ALTER/UPDATE/DELETE 等一切破坏性/逃逸语句（#394）。
+/// 快照来自外部（sync remote / import 文件）时是信任边界，返回清洗后可直接执行的 SQL。
+fn sanitize_snapshot(sql: &str) -> Result<String, Error> {
+    let mut out = String::new();
+    for stmt in split_sql_statements(sql) {
+        let s = strip_leading_comment(stmt);
+        if s.is_empty() {
+            continue;
+        }
+        let up = s.to_ascii_uppercase();
+        if up.starts_with("CREATE TRIGGER") {
+            continue; // 剔除触发器：导入端不依赖它，且其体内可含任意语句（注入面）。
+        }
+        if up.starts_with("CREATE") || up.starts_with("INSERT INTO") {
+            if up.starts_with("INSERT INTO") {
+                let table = s["INSERT INTO".len()..]
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("");
+                if !crate::db::sync::DATA_TABLES.contains(&table) {
+                    return Err(Error::Other(format!(
+                        "snapshot contains INSERT into non-whitelisted table '{table}'; refusing to import"
+                    )));
+                }
+            }
+            out.push_str(s);
+            out.push_str(";\n");
+            continue;
+        }
+        return Err(Error::Other(format!(
+            "snapshot contains disallowed statement '{s}'; refusing to import"
+        )));
+    }
+    Ok(out)
+}
+
+/// 按语句边界分割 SQL 文本（`;`），正确处理单引号字符串（`''` 转义）、`--` 行注释，
+/// 以及 `CREATE TRIGGER ... BEGIN ...; ...; END` 块（块内 `;` 不切分，触发器作为整体）。
+fn split_sql_statements(sql: &str) -> Vec<&str> {
+    let bytes = sql.as_bytes();
+    let mut stmts = Vec::new();
+    let mut start = 0;
+    let mut in_single = false;
+    let mut in_comment = false;
+    let mut block = 0usize;
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if in_comment {
+            if c == b'\n' {
+                in_comment = false;
+            }
+            i += 1;
+            continue;
+        }
+        if !in_single && c == b'-' && i + 1 < bytes.len() && bytes[i + 1] == b'-' {
+            in_comment = true;
+            i += 2;
+            continue;
+        }
+        if c == b'\'' {
+            if in_single && i + 1 < bytes.len() && bytes[i + 1] == b'\'' {
+                i += 2; // '' 转义
+                continue;
+            }
+            in_single = !in_single;
+            i += 1;
+            continue;
+        }
+        if c.is_ascii_alphabetic() {
+            // 提取单词跟踪 BEGIN/END 块（触发器体）；检查单词边界。
+            let ws = i;
+            while i < bytes.len() && bytes[i].is_ascii_alphabetic() {
+                i += 1;
+            }
+            let prev_ok =
+                ws == 0 || !(bytes[ws - 1].is_ascii_alphanumeric() || bytes[ws - 1] == b'_');
+            let next_ok =
+                i >= bytes.len() || !(bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_');
+            if prev_ok && next_ok {
+                match &sql[ws..i] {
+                    "BEGIN" => block += 1,
+                    "END" => block = block.saturating_sub(1),
+                    _ => {}
+                }
+            }
+            continue;
+        }
+        if !in_single && c == b';' && block == 0 {
+            stmts.push(&sql[start..i]);
+            start = i + 1;
+        }
+        i += 1;
+    }
+    if start < bytes.len() {
+        stmts.push(&sql[start..]);
+    }
+    stmts
+}
+
+/// 剥离语句前导的 `--` 行注释（可多行），返回剩余；整句皆注释返回空串。
+fn strip_leading_comment(mut s: &str) -> &str {
+    loop {
+        let t = s.trim();
+        if let Some(rest) = t.strip_prefix("--") {
+            s = match rest.find('\n') {
+                Some(idx) => &rest[idx..],
+                None => return "",
+            };
+        } else {
+            return t;
+        }
+    }
+}
+
 fn merge_all(conn: &Connection, tmp: &Connection) -> Result<MergeReport, Error> {
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let res = merge_all_inner(conn, tmp);
+    match &res {
+        Ok(_) => conn.execute_batch("COMMIT")?,
+        // 显式 ROLLBACK（不依赖 Connection drop 的隐式回滚，#401）。
+        Err(_) => {
+            conn.execute_batch("ROLLBACK").ok();
+        }
+    }
+    res
+}
+
+fn merge_all_inner(conn: &Connection, tmp: &Connection) -> Result<MergeReport, Error> {
     let mut report = MergeReport::default();
     let mut projects_map = HashMap::new();
     let mut labels_map = HashMap::new();
     let mut milestones_map = HashMap::new();
     let mut plans_map = HashMap::new();
     let mut issues_map = HashMap::new();
-
-    conn.execute_batch("BEGIN IMMEDIATE")?;
 
     merge_machines(conn, tmp, &mut report)?;
     merge_keyed(
@@ -102,7 +256,6 @@ fn merge_all(conn: &Connection, tmp: &Connection) -> Result<MergeReport, Error> 
         &mut report,
     )?;
 
-    conn.execute_batch("COMMIT")?;
     Ok(report)
 }
 
@@ -283,14 +436,25 @@ fn merge_issues(
                     }
                 }
             }
-            // uid 为空（不应出现）：按 id 幂等兜底，避免重复。
-            Value::Integer(id) => {
-                report.skipped += 1;
-                id
+            // uid 为空（002 迁移前历史数据，无 machine_id 无法合成 uid）：按 id 幂等兜底插入，
+            // 保留 issue 与其关联（不跳过、不映射 0，否则 FK 违反致迁移失败或关联被吞，#395）。
+            Value::Null => {
+                let orig = orig_id.ok_or_else(|| {
+                    Error::Other("snapshot issue has neither uid nor id".to_string())
+                })?;
+                if id_taken(conn, "issues", orig)? {
+                    report.skipped += 1;
+                } else {
+                    set_id(&mut row, &cols, orig);
+                    insert_row(conn, "issues", &cols, &row)?;
+                    report.inserted += 1;
+                }
+                orig
             }
+            // uid 异常非文本（不应出现）：跳过但不映射 0（幂等，避免破坏关联）。
             _ => {
                 report.skipped += 1;
-                0
+                orig_id.unwrap_or(0)
             }
         };
         if let Some(orig) = orig_id {
@@ -333,12 +497,29 @@ fn merge_assoc(
 // ── 工具 ────────────────────────────────────────────────────
 
 /// 临时库路径：系统 temp + pid + 时间纳秒（零依赖，用完删除）。
-fn temp_db_path() -> Result<std::path::PathBuf, Error> {
+/// 0600 预创建 + `create_new`：rusqlite `open` 默认 0644，而临时库承载快照正文
+/// （issue 正文/commit SHA），应收敛权限；create_new 同时防同路径 symlink 抢占（#401）。
+fn temp_db_path() -> Result<PathBuf, Error> {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| Error::Other(format!("clock error: {e}")))?
         .as_nanos();
-    Ok(std::env::temp_dir().join(format!("mint-sync-{}-{nanos}.db", std::process::id())))
+    let path = std::env::temp_dir().join(format!("mint-sync-{}-{nanos}.db", std::process::id()));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)?;
+    }
+    #[cfg(not(unix))]
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
+    Ok(path)
 }
 
 /// 取表列名（PRAGMA table_info，定义序）。
@@ -571,6 +752,80 @@ mod tests {
             .unwrap();
         assert_eq!(il_issue, 2);
         assert_eq!(il_label, 1);
+    }
+
+    /// 恶意快照被拒：ATTACH/DROP/非白名单表 INSERT 一律拒绝；正常导出快照不受影响（#394）。
+    #[test]
+    fn import_rejects_malicious_snapshot() {
+        let mut b = test_conn();
+        for evil in [
+            "INSERT INTO issues (title) VALUES ('x'); ATTACH DATABASE 'evil' AS x;",
+            "INSERT INTO issues (title) VALUES ('x'); DROP TABLE issues;",
+            "INSERT INTO sqlite_master (type) VALUES ('table');",
+            "PRAGMA writable_schema=ON;",
+        ] {
+            assert!(import_sql(&mut b, evil).is_err(), "应拒绝恶意快照: {evil}");
+        }
+        // 正常快照不受影响。
+        let a = test_conn();
+        a.execute("INSERT INTO issues (title) VALUES ('ok')", [])
+            .unwrap();
+        let sql = crate::db::sync::export_sql(&a).unwrap();
+        assert!(import_sql(&mut b, &sql).is_ok());
+        let (cnt, title): (i64, String) = b
+            .query_row(
+                "SELECT count(*), coalesce(max(title),'') FROM issues",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((cnt, title.as_str()), (1, "ok"));
+    }
+
+    /// 语句分割：单引号字符串与注释内的分号不误拆（#394）。
+    #[test]
+    fn split_sql_statements_ignores_inline_semicolons() {
+        let sql = "INSERT INTO issues (title) VALUES ('a;b'); -- c; d\nINSERT INTO labels (name) VALUES ('e');";
+        let stmts = split_sql_statements(sql);
+        assert_eq!(stmts.len(), 2, "{stmts:?}");
+        assert!(stmts[0].contains("'a;b'"), "字符串内分号不拆: {stmts:?}");
+        // 注释行与后续 INSERT 同一段（注释内分号不切）；strip 后应还原出完整 INSERT。
+        let clean = strip_leading_comment(stmts[1]);
+        assert!(
+            clean.starts_with("INSERT INTO labels"),
+            "注释剥离后为 INSERT: {clean:?}"
+        );
+    }
+
+    /// NULL-uid 存量 issue（002 前无 machine_id 数据）：按 id 幂等插入，issue 与关联保留（#395）。
+    #[test]
+    fn import_null_uid_issue_kept_by_id() {
+        let a = test_conn();
+        a.execute("INSERT INTO issues (title) VALUES ('legacy')", [])
+            .unwrap();
+        a.execute("INSERT INTO labels (name) VALUES ('old')", [])
+            .unwrap();
+        a.execute(
+            "INSERT INTO issue_labels (issue_id, label_id) VALUES (1, 1)",
+            [],
+        )
+        .unwrap();
+        let sql = crate::db::sync::export_sql(&a).unwrap();
+        let mut b = test_conn();
+        import_sql(&mut b, &sql).unwrap();
+        let (cnt, title): (i64, String) = b
+            .query_row(
+                "SELECT count(*), coalesce(max(title),'') FROM issues",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(cnt, 1, "NULL-uid issue 不应被丢弃");
+        assert_eq!(title, "legacy");
+        let n: i64 = b
+            .query_row("SELECT count(*) FROM issue_labels", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1, "NULL-uid issue 的关联应保留");
     }
 
     /// issue_links 引用经 id 重映射修正（from/to 都转换）。
