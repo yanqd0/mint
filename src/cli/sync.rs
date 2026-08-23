@@ -29,6 +29,13 @@ pub fn cmd_sync(conn: &mut Connection, data_dir: &Path, a: &SyncArgs) -> Result<
                 pull(conn, p, None)
             }
         }
+        SyncCmd::Merge(m) => {
+            if m.all {
+                merge_all(data_dir)
+            } else {
+                merge(conn)
+            }
+        }
     }
 }
 
@@ -93,10 +100,48 @@ fn pull(conn: &mut Connection, a: &SyncPullArgs, branch: Option<&str>) -> Result
             &["pull", "origin", "HEAD", "--allow-unrelated-histories"],
         )?,
     }
-    let mut report = MergeReport::default();
     let snaps_dir = dir.join("snapshots");
+    let report = merge_remote_snapshots(conn, &snaps_dir)?;
+    println!(
+        "pulled: {} inserted, {} updated, {} skipped",
+        report.inserted, report.updated, report.skipped
+    );
+    Ok(())
+}
+
+/// merge 当前项目：从本地 `snapshots/` 目录合并快照（无 git 传输）。
+/// rsync/Syncthing 等自建直连方案：把 `snapshots/` 目录同步到本机后执行本命令落地（#378）。
+fn merge(conn: &mut Connection) -> Result<(), Error> {
+    let dir = sync_dir(conn)?;
+    let snaps_dir = dir.join("snapshots");
+    let report = merge_remote_snapshots(conn, &snaps_dir)?;
+    println!(
+        "merged: {} inserted, {} updated, {} skipped",
+        report.inserted, report.updated, report.skipped
+    );
+    Ok(())
+}
+
+/// merge --all：遍历 projects/，每项目 merge 其 snapshots/ 目录。
+fn merge_all(data_dir: &Path) -> Result<(), Error> {
+    let mut merged = 0;
+    for (_name, mut conn) in each_project_db(data_dir)? {
+        merge(&mut conn)?;
+        merged += 1;
+    }
+    println!("merged {merged} project(s)");
+    Ok(())
+}
+
+/// 公共落地：从 `snapshots/` 目录合并非本机快照（git pull 与 rsync/Syncthing 复用，#378）。
+/// 跳过本机快照；坏/旧快照 warn 跳过而非整体失败（#400）。
+pub(crate) fn merge_remote_snapshots(
+    conn: &mut Connection,
+    snaps_dir: &Path,
+) -> Result<MergeReport, Error> {
+    let mut report = MergeReport::default();
     let mine = crate::db::machine_id();
-    if let Ok(entries) = std::fs::read_dir(&snaps_dir) {
+    if let Ok(entries) = std::fs::read_dir(snaps_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             let name = entry.file_name();
@@ -129,11 +174,7 @@ fn pull(conn: &mut Connection, a: &SyncPullArgs, branch: Option<&str>) -> Result
             }
         }
     }
-    println!(
-        "pulled: {} inserted, {} updated, {} skipped",
-        report.inserted, report.updated, report.skipped
-    );
-    Ok(())
+    Ok(report)
 }
 
 /// 项目名 → git-safe 分支名：ASCII 特殊字符（空格/`~^:?*[\` 等）替换为 '-'，

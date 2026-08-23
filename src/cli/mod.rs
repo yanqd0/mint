@@ -467,8 +467,10 @@ pub struct SyncArgs {
 pub enum SyncCmd {
     /// Push local snapshot to the sync git repo (export + commit + push)
     Push(SyncPushArgs),
-    /// Pull remote snapshots and merge into this database
+    /// Pull remote snapshots and merge into this database (git transport)
     Pull(SyncPullArgs),
+    /// Merge snapshots already present in snapshots/ dir (no git; rsync/Syncthing landing, #378)
+    Merge(SyncMergeArgs),
 }
 
 #[derive(clap::Args)]
@@ -486,6 +488,13 @@ pub struct SyncPullArgs {
     /// Git remote URL (initializes repo if absent)
     #[arg(long)]
     pub remote: Option<String>,
+    /// Sync all projects (iterate projects/ directory)
+    #[arg(long)]
+    pub all: bool,
+}
+
+#[derive(clap::Args)]
+pub struct SyncMergeArgs {
     /// Sync all projects (iterate projects/ directory)
     #[arg(long)]
     pub all: bool,
@@ -509,7 +518,8 @@ impl Cli {
             }
             Commands::Sync(s) => {
                 !(matches!(&s.command, SyncCmd::Push(p) if p.all)
-                    || matches!(&s.command, SyncCmd::Pull(p) if p.all))
+                    || matches!(&s.command, SyncCmd::Pull(p) if p.all)
+                    || matches!(&s.command, SyncCmd::Merge(m) if m.all))
             }
             _ => true,
         };

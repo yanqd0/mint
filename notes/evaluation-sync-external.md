@@ -117,6 +117,16 @@ mint merge --from pulled-snapshot.db             # 按 uid 去重重建全局视
 
 > 增量策略（#302 关联）：可选「整库快照 + git/rclone 增量」或「事务级变更日志」。整库快照最简单、幂等最强，配合外部工具的增量传输（git delta / rsync 差量 / rclone 按块）已够低频场景用。
 
+### 落地复用（#378，git+SQL 已实现的公共核心）
+
+多 db 架构下同步已收敛为「**快照导出 → 传输 → 落地合并**」，传输与后端完全解耦：
+
+- **导出**：`mint export --format sql` → SQL 文本快照（schema + 数据，主键排序、uid 幂等）。
+- **传输**：仅差异在传输层——git（`sync push/pull`，走 `snapshots/<machine>.sql` + 项目分支）/ rsync/scp（同步 `snapshots/` 目录）/ Syncthing（P2P 同步目录）。
+- **落地**：`mint sync merge`（**无 git 传输**，从本地 `snapshots/` 目录合并，跳过本机快照、容错坏快照）——rsync/Syncthing 方案同步目录后直接调用，复用同一 `import_sql` 幂等合并（uid/LWW + id 重映射）。
+
+复用边界：rsync/Syncthing **只做传输接线**，不重复实现导出/合并/落地（#378）。`snapshots/` 目录是统一落地单元，任何外部传输把它同步到本机后执行 `sync merge` 即可。
+
 ## 四路候选初步评估
 
 ### 1. rclone 生态（#350）——通用性最强
