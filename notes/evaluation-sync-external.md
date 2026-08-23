@@ -162,6 +162,21 @@ mint sync pull --backend rsync --remote user@host:/mnt/mint/p
 
 说明：`--backend rsync` 复用同一 `snapshots/` 落地单元与 `import_sql` 幂等合并，只换传输层；rsync `-a` 文件级差量即「差量增量传输」。`--all` 不适用于 rsync（每项目远端路径独立，逐项目 sync）。
 
+#### Syncthing 接线（#374，备选）
+
+前置：多机装 Syncthing daemon，配好设备信任（P2P 直连，无中间存储）。
+
+配置：每机把项目 `sync` 目录（`<db 父目录>/sync`）加入 Syncthing 同步对（两机共享同一 folder），Syncthing 自动实时增量同步 + 冲突版本保留（文件级）。
+
+落地（复用 #378 的 `sync merge`，Syncthing 同步完成后执行）：
+
+```bash
+mint sync merge          # 本机 snapshots/ 已同步，直接落地合并
+mint sync merge --all    # 多项目
+```
+
+说明：Syncthing 只做目录同步（传输层，独立 daemon 后台运行），落地统一走 `sync merge`——与 rsync 复用同一公共核心；增量 + 冲突版本由 Syncthing 自身保证。
+
 ### 4. git+SQL（#353）——增量/历史天然满足（用户补充思路）
 
 - 核心：mint 导出**等效 SQL 文本**（`sqlite3 .dump` 等价物，`CREATE TABLE` + `INSERT`），用 git 私有仓库同步——git 对文本的 **delta 压缩**即增量、`git log` 即历史、`git revert` 即回滚、分支即实验。
