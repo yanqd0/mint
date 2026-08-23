@@ -177,6 +177,26 @@ mint sync merge --all    # 多项目
 
 说明：Syncthing 只做目录同步（传输层，独立 daemon 后台运行），落地统一走 `sync merge`——与 rsync 复用同一公共核心；增量 + 冲突版本由 Syncthing 自身保证。
 
+#### rclone 接线（#364，已实现）
+
+**形态决策**：rclone 走 **SQL 文本快照 + gzip 压缩**（非二进制 db）。实测（本机 2.9M db，397 issue）：二进制 `VACUUM INTO` 导出 1.37MB、gzip -9 后 538KB；SQL 文本 420KB、gzip -9 后 **104KB（小 5.2×）**。本地处理两者均毫秒级（mint 数据量级无差异）；SQL 文本对 rclone 增量（文件块）与文本 diff 更友好。二进制 db 形态不采用。
+
+```bash
+# push：导出 SQL 快照 → gzip -9 → rclone copy（只传 *.sql.gz）
+mint sync push --backend rclone --remote r2:mint/p        # 海外（Cloudflare R2 免费）
+mint sync push --backend rclone --remote oss:mint/p       # 国内（阿里云 OSS，rclone 配 S3 协议）
+mint sync push --backend rclone --remote cos:mint/p       # 腾讯云 COS
+
+# pull：rclone copy 远端 → gunzip 解压 → 落地合并（复用 #378）
+mint sync pull --backend rclone --remote r2:mint/p
+```
+
+约定：
+- **压缩**：rclone 传输 `snapshots/*.sql.gz`（gzip -9）；git/rsync 保持裸 `.sql`（文本 diff/历史）
+- **产物路径**：远端 `<remote>/snapshots/*.sql.gz`
+- **换后端 = 换 `--remote` 配置**，非换工具（传输与后端解耦）
+- `--all` 不适用（同 rsync，每项目远端独立，逐项目 sync）
+
 ### 4. git+SQL（#353）——增量/历史天然满足（用户补充思路）
 
 - 核心：mint 导出**等效 SQL 文本**（`sqlite3 .dump` 等价物，`CREATE TABLE` + `INSERT`），用 git 私有仓库同步——git 对文本的 **delta 压缩**即增量、`git log` 即历史、`git revert` 即回滚、分支即实验。

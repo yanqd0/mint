@@ -473,11 +473,13 @@ pub enum SyncCmd {
     Merge(SyncMergeArgs),
 }
 
-/// sync 传输后端：git（默认，私有仓库 + 项目分支）或 rsync/scp（自建直连 SSH，#373）。
+/// sync 传输后端：git（默认，私有仓库 + 项目分支）、rsync/scp（自建直连 SSH，#373）
+/// 或 rclone（通用传输层，SQL 快照 gzip 压缩传输，#364）。
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SyncBackend {
     Git,
     Rsync,
+    Rclone,
 }
 
 #[derive(clap::Args)]

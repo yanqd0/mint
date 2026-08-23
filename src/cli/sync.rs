@@ -56,11 +56,22 @@ fn sync_dir(conn: &Connection) -> Result<PathBuf, Error> {
 /// `--backend rsync` 走 rsync/scp 直连（#373），复用同一导出 + snapshots 落地单元。
 fn push(conn: &Connection, a: &SyncPushArgs, branch: Option<&str>) -> Result<(), Error> {
     let dir = sync_dir(conn)?;
-    if a.backend == SyncBackend::Rsync {
-        let remote = a.remote.as_deref().ok_or_else(|| {
-            Error::Other("--remote user@host:/path required for rsync backend".to_string())
-        })?;
-        return rsync_push(conn, &dir, remote);
+    match a.backend {
+        SyncBackend::Rsync => {
+            let remote = a.remote.as_deref().ok_or_else(|| {
+                Error::Other("--remote user@host:/path required for rsync backend".to_string())
+            })?;
+            return rsync_push(conn, &dir, remote);
+        }
+        SyncBackend::Rclone => {
+            let remote = a.remote.as_deref().ok_or_else(|| {
+                Error::Other(
+                    "--remote <rclone-remote>:<path> required for rclone backend".to_string(),
+                )
+            })?;
+            return rclone_push(conn, &dir, remote);
+        }
+        SyncBackend::Git => {}
     }
     ensure_git_repo(&dir, a.remote.as_deref())?;
     let snap = dir
@@ -85,9 +96,9 @@ fn push(conn: &Connection, a: &SyncPushArgs, branch: Option<&str>) -> Result<(),
 
 /// push --all：遍历 projects/ 目录，每项目独立 push（git-safe 项目分支）。
 fn push_all(data_dir: &Path, a: &SyncPushArgs) -> Result<(), Error> {
-    if a.backend == SyncBackend::Rsync {
+    if a.backend != SyncBackend::Git {
         return Err(Error::Other(
-            "rsync backend does not support --all; sync per project".to_string(),
+            "only git backend supports --all; sync per project".to_string(),
         ));
     }
     let mut pushed = 0;
@@ -103,11 +114,22 @@ fn push_all(data_dir: &Path, a: &SyncPushArgs) -> Result<(), Error> {
 /// 分支统一走 `project/<safe>`（#398）；坏/旧快照 warn 跳过而非整体失败（#400）。
 fn pull(conn: &mut Connection, a: &SyncPullArgs, branch: Option<&str>) -> Result<(), Error> {
     let dir = sync_dir(conn)?;
-    if a.backend == SyncBackend::Rsync {
-        let remote = a.remote.as_deref().ok_or_else(|| {
-            Error::Other("--remote user@host:/path required for rsync backend".to_string())
-        })?;
-        return rsync_pull(conn, &dir, remote);
+    match a.backend {
+        SyncBackend::Rsync => {
+            let remote = a.remote.as_deref().ok_or_else(|| {
+                Error::Other("--remote user@host:/path required for rsync backend".to_string())
+            })?;
+            return rsync_pull(conn, &dir, remote);
+        }
+        SyncBackend::Rclone => {
+            let remote = a.remote.as_deref().ok_or_else(|| {
+                Error::Other(
+                    "--remote <rclone-remote>:<path> required for rclone backend".to_string(),
+                )
+            })?;
+            return rclone_pull(conn, &dir, remote);
+        }
+        SyncBackend::Git => {}
     }
     ensure_git_repo(&dir, a.remote.as_deref())?;
     let b = branch.map(str::to_string).or_else(|| current_branch(conn));
@@ -194,6 +216,90 @@ fn run_rsync(args: &[&str]) -> Result<(), Error> {
             String::from_utf8_lossy(&out.stderr).trim()
         )));
     }
+    Ok(())
+}
+
+/// rclone 传输 push：导出快照 → gzip 压缩 → rclone copy 到远端（SQL 形态 + 压缩，#364）。
+/// 传输 `snapshots/*.sql.gz`（压缩后体积小 ~5×）；本地保留裸 `.sql` 供 merge 读。
+fn rclone_push(conn: &Connection, dir: &Path, remote: &str) -> Result<(), Error> {
+    let snap = dir
+        .join("snapshots")
+        .join(format!("{}.sql", crate::db::machine_id()));
+    std::fs::create_dir_all(snap.parent().expect("snapshots dir"))?;
+    let sql = crate::db::sync::export_sql(conn)?;
+    std::fs::write(&snap, sql)?;
+    let gz = snap.with_extension("sql.gz");
+    run_gzip(true, &snap, &gz)?;
+    let snaps = snap.parent().expect("snapshots dir");
+    run_rclone(&[
+        "copy",
+        snaps.to_str().expect("path"),
+        remote,
+        "--include",
+        "*.sql.gz",
+        "--exclude",
+        "*",
+    ])?;
+    println!("pushed {} via rclone to {remote}", gz.display());
+    Ok(())
+}
+
+/// rclone 传输 pull：rclone copy 远端 → 本地 gunzip 解压 → 复用 merge_remote_snapshots 落地（#378）。
+fn rclone_pull(conn: &mut Connection, dir: &Path, remote: &str) -> Result<(), Error> {
+    let snaps_dir = dir.join("snapshots");
+    std::fs::create_dir_all(&snaps_dir)?;
+    run_rclone(&["copy", remote, snaps_dir.to_str().expect("path")])?;
+    // gunzip 每个 `.sql.gz` → `.sql`（merge 读裸 .sql），随后清理 .gz。
+    if let Ok(entries) = std::fs::read_dir(&snaps_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("gz") {
+                continue;
+            }
+            let out = path.with_extension("sql");
+            run_gzip(false, &path, &out)?;
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+    let report = merge_remote_snapshots(conn, &snaps_dir, false)?;
+    println!(
+        "pulled: {} inserted, {} updated, {} skipped",
+        report.inserted, report.updated, report.skipped
+    );
+    Ok(())
+}
+
+/// spawn rclone（argv 数组，无 shell）；非零退出码 → Error 带 stderr。
+fn run_rclone(args: &[&str]) -> Result<(), Error> {
+    let out = std::process::Command::new("rclone").args(args).output()?;
+    if !out.status.success() {
+        return Err(Error::Other(format!(
+            "rclone {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+    Ok(())
+}
+
+/// gzip 压缩（-9 -c）或解压（-d -c）：捕获 stdout 写文件，避免 shell 管道；外部命令化（#364）。
+fn run_gzip(compress: bool, input: &Path, output: &Path) -> Result<(), Error> {
+    let mut cmd = std::process::Command::new("gzip");
+    if compress {
+        cmd.args(["-9", "-c"]);
+    } else {
+        cmd.args(["-d", "-c"]);
+    }
+    cmd.arg(input);
+    let out = cmd.output()?;
+    if !out.status.success() {
+        return Err(Error::Other(format!(
+            "gzip {} failed: {}",
+            input.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+    std::fs::write(output, out.stdout)?;
     Ok(())
 }
 
@@ -302,9 +408,9 @@ fn has_changes(dir: &Path) -> Result<bool, Error> {
 
 /// pull --all：遍历 projects/，每项目独立 pull（git-safe 项目分支）。
 fn pull_all(data_dir: &Path, a: &SyncPullArgs) -> Result<(), Error> {
-    if a.backend == SyncBackend::Rsync {
+    if a.backend != SyncBackend::Git {
         return Err(Error::Other(
-            "rsync backend does not support --all; sync per project".to_string(),
+            "only git backend supports --all; sync per project".to_string(),
         ));
     }
     let mut pulled = 0;
@@ -386,6 +492,26 @@ mod tests {
                 "非法字符: {b}"
             );
         }
+    }
+
+    /// gzip 压缩/解压往返：快照压缩后变小，解压还原一致（#364 rclone 传输压缩）。
+    #[test]
+    fn gzip_roundtrip_compresses_snapshot() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let sql = dir.path().join("snap.sql");
+        let gz = dir.path().join("snap.sql.gz");
+        let out = dir.path().join("snap.out.sql");
+        let body = "INSERT INTO issues (title) VALUES ('x');\n".repeat(1000);
+        std::fs::write(&sql, &body).unwrap();
+        run_gzip(true, &sql, &gz).unwrap();
+        run_gzip(false, &gz, &out).unwrap();
+        let original = std::fs::read(&sql).unwrap();
+        let restored = std::fs::read(&out).unwrap();
+        assert_eq!(original, restored, "gzip 往返应还原一致");
+        assert!(
+            std::fs::metadata(&gz).unwrap().len() < original.len() as u64,
+            "压缩后应更小"
+        );
     }
 
     /// 非 --all 分支推导：项目模式用项目名分支；--db 单文件模式用固定分支（跨机一致，#398）。

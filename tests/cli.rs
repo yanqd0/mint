@@ -3929,3 +3929,98 @@ fn st_sync_merge_prune_keeps_local_removes_remote() {
         "merge --prune 后数据应已合并: {text}"
     );
 }
+
+/// rclone 后端：push/pull 走 rclone 传输（本地目录模拟远端），SQL 快照 gzip 压缩（#364）。
+/// rclone 不在 PATH 时跳过（提示不 fail，CI 有 rclone 时生效）。
+#[test]
+fn st_sync_rclone_backend_push_pull() {
+    if std::process::Command::new("rclone")
+        .arg("version")
+        .output()
+        .is_err()
+    {
+        eprintln!("rclone not installed; skipping st_sync_rclone_backend_push_pull");
+        return;
+    }
+    let dir_a = TempDir::new().unwrap();
+    let dir_b = TempDir::new().unwrap();
+    let remote_dir = tempfile::tempdir().unwrap();
+    let remote = format!("local:{}", remote_dir.path().join("mint").display());
+    let run = |dir: &TempDir, mid: &str, args: &[&str]| {
+        let mut c = Command::cargo_bin("mint").unwrap();
+        c.env("XDG_DATA_HOME", dir.path())
+            .env("MINT_MACHINE_ID", mid)
+            .args(args);
+        c
+    };
+    // A 机：issue + rclone push（SQL 快照 gzip 传输）。
+    run(
+        &dir_a,
+        "mach-a",
+        &["--project", "p", "issue", "add", "rclone数据"],
+    )
+    .assert()
+    .success();
+    run(
+        &dir_a,
+        "mach-a",
+        &[
+            "--project",
+            "p",
+            "sync",
+            "push",
+            "--backend",
+            "rclone",
+            "--remote",
+            remote.as_str(),
+        ],
+    )
+    .assert()
+    .success();
+    // 远端产物应为 .sql.gz（验证压缩传输）。
+    let remote_snaps = remote_dir.path().join("mint");
+    let gz_exists = std::fs::read_dir(&remote_snaps).is_ok_and(|mut it| {
+        it.any(|e| {
+            e.unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".sql.gz")
+        })
+    });
+    assert!(gz_exists, "远端应有 .sql.gz 产物");
+    // B 机：rclone pull → gunzip + 落地合并。
+    run(
+        &dir_b,
+        "mach-b",
+        &["--project", "p", "issue", "add", "b占位"],
+    )
+    .assert()
+    .success();
+    run(
+        &dir_b,
+        "mach-b",
+        &[
+            "--project",
+            "p",
+            "sync",
+            "pull",
+            "--backend",
+            "rclone",
+            "--remote",
+            remote.as_str(),
+        ],
+    )
+    .assert()
+    .success();
+    let out = run(&dir_b, "mach-b", &["--project", "p", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(
+        text.contains("rclone数据"),
+        "B 应含 A 的 rclone 数据: {text}"
+    );
+}
