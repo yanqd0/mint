@@ -473,24 +473,37 @@ pub enum SyncCmd {
     Merge(SyncMergeArgs),
 }
 
+/// sync 传输后端：git（默认，私有仓库 + 项目分支）或 rsync/scp（自建直连 SSH，#373）。
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SyncBackend {
+    Git,
+    Rsync,
+}
+
 #[derive(clap::Args)]
 pub struct SyncPushArgs {
-    /// Git remote URL (initializes repo if absent)
+    /// Git remote URL, or `user@host:/path` for rsync backend
     #[arg(long)]
     pub remote: Option<String>,
     /// Sync all projects (iterate projects/ directory)
     #[arg(long)]
     pub all: bool,
+    /// Transfer backend: git (default) or rsync/scp over SSH (#373)
+    #[arg(long, value_enum, default_value = "git")]
+    pub backend: SyncBackend,
 }
 
 #[derive(clap::Args)]
 pub struct SyncPullArgs {
-    /// Git remote URL (initializes repo if absent)
+    /// Git remote URL, or `user@host:/path` for rsync backend
     #[arg(long)]
     pub remote: Option<String>,
     /// Sync all projects (iterate projects/ directory)
     #[arg(long)]
     pub all: bool,
+    /// Transfer backend: git (default) or rsync/scp over SSH (#373)
+    #[arg(long, value_enum, default_value = "git")]
+    pub backend: SyncBackend,
 }
 
 #[derive(clap::Args)]

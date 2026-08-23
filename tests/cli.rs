@@ -3783,3 +3783,74 @@ fn st_sync_merge_from_local_snapshots() {
     let text = String::from_utf8_lossy(&out).to_string();
     assert!(text.contains("来自A"), "sync merge 应合并 A 快照: {text}");
 }
+
+/// rsync 后端：push/pull 走 rsync 直连（本地目录模拟远端 SSH），复用 #378 落地（#373）。
+#[test]
+fn st_sync_rsync_backend_push_pull() {
+    let dir_a = TempDir::new().unwrap();
+    let dir_b = TempDir::new().unwrap();
+    let remote = tempfile::tempdir().unwrap().path().join("remote-sync");
+    let run = |dir: &TempDir, mid: &str, args: &[&str]| {
+        let mut c = Command::cargo_bin("mint").unwrap();
+        c.env("XDG_DATA_HOME", dir.path())
+            .env("MINT_MACHINE_ID", mid)
+            .args(args);
+        c
+    };
+    // A 机：issue + rsync push（同步 sync 目录到远端）。
+    run(
+        &dir_a,
+        "mach-a",
+        &["--project", "p", "issue", "add", "rsync数据"],
+    )
+    .assert()
+    .success();
+    run(
+        &dir_a,
+        "mach-a",
+        &[
+            "--project",
+            "p",
+            "sync",
+            "push",
+            "--backend",
+            "rsync",
+            "--remote",
+            remote.to_str().unwrap(),
+        ],
+    )
+    .assert()
+    .success();
+    // B 机：rsync pull → 拉取远端 + 落地合并。
+    run(
+        &dir_b,
+        "mach-b",
+        &["--project", "p", "issue", "add", "b占位"],
+    )
+    .assert()
+    .success();
+    run(
+        &dir_b,
+        "mach-b",
+        &[
+            "--project",
+            "p",
+            "sync",
+            "pull",
+            "--backend",
+            "rsync",
+            "--remote",
+            remote.to_str().unwrap(),
+        ],
+    )
+    .assert()
+    .success();
+    let out = run(&dir_b, "mach-b", &["--project", "p", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8_lossy(&out).to_string();
+    assert!(text.contains("rsync数据"), "B 应含 A 的 rsync 数据: {text}");
+}

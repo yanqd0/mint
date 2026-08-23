@@ -148,6 +148,20 @@ mint merge --from pulled-snapshot.db             # 按 uid 去重重建全局视
 - **Syncthing**：P2P 多机直连，实时增量 + 冲突版本保留，无需中间存储；但需要每机跑 daemon（对"毫秒级 CLI"无影响，同步是后台独立进程）。
 - 结论倾向：若用户已有 NAS/VPS，rsync 是最简路径；Syncthing 适合多机持续同步场景。
 
+#### rsync/scp 接线（#373，已实现）
+
+前置（运维一次性）：SSH 免密登录（`ssh-keygen` + `ssh-copy-id user@host`，或密钥/端口配置）；远端建好 sync 目录。
+
+```bash
+# push：导出本机快照 + rsync 同步 sync 目录到远端（差量增量，-a 递归）
+mint sync push --backend rsync --remote user@host:/mnt/mint/p
+
+# pull：rsync 拉取远端 sync 目录 + 落地合并（复用 #378 的 merge_remote_snapshots）
+mint sync pull --backend rsync --remote user@host:/mnt/mint/p
+```
+
+说明：`--backend rsync` 复用同一 `snapshots/` 落地单元与 `import_sql` 幂等合并，只换传输层；rsync `-a` 文件级差量即「差量增量传输」。`--all` 不适用于 rsync（每项目远端路径独立，逐项目 sync）。
+
 ### 4. git+SQL（#353）——增量/历史天然满足（用户补充思路）
 
 - 核心：mint 导出**等效 SQL 文本**（`sqlite3 .dump` 等价物，`CREATE TABLE` + `INSERT`），用 git 私有仓库同步——git 对文本的 **delta 压缩**即增量、`git log` 即历史、`git revert` 即回滚、分支即实验。

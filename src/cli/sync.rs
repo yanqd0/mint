@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 
-use crate::cli::{SyncArgs, SyncCmd, SyncPullArgs, SyncPushArgs};
+use crate::cli::{SyncArgs, SyncBackend, SyncCmd, SyncPullArgs, SyncPushArgs};
 use crate::db::sync_import::MergeReport;
 use crate::error::Error;
 
@@ -53,8 +53,15 @@ fn sync_dir(conn: &Connection) -> Result<PathBuf, Error> {
 /// push 当前项目：导出本机快照 → snapshots/<machine_id>.sql → git add/commit/push。
 /// 分支统一走 `project/<safe>`（`branch` 为 --all 传的已映射分支；None 时从 db 路径推导），
 /// 与默认分支区分且 --all/非 --all 一致（#398）。快照无变化不产生空提交（#402）。
+/// `--backend rsync` 走 rsync/scp 直连（#373），复用同一导出 + snapshots 落地单元。
 fn push(conn: &Connection, a: &SyncPushArgs, branch: Option<&str>) -> Result<(), Error> {
     let dir = sync_dir(conn)?;
+    if a.backend == SyncBackend::Rsync {
+        let remote = a.remote.as_deref().ok_or_else(|| {
+            Error::Other("--remote user@host:/path required for rsync backend".to_string())
+        })?;
+        return rsync_push(conn, &dir, remote);
+    }
     ensure_git_repo(&dir, a.remote.as_deref())?;
     let snap = dir
         .join("snapshots")
@@ -78,6 +85,11 @@ fn push(conn: &Connection, a: &SyncPushArgs, branch: Option<&str>) -> Result<(),
 
 /// push --all：遍历 projects/ 目录，每项目独立 push（git-safe 项目分支）。
 fn push_all(data_dir: &Path, a: &SyncPushArgs) -> Result<(), Error> {
+    if a.backend == SyncBackend::Rsync {
+        return Err(Error::Other(
+            "rsync backend does not support --all; sync per project".to_string(),
+        ));
+    }
     let mut pushed = 0;
     for (name, conn) in each_project_db(data_dir)? {
         push(&conn, a, Some(&git_branch_for(&name)))?;
@@ -91,6 +103,12 @@ fn push_all(data_dir: &Path, a: &SyncPushArgs) -> Result<(), Error> {
 /// 分支统一走 `project/<safe>`（#398）；坏/旧快照 warn 跳过而非整体失败（#400）。
 fn pull(conn: &mut Connection, a: &SyncPullArgs, branch: Option<&str>) -> Result<(), Error> {
     let dir = sync_dir(conn)?;
+    if a.backend == SyncBackend::Rsync {
+        let remote = a.remote.as_deref().ok_or_else(|| {
+            Error::Other("--remote user@host:/path required for rsync backend".to_string())
+        })?;
+        return rsync_pull(conn, &dir, remote);
+    }
     ensure_git_repo(&dir, a.remote.as_deref())?;
     let b = branch.map(str::to_string).or_else(|| current_branch(conn));
     match b {
@@ -130,6 +148,51 @@ fn merge_all(data_dir: &Path) -> Result<(), Error> {
         merged += 1;
     }
     println!("merged {merged} project(s)");
+    Ok(())
+}
+
+/// rsync 传输 push：导出快照到 snapshots/ 后 rsync 同步整个 sync 目录到远端（SSH）。
+/// rsync 文件级差量 + `-z` 压缩即增量传输（#373）。
+fn rsync_push(conn: &Connection, dir: &Path, remote: &str) -> Result<(), Error> {
+    let snap = dir
+        .join("snapshots")
+        .join(format!("{}.sql", crate::db::machine_id()));
+    std::fs::create_dir_all(snap.parent().expect("snapshots dir"))?;
+    let sql = crate::db::sync::export_sql(conn)?;
+    std::fs::write(&snap, sql)?;
+    let src = format!("{}/", dir.display());
+    let dst = format!("{}/", remote.trim_end_matches('/'));
+    // -a（递归 + 保留属性）：rsync 默认不递归，缺 -a 会漏掉 snapshots/ 子目录（#373）。
+    run_rsync(&["-a", &src, &dst])?;
+    println!("pushed {} via rsync to {remote}", snap.display());
+    Ok(())
+}
+
+/// rsync 传输 pull：rsync 拉取远端 sync 目录到本地，复用 merge_remote_snapshots 落地（#378）。
+fn rsync_pull(conn: &mut Connection, dir: &Path, remote: &str) -> Result<(), Error> {
+    std::fs::create_dir_all(dir)?;
+    let src = format!("{}/", remote.trim_end_matches('/'));
+    let dst = format!("{}/", dir.display());
+    run_rsync(&["-a", &src, &dst])?;
+    let snaps_dir = dir.join("snapshots");
+    let report = merge_remote_snapshots(conn, &snaps_dir)?;
+    println!(
+        "pulled: {} inserted, {} updated, {} skipped",
+        report.inserted, report.updated, report.skipped
+    );
+    Ok(())
+}
+
+/// spawn rsync（argv 数组，无 shell）；非零退出码 → Error 带 stderr。
+fn run_rsync(args: &[&str]) -> Result<(), Error> {
+    let out = std::process::Command::new("rsync").args(args).output()?;
+    if !out.status.success() {
+        return Err(Error::Other(format!(
+            "rsync {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
     Ok(())
 }
 
@@ -232,6 +295,11 @@ fn has_changes(dir: &Path) -> Result<bool, Error> {
 
 /// pull --all：遍历 projects/，每项目独立 pull（git-safe 项目分支）。
 fn pull_all(data_dir: &Path, a: &SyncPullArgs) -> Result<(), Error> {
+    if a.backend == SyncBackend::Rsync {
+        return Err(Error::Other(
+            "rsync backend does not support --all; sync per project".to_string(),
+        ));
+    }
     let mut pulled = 0;
     for (name, mut conn) in each_project_db(data_dir)? {
         pull(&mut conn, a, Some(&git_branch_for(&name)))?;
