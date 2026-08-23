@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 
-use crate::cli::{SyncArgs, SyncBackend, SyncCmd, SyncPullArgs, SyncPushArgs};
+use crate::cli::{SyncArgs, SyncBackend, SyncCmd, SyncMergeArgs, SyncPullArgs, SyncPushArgs};
 use crate::db::sync_import::MergeReport;
 use crate::error::Error;
 
@@ -31,9 +31,9 @@ pub fn cmd_sync(conn: &mut Connection, data_dir: &Path, a: &SyncArgs) -> Result<
         }
         SyncCmd::Merge(m) => {
             if m.all {
-                merge_all(data_dir)
+                merge_all(data_dir, m)
             } else {
-                merge(conn)
+                merge(conn, m)
             }
         }
     }
@@ -119,7 +119,7 @@ fn pull(conn: &mut Connection, a: &SyncPullArgs, branch: Option<&str>) -> Result
         )?,
     }
     let snaps_dir = dir.join("snapshots");
-    let report = merge_remote_snapshots(conn, &snaps_dir)?;
+    let report = merge_remote_snapshots(conn, &snaps_dir, false)?;
     println!(
         "pulled: {} inserted, {} updated, {} skipped",
         report.inserted, report.updated, report.skipped
@@ -129,10 +129,11 @@ fn pull(conn: &mut Connection, a: &SyncPullArgs, branch: Option<&str>) -> Result
 
 /// merge 当前项目：从本地 `snapshots/` 目录合并快照（无 git 传输）。
 /// rsync/Syncthing 等自建直连方案：把 `snapshots/` 目录同步到本机后执行本命令落地（#378）。
-fn merge(conn: &mut Connection) -> Result<(), Error> {
+/// `--prune` 时合并成功后删除远端快照（清理累积；本机快照保留）。
+fn merge(conn: &mut Connection, a: &SyncMergeArgs) -> Result<(), Error> {
     let dir = sync_dir(conn)?;
     let snaps_dir = dir.join("snapshots");
-    let report = merge_remote_snapshots(conn, &snaps_dir)?;
+    let report = merge_remote_snapshots(conn, &snaps_dir, a.prune)?;
     println!(
         "merged: {} inserted, {} updated, {} skipped",
         report.inserted, report.updated, report.skipped
@@ -141,10 +142,10 @@ fn merge(conn: &mut Connection) -> Result<(), Error> {
 }
 
 /// merge --all：遍历 projects/，每项目 merge 其 snapshots/ 目录。
-fn merge_all(data_dir: &Path) -> Result<(), Error> {
+fn merge_all(data_dir: &Path, a: &SyncMergeArgs) -> Result<(), Error> {
     let mut merged = 0;
     for (_name, mut conn) in each_project_db(data_dir)? {
-        merge(&mut conn)?;
+        merge(&mut conn, a)?;
         merged += 1;
     }
     println!("merged {merged} project(s)");
@@ -175,7 +176,7 @@ fn rsync_pull(conn: &mut Connection, dir: &Path, remote: &str) -> Result<(), Err
     let dst = format!("{}/", dir.display());
     run_rsync(&["-a", &src, &dst])?;
     let snaps_dir = dir.join("snapshots");
-    let report = merge_remote_snapshots(conn, &snaps_dir)?;
+    let report = merge_remote_snapshots(conn, &snaps_dir, false)?;
     println!(
         "pulled: {} inserted, {} updated, {} skipped",
         report.inserted, report.updated, report.skipped
@@ -198,9 +199,11 @@ fn run_rsync(args: &[&str]) -> Result<(), Error> {
 
 /// 公共落地：从 `snapshots/` 目录合并非本机快照（git pull 与 rsync/Syncthing 复用，#378）。
 /// 跳过本机快照；坏/旧快照 warn 跳过而非整体失败（#400）。
+/// `prune`（sync merge --prune）时，合并成功的**远端**快照随即删除（清理累积；本机快照保留）。
 pub(crate) fn merge_remote_snapshots(
     conn: &mut Connection,
     snaps_dir: &Path,
+    prune: bool,
 ) -> Result<MergeReport, Error> {
     let mut report = MergeReport::default();
     let mine = crate::db::machine_id();
@@ -230,6 +233,10 @@ pub(crate) fn merge_remote_snapshots(
                     report.inserted += r.inserted;
                     report.updated += r.updated;
                     report.skipped += r.skipped;
+                    if prune {
+                        // 合并成功（import 事务已提交）→ 删远端快照；本机快照已在上面跳过。
+                        let _ = std::fs::remove_file(&path);
+                    }
                 }
                 Err(err) => {
                     eprintln!("mint: warning: skip {}: {err}", path.display());

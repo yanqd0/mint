@@ -511,6 +511,9 @@ pub struct SyncMergeArgs {
     /// Sync all projects (iterate projects/ directory)
     #[arg(long)]
     pub all: bool,
+    /// Delete remote snapshots after successfully merging them (cleanup; local snapshot kept)
+    #[arg(long)]
+    pub prune: bool,
 }
 
 // ── Cli::run ──────────────────────────────────────────────────────
