@@ -1253,7 +1253,11 @@ fn selected_milestone_id_resolves_by_view() {
     assert_eq!(m.selected_milestone_id(), Some(4));
     // Plans 行 → plan.milestone。
     let mut m = DashboardModel::new();
-    m.init(snap_full(vec![], vec![(mk_plan(7, Some(4), "1"), 0)], vec![]));
+    m.init(snap_full(
+        vec![],
+        vec![(mk_plan(7, Some(4), "1"), 0)],
+        vec![],
+    ));
     m.view = View::Plans;
     m.selected = 1;
     assert_eq!(m.selected_milestone_id(), Some(4));
