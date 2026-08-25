@@ -482,6 +482,26 @@ pub enum SyncBackend {
     Rclone,
 }
 
+impl SyncBackend {
+    /// 缓存/配置中的小写字符串形式。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SyncBackend::Git => "git",
+            SyncBackend::Rsync => "rsync",
+            SyncBackend::Rclone => "rclone",
+        }
+    }
+
+    pub fn from_config(s: &str) -> Option<SyncBackend> {
+        match s {
+            "git" => Some(SyncBackend::Git),
+            "rsync" => Some(SyncBackend::Rsync),
+            "rclone" => Some(SyncBackend::Rclone),
+            _ => None,
+        }
+    }
+}
+
 #[derive(clap::Args)]
 pub struct SyncPushArgs {
     /// Git remote URL; rsync `user@host:/path`; rclone `<remote>:<base>` (auto-creates mint/<project>/snapshots)
@@ -491,8 +511,8 @@ pub struct SyncPushArgs {
     #[arg(long)]
     pub all: bool,
     /// Transfer backend: git (default) or rsync/scp over SSH (#373)
-    #[arg(long, value_enum, default_value = "git")]
-    pub backend: SyncBackend,
+    #[arg(long, value_enum)]
+    pub backend: Option<SyncBackend>,
 }
 
 #[derive(clap::Args)]
@@ -504,8 +524,8 @@ pub struct SyncPullArgs {
     #[arg(long)]
     pub all: bool,
     /// Transfer backend: git (default) or rsync/scp over SSH (#373)
-    #[arg(long, value_enum, default_value = "git")]
-    pub backend: SyncBackend,
+    #[arg(long, value_enum)]
+    pub backend: Option<SyncBackend>,
 }
 
 #[derive(clap::Args)]

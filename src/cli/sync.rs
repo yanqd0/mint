@@ -8,26 +8,36 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 
-use crate::cli::{SyncArgs, SyncBackend, SyncCmd, SyncMergeArgs, SyncPullArgs, SyncPushArgs};
+use crate::cli::{SyncArgs, SyncBackend, SyncCmd, SyncMergeArgs};
 use crate::db::sync_import::MergeReport;
 use crate::error::Error;
 
 /// 执行 sync 分发（--all 遍历 projects/，需 data_dir）。
+/// Push/Pull 先解析全局 sync 缓存（`data_dir/sync.json`）：命令行 > 缓存 > 默认 git，
+/// 成功后回写缓存（覆盖单条，切换即覆盖，#406）。
 pub fn cmd_sync(conn: &mut Connection, data_dir: &Path, a: &SyncArgs) -> Result<(), Error> {
     match &a.command {
         SyncCmd::Push(p) => {
-            if p.all {
-                push_all(data_dir, p)
+            let (backend, remote) = resolve_sync_config(data_dir, p.backend, p.remote.clone())?;
+            let res = if p.all {
+                push_all(data_dir, &backend, remote.as_deref())
             } else {
-                push(conn, p, None)
-            }
+                push(conn, &backend, remote.as_deref(), None)
+            };
+            res?;
+            save_sync_config(data_dir, backend, remote.as_deref())?;
+            Ok(())
         }
         SyncCmd::Pull(p) => {
-            if p.all {
-                pull_all(data_dir, p)
+            let (backend, remote) = resolve_sync_config(data_dir, p.backend, p.remote.clone())?;
+            let res = if p.all {
+                pull_all(data_dir, &backend, remote.as_deref())
             } else {
-                pull(conn, p, None)
-            }
+                pull(conn, &backend, remote.as_deref(), None)
+            };
+            res?;
+            save_sync_config(data_dir, backend, remote.as_deref())?;
+            Ok(())
         }
         SyncCmd::Merge(m) => {
             if m.all {
@@ -37,6 +47,59 @@ pub fn cmd_sync(conn: &mut Connection, data_dir: &Path, a: &SyncArgs) -> Result<
             }
         }
     }
+}
+
+/// 解析 sync 配置（全局单条缓存 `data_dir/sync.json`）：优先级 命令行 > 缓存 > 默认(git, None)。
+fn resolve_sync_config(
+    data_dir: &Path,
+    cli_backend: Option<SyncBackend>,
+    cli_remote: Option<String>,
+) -> Result<(SyncBackend, Option<String>), Error> {
+    let cached = load_sync_config(data_dir)?;
+    let backend = cli_backend
+        .or(cached.as_ref().map(|(b, _)| *b))
+        .unwrap_or(SyncBackend::Git);
+    let remote = cli_remote.or(cached.and_then(|(_, r)| r));
+    Ok((backend, remote))
+}
+
+/// 读全局 sync 缓存（缺失/损坏 → None，回退默认）。
+fn load_sync_config(data_dir: &Path) -> Result<Option<(SyncBackend, Option<String>)>, Error> {
+    let path = data_dir.join("sync.json");
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(_) => return Ok(None),
+    };
+    let v: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(_) => return Ok(None), // 损坏视为无缓存
+    };
+    let backend = v
+        .get("backend")
+        .and_then(serde_json::Value::as_str)
+        .and_then(SyncBackend::from_config);
+    let remote = v
+        .get("remote")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    Ok(backend.map(|b| (b, remote)))
+}
+
+/// 写全局 sync 缓存（覆盖单条；在 data_dir 根，不参与同步，#406）。
+fn save_sync_config(
+    data_dir: &Path,
+    backend: SyncBackend,
+    remote: Option<&str>,
+) -> Result<(), Error> {
+    let info = serde_json::json!({
+        "backend": backend.as_str(),
+        "remote": remote,
+    });
+    std::fs::write(
+        data_dir.join("sync.json"),
+        serde_json::to_string_pretty(&info).unwrap_or_default(),
+    )?;
+    Ok(())
 }
 
 /// 同步工作目录：<db 父目录>/sync（每项目独立；MINT_DB_PATH 覆盖时随 db 迁移）。
@@ -53,27 +116,32 @@ fn sync_dir(conn: &Connection) -> Result<PathBuf, Error> {
 /// push 当前项目：导出本机快照 → snapshots/<machine_id>.sql → git add/commit/push。
 /// 分支统一走 `project/<safe>`（`branch` 为 --all 传的已映射分支；None 时从 db 路径推导），
 /// 与默认分支区分且 --all/非 --all 一致（#398）。快照无变化不产生空提交（#402）。
-/// `--backend rsync` 走 rsync/scp 直连（#373），复用同一导出 + snapshots 落地单元。
-fn push(conn: &Connection, a: &SyncPushArgs, branch: Option<&str>) -> Result<(), Error> {
+/// `backend`/`remote` 由 cmd_sync 解析（命令行 > sync.json 缓存 > 默认 git，#406）。
+fn push(
+    conn: &Connection,
+    backend: &SyncBackend,
+    remote: Option<&str>,
+    branch: Option<&str>,
+) -> Result<(), Error> {
     let dir = sync_dir(conn)?;
-    match a.backend {
+    match backend {
         SyncBackend::Rsync => {
-            let remote = a.remote.as_deref().ok_or_else(|| {
+            let remote = remote.ok_or_else(|| {
                 Error::Other("--remote user@host:/path required for rsync backend".to_string())
             })?;
             return rsync_push(conn, &dir, remote);
         }
         SyncBackend::Rclone => {
-            let remote = a.remote.as_deref().ok_or_else(|| {
+            let remote = remote.ok_or_else(|| {
                 Error::Other(
-                    "--remote <rclone-remote>:<path> required for rclone backend".to_string(),
+                    "--remote <rclone-remote>:<base> required for rclone backend".to_string(),
                 )
             })?;
             return rclone_push(conn, &dir, remote);
         }
         SyncBackend::Git => {}
     }
-    ensure_git_repo(&dir, a.remote.as_deref())?;
+    ensure_git_repo(&dir, remote)?;
     let snap = dir
         .join("snapshots")
         .join(format!("{}.sql", crate::db::machine_id()));
@@ -94,16 +162,12 @@ fn push(conn: &Connection, a: &SyncPushArgs, branch: Option<&str>) -> Result<(),
     Ok(())
 }
 
-/// push --all：遍历 projects/ 目录，每项目独立 push（git-safe 项目分支）。
-fn push_all(data_dir: &Path, a: &SyncPushArgs) -> Result<(), Error> {
-    if a.backend != SyncBackend::Git {
-        return Err(Error::Other(
-            "only git backend supports --all; sync per project".to_string(),
-        ));
-    }
+/// push --all：遍历 projects/ 目录，每项目独立 push。
+/// 各 backend 均支持（git 走项目分支；rclone/rsync 走 `<base>/mint/<project>` 子目录，#406）。
+fn push_all(data_dir: &Path, backend: &SyncBackend, remote: Option<&str>) -> Result<(), Error> {
     let mut pushed = 0;
     for (name, conn) in each_project_db(data_dir)? {
-        push(&conn, a, Some(&git_branch_for(&name)))?;
+        push(&conn, backend, remote, Some(&git_branch_for(&name)))?;
         pushed += 1;
     }
     println!("pushed {pushed} project(s)");
@@ -112,26 +176,32 @@ fn push_all(data_dir: &Path, a: &SyncPushArgs) -> Result<(), Error> {
 
 /// pull 当前项目：git pull → 读取 snapshots/*.sql（非本机）逐个 import 合并。
 /// 分支统一走 `project/<safe>`（#398）；坏/旧快照 warn 跳过而非整体失败（#400）。
-fn pull(conn: &mut Connection, a: &SyncPullArgs, branch: Option<&str>) -> Result<(), Error> {
+/// `backend`/`remote` 由 cmd_sync 解析（命令行 > sync.json 缓存 > 默认 git，#406）。
+fn pull(
+    conn: &mut Connection,
+    backend: &SyncBackend,
+    remote: Option<&str>,
+    branch: Option<&str>,
+) -> Result<(), Error> {
     let dir = sync_dir(conn)?;
-    match a.backend {
+    match backend {
         SyncBackend::Rsync => {
-            let remote = a.remote.as_deref().ok_or_else(|| {
+            let remote = remote.ok_or_else(|| {
                 Error::Other("--remote user@host:/path required for rsync backend".to_string())
             })?;
             return rsync_pull(conn, &dir, remote);
         }
         SyncBackend::Rclone => {
-            let remote = a.remote.as_deref().ok_or_else(|| {
+            let remote = remote.ok_or_else(|| {
                 Error::Other(
-                    "--remote <rclone-remote>:<path> required for rclone backend".to_string(),
+                    "--remote <rclone-remote>:<base> required for rclone backend".to_string(),
                 )
             })?;
             return rclone_pull(conn, &dir, remote);
         }
         SyncBackend::Git => {}
     }
-    ensure_git_repo(&dir, a.remote.as_deref())?;
+    ensure_git_repo(&dir, remote)?;
     let b = branch.map(str::to_string).or_else(|| current_branch(conn));
     match b {
         Some(b) => git(&dir, &["pull", "origin", &b, "--allow-unrelated-histories"])?,
@@ -183,18 +253,23 @@ fn rsync_push(conn: &Connection, dir: &Path, remote: &str) -> Result<(), Error> 
     std::fs::create_dir_all(snap.parent().expect("snapshots dir"))?;
     let sql = crate::db::sync::export_sql(conn)?;
     std::fs::write(&snap, sql)?;
+    // 远端结构 `<base>/mint/<project>`（同步 sync 目录内容，含 snapshots/；rsync 自动建目录，#406）。
+    let proj = project_name(conn)?;
+    let target = format!("{remote}/mint/{proj}");
     let src = format!("{}/", dir.display());
-    let dst = format!("{}/", remote.trim_end_matches('/'));
+    let dst = format!("{}/", target.trim_end_matches('/'));
     // -a（递归 + 保留属性）：rsync 默认不递归，缺 -a 会漏掉 snapshots/ 子目录（#373）。
     run_rsync(&["-a", &src, &dst])?;
-    println!("pushed {} via rsync to {remote}", snap.display());
+    println!("pushed {} via rsync to {target}", snap.display());
     Ok(())
 }
 
 /// rsync 传输 pull：rsync 拉取远端 sync 目录到本地，复用 merge_remote_snapshots 落地（#378）。
 fn rsync_pull(conn: &mut Connection, dir: &Path, remote: &str) -> Result<(), Error> {
+    let proj = project_name(conn)?;
+    let target = format!("{remote}/mint/{proj}");
     std::fs::create_dir_all(dir)?;
-    let src = format!("{}/", remote.trim_end_matches('/'));
+    let src = format!("{}/", target.trim_end_matches('/'));
     let dst = format!("{}/", dir.display());
     run_rsync(&["-a", &src, &dst])?;
     let snaps_dir = dir.join("snapshots");
@@ -446,15 +521,10 @@ fn has_changes(dir: &Path) -> Result<bool, Error> {
 }
 
 /// pull --all：遍历 projects/，每项目独立 pull（git-safe 项目分支）。
-fn pull_all(data_dir: &Path, a: &SyncPullArgs) -> Result<(), Error> {
-    if a.backend != SyncBackend::Git {
-        return Err(Error::Other(
-            "only git backend supports --all; sync per project".to_string(),
-        ));
-    }
+fn pull_all(data_dir: &Path, backend: &SyncBackend, remote: Option<&str>) -> Result<(), Error> {
     let mut pulled = 0;
     for (name, mut conn) in each_project_db(data_dir)? {
-        pull(&mut conn, a, Some(&git_branch_for(&name)))?;
+        pull(&mut conn, backend, remote, Some(&git_branch_for(&name)))?;
         pulled += 1;
     }
     println!("pulled {pulled} project(s)");
