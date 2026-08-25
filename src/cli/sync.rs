@@ -258,8 +258,8 @@ fn rsync_push(conn: &Connection, dir: &Path, remote: &str) -> Result<(), Error> 
     let target = format!("{remote}/mint/{proj}");
     let src = format!("{}/", dir.display());
     let dst = format!("{}/", target.trim_end_matches('/'));
-    // -a（递归 + 保留属性）：rsync 默认不递归，缺 -a 会漏掉 snapshots/ 子目录（#373）。
-    run_rsync(&["-a", &src, &dst])?;
+    // -a（递归 + 保留属性）+ --mkpath（GNU rsync 3.2+ 创建多级目标目录，空 base 可用；#408）。
+    run_rsync(&["-a", "--mkpath", &src, &dst])?;
     println!("pushed {} via rsync to {target}", snap.display());
     Ok(())
 }

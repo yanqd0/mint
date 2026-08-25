@@ -4,13 +4,13 @@ use super::*;
 /// rsync 后端：push/pull 走 rsync 直连（本地目录模拟远端 SSH），复用 #378 落地（#373）。
 #[test]
 fn st_sync_rsync_backend_push_pull() {
-    // CI（windows）无 rsync：未装则跳过（#408）。
-    if std::process::Command::new("rsync")
+    // rsync 需支持 --mkpath（GNU 3.2+，创建多级目标目录）；openrsync 不支持则跳过（#408）。
+    let probe = std::process::Command::new("rsync")
+        .arg("--mkpath")
         .arg("--version")
-        .output()
-        .is_err()
-    {
-        eprintln!("rsync not installed; skipping st_sync_rsync_backend_push_pull");
+        .output();
+    if !probe.map(|o| o.status.success()).unwrap_or(false) {
+        eprintln!("rsync --mkpath unsupported; skipping st_sync_rsync_backend_push_pull");
         return;
     }
     let dir_a = TempDir::new().unwrap();
