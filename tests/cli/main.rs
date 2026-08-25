@@ -117,6 +117,7 @@ mod list_search;
 mod migrate;
 mod milestone;
 mod plan;
+mod plan_ext;
 mod plan_list;
 mod project;
 mod search;

@@ -165,3 +165,17 @@ fn st_milestone_get_fields() {
         "stderr: {stderr}"
     );
 }
+
+/// milestone 空 title/version 拒绝 + create/set 非 json 输出（#415 补测）。
+#[test]
+fn st_milestone_boundary_errors_and_text() {
+    let (_dir, db) = empty_db();
+    let err = run_fail(&db, &["milestone", "create", "  ", "--version", "0.1.0"]);
+    assert!(err.contains("title must not be empty"), "stderr: {err}");
+    let t = run_ok(&db, &["milestone", "create", "r", "--version", "0.1.0"]);
+    assert!(t.contains("Created milestone #1 (r)"), "text: {t}");
+    let err = run_fail(&db, &["milestone", "set", "1", "--version", " "]);
+    assert!(err.contains("version must not be empty"), "stderr: {err}");
+    let t = run_ok(&db, &["milestone", "set", "1", "--title", "r2"]);
+    assert!(t.contains("Updated milestone #1"), "text: {t}");
+}

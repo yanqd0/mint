@@ -274,3 +274,16 @@ fn st_issue_add_priority_zero() {
     let err = run_fail(&db, &["issue", "add", "x", "--priority", "5"]);
     assert!(err.contains("5"), "{err}");
 }
+
+/// issue get/set not found + set 非 json 输出（#415 补测）。
+#[test]
+fn st_issue_get_set_not_found_and_text() {
+    let (_dir, db) = empty_db();
+    let err = run_fail(&db, &["issue", "get", "999", "title"]);
+    assert!(err.contains("issue #999 not found"), "stderr: {err}");
+    let err = run_fail(&db, &["issue", "set", "999", "--title", "x"]);
+    assert!(err.contains("issue #999 not found"), "stderr: {err}");
+    let a = add_issue(&db, "x");
+    let t = run_ok(&db, &["issue", "set", &a.to_string(), "--title", "y"]);
+    assert!(t.contains("Updated issue #"), "text: {t}");
+}
