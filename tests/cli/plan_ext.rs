@@ -16,7 +16,10 @@ fn st_plan_boundary_errors_and_text() {
     let t = run_ok(&db, &["plan", "set", "1", "--title", "p2"]);
     assert!(t.contains("Updated plan #1"), "text: {t}");
     // set --milestone 非 json：move 重置其下 planned issue → reset 计数。
-    run_json(&db, &["milestone", "create", "ms", "--version", "0.2.0", "--json"]);
+    run_json(
+        &db,
+        &["milestone", "create", "ms", "--version", "0.2.0", "--json"],
+    );
     let i = add_issue(&db, "x");
     run_json(&db, &["plan", "attach", "1", &i.to_string(), "--json"]);
     run_json(&db, &["issue", "state", "plan", &i.to_string(), "--json"]);

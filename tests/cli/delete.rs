@@ -137,7 +137,10 @@ fn st_delete_not_found() {
 #[test]
 fn st_delete_non_json_outputs() {
     let (_dir, db) = empty_db();
-    run_json(&db, &["milestone", "create", "r", "--version", "0.1.0", "--json"]);
+    run_json(
+        &db,
+        &["milestone", "create", "r", "--version", "0.1.0", "--json"],
+    );
     run_json(&db, &["plan", "create", "p", "--json"]);
     let a = add_issue(&db, "x");
     let t = run_ok(&db, &["delete", "issue", &a.to_string()]);
@@ -154,7 +157,10 @@ fn st_delete_label_json_and_project_success() {
     let (_dir, db) = empty_db();
     let data_dir = std::path::Path::new(&db).parent().unwrap().to_path_buf();
     // label --json。
-    run_json(&db, &["issue", "add", "with-label", "--label", "ui", "--json"]);
+    run_json(
+        &db,
+        &["issue", "add", "with-label", "--label", "ui", "--json"],
+    );
     let v = run_json(&db, &["delete", "label", "ui", "--json"]);
     assert_eq!(v["deleted"], "ui");
     assert_eq!(v["kind"], "label");
@@ -162,10 +168,7 @@ fn st_delete_label_json_and_project_success() {
     run_ok(&db, &["project", "create", "alpha"]);
     let t = run_ok(&db, &["delete", "project", "alpha"]);
     assert!(t.contains("Deleted project"), "text: {t}");
-    assert!(
-        !data_dir.join("projects/alpha").exists(),
-        "项目目录应删除"
-    );
+    assert!(!data_dir.join("projects/alpha").exists(), "项目目录应删除");
     // project --json 成功。
     run_ok(&db, &["project", "create", "beta"]);
     let v = run_json(&db, &["delete", "project", "beta", "--json"]);
