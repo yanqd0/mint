@@ -3945,8 +3945,8 @@ fn st_sync_rclone_backend_push_pull() {
     let dir_a = TempDir::new().unwrap();
     let dir_b = TempDir::new().unwrap();
     let remote_dir = tempfile::tempdir().unwrap();
-    // 纯本地路径模拟远端（未配置 rclone remote 时 `local:` 前缀不可用）。
-    let remote = format!("{}", remote_dir.path().join("mint").display());
+    // 基目录语义：空目录（不预建任何子目录），mint 自动建 mint/<proj>/snapshots（#405）。
+    let remote = format!("{}", remote_dir.path().display());
     let run = |dir: &TempDir, mid: &str, args: &[&str]| {
         let mut c = Command::cargo_bin("mint").unwrap();
         c.env("XDG_DATA_HOME", dir.path())
@@ -3978,17 +3978,12 @@ fn st_sync_rclone_backend_push_pull() {
     )
     .assert()
     .success();
-    // 远端产物应为 .sql.gz（验证压缩传输）。
-    let remote_snaps = remote_dir.path().join("mint");
-    let gz_exists = std::fs::read_dir(&remote_snaps).is_ok_and(|mut it| {
-        it.any(|e| {
-            e.unwrap()
-                .file_name()
-                .to_string_lossy()
-                .ends_with(".sql.gz")
-        })
-    });
-    assert!(gz_exists, "远端应有 .sql.gz 产物");
+    // 远端应自动建出 mint/p/snapshots/mach-a.sql.gz（无需预建，验证目录创建内化）。
+    let remote_snap = remote_dir.path().join("mint/p/snapshots/mach-a.sql.gz");
+    assert!(
+        remote_snap.exists(),
+        "远端应自动建 mint/p/snapshots/mach-a.sql.gz"
+    );
     // B 机：rclone pull → gunzip + 落地合并。
     run(
         &dir_b,

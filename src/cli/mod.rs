@@ -484,7 +484,7 @@ pub enum SyncBackend {
 
 #[derive(clap::Args)]
 pub struct SyncPushArgs {
-    /// Git remote URL, or `user@host:/path` for rsync backend
+    /// Git remote URL; rsync `user@host:/path`; rclone `<remote>:<base>` (auto-creates mint/<project>/snapshots)
     #[arg(long)]
     pub remote: Option<String>,
     /// Sync all projects (iterate projects/ directory)
@@ -497,7 +497,7 @@ pub struct SyncPushArgs {
 
 #[derive(clap::Args)]
 pub struct SyncPullArgs {
-    /// Git remote URL, or `user@host:/path` for rsync backend
+    /// Git remote URL; rsync `user@host:/path`; rclone `<remote>:<base>` (auto-creates mint/<project>/snapshots)
     #[arg(long)]
     pub remote: Option<String>,
     /// Sync all projects (iterate projects/ directory)

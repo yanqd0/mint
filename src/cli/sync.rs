@@ -219,7 +219,38 @@ fn run_rsync(args: &[&str]) -> Result<(), Error> {
     Ok(())
 }
 
+/// 从 db 路径推导当前项目名（db 父目录 basename = 项目名，如 `projects/<name>/<machine>.db`）。
+fn project_name(conn: &Connection) -> Result<String, Error> {
+    let db = conn
+        .path()
+        .ok_or_else(|| Error::Other("no db path".to_string()))?;
+    Path::new(db)
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .map(str::to_string)
+        .ok_or_else(|| Error::Other("cannot derive project name".to_string()))
+}
+
+/// 递归创建远端目录（#405）：remote 含 `:`（非本地后端）按 `/` 逐级 `rclone mkdir`
+/// ——WebDAV/SFTP/Drive 等不递归建父目录（409），需逐级；S3/B2 等无目录后端 mkdir no-op 无害。
+/// 本地路径（无 `:`）用 `create_dir_all`（原生递归）。mkdir 对已存在目录幂等。
+fn rclone_mkdirs(remote: &str) -> Result<(), Error> {
+    if let Some((name, path)) = remote.split_once(':') {
+        let mut acc = String::new();
+        for seg in path.trim_matches('/').split('/').filter(|s| !s.is_empty()) {
+            acc.push('/');
+            acc.push_str(seg);
+            run_rclone(&["mkdir", &format!("{name}:{acc}")])?;
+        }
+    } else {
+        std::fs::create_dir_all(remote)?;
+    }
+    Ok(())
+}
+
 /// rclone 传输 push：导出快照 → gzip 压缩 → rclone copy 到远端（SQL 形态 + 压缩，#364）。
+/// `remote` = 基目录（可空/不存在）；自动建 `mint/<project>/snapshots` 结构（#405）。
 /// 传输 `snapshots/*.sql.gz`（压缩后体积小 ~5×）；本地保留裸 `.sql` 供 merge 读。
 fn rclone_push(conn: &Connection, dir: &Path, remote: &str) -> Result<(), Error> {
     let snap = dir
@@ -230,26 +261,33 @@ fn rclone_push(conn: &Connection, dir: &Path, remote: &str) -> Result<(), Error>
     std::fs::write(&snap, sql)?;
     let gz = snap.with_extension("sql.gz");
     run_gzip(true, &snap, &gz)?;
+    // 远端结构 `<base>/mint/<project>/snapshots`：先逐级创建（WebDAV 不递归，409）。
+    let proj = project_name(conn)?;
+    let target = format!("{remote}/mint/{proj}/snapshots");
+    rclone_mkdirs(&target)?;
     let snaps = snap.parent().expect("snapshots dir");
     // --filter 替代 --include/--exclude 组合（rclone 提示组合顺序不确定，推荐 filter）。
     run_rclone(&[
         "copy",
         snaps.to_str().expect("path"),
-        remote,
+        &target,
         "--filter",
         "+ *.sql.gz",
         "--filter",
         "- *",
     ])?;
-    println!("pushed {} via rclone to {remote}", gz.display());
+    println!("pushed {} via rclone to {target}", gz.display());
     Ok(())
 }
 
 /// rclone 传输 pull：rclone copy 远端 → 本地 gunzip 解压 → 复用 merge_remote_snapshots 落地（#378）。
+/// 远端结构 `mint/<project>/snapshots`（与 push 对应，自动定位，#405）。
 fn rclone_pull(conn: &mut Connection, dir: &Path, remote: &str) -> Result<(), Error> {
+    let proj = project_name(conn)?;
+    let target = format!("{remote}/mint/{proj}/snapshots");
     let snaps_dir = dir.join("snapshots");
     std::fs::create_dir_all(&snaps_dir)?;
-    run_rclone(&["copy", remote, snaps_dir.to_str().expect("path")])?;
+    run_rclone(&["copy", &target, snaps_dir.to_str().expect("path")])?;
     // gunzip 每个 `.sql.gz` → `.sql`（merge 读裸 .sql），随后清理 .gz。
     if let Ok(entries) = std::fs::read_dir(&snaps_dir) {
         for entry in entries.flatten() {

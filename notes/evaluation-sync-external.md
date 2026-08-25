@@ -183,17 +183,18 @@ mint sync merge --all    # 多项目
 
 ```bash
 # push：导出 SQL 快照 → gzip -9 → rclone copy（只传 *.sql.gz）
-mint sync push --backend rclone --remote r2:mint/p        # 海外（Cloudflare R2 免费）
-mint sync push --backend rclone --remote oss:mint/p       # 国内（阿里云 OSS，rclone 配 S3 协议）
-mint sync push --backend rclone --remote cos:mint/p       # 腾讯云 COS
+mint sync push --backend rclone --remote r2:mint          # 海外（Cloudflare R2 免费）
+mint sync push --backend rclone --remote oss:mint         # 国内（阿里云 OSS，rclone 配 S3 协议）
+mint sync push --backend rclone --remote jianguo:/mint    # 坚果云 WebDAV（基目录）
 
 # pull：rclone copy 远端 → gunzip 解压 → 落地合并（复用 #378）
-mint sync pull --backend rclone --remote r2:mint/p
+mint sync pull --backend rclone --remote r2:mint
 ```
 
 约定：
+- **`--remote` = 基目录**（可空/不存在）：mint 自动建 `mint/<project>/snapshots` 结构（逐级 rclone mkdir，WebDAV 等不递归后端 409 已内化；S3 类 no-op 安全；本地路径递归），**无需预建目录**
 - **压缩**：rclone 传输 `snapshots/*.sql.gz`（gzip -9）；git/rsync 保持裸 `.sql`（文本 diff/历史）
-- **产物路径**：远端 `<remote>/snapshots/*.sql.gz`
+- **产物路径**：远端 `<remote>/mint/<project>/snapshots/*.sql.gz`（多项目天然隔离）
 - **换后端 = 换 `--remote` 配置**，非换工具（传输与后端解耦）
 - `--all` 不适用（同 rsync，每项目远端独立，逐项目 sync）
 
