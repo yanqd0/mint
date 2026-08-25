@@ -150,6 +150,44 @@ fn st_link_missing_ids() {
     assert!(stderr.contains("issue #999 not found"), "stderr: {stderr}");
 }
 
+/// link create/remove/list 非 json 人类输出 + list 不存在 issue 报错（#414 补测）。
+#[test]
+fn st_link_non_json_and_not_found() {
+    let (_dir, db) = empty_db();
+    let a = add_issue(&db, "a");
+    let b = add_issue(&db, "b");
+    let t = run_ok(
+        &db,
+        &[
+            "issue",
+            "link",
+            "create",
+            &a.to_string(),
+            "solves",
+            &b.to_string(),
+        ],
+    );
+    assert!(t.contains("linked issue"), "text: {t}");
+    let t = run_ok(&db, &["issue", "link", "list", &a.to_string()]);
+    assert!(t.contains("#2"), "list 应含对端 id: {t}");
+    // 反向 remove（对称删除）。
+    let t = run_ok(
+        &db,
+        &[
+            "issue",
+            "link",
+            "remove",
+            &b.to_string(),
+            "solves",
+            &a.to_string(),
+        ],
+    );
+    assert!(t.contains("unlinked"), "text: {t}");
+    // list 不存在 issue → not found。
+    let err = run_fail(&db, &["issue", "link", "list", "999"]);
+    assert!(err.contains("issue #999 not found"), "stderr: {err}");
+}
+
 /// show 内嵌 links；invalid type 被 clap 拒绝。
 #[test]
 fn st_show_embeds_links() {

@@ -43,6 +43,18 @@ pub(crate) fn run_json(db: &str, args: &[&str]) -> Value {
     serde_json::from_slice(&out).expect("stdout 应为合法 JSON")
 }
 
+/// 执行并断言成功，返回 stdout 文本（非 json 输出路径用）。
+pub(crate) fn run_ok(db: &str, args: &[&str]) -> String {
+    let out = mint(db)
+        .args(args)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    String::from_utf8_lossy(&out).to_string()
+}
+
 /// 执行并断言失败，返回 stderr 字符串。
 pub(crate) fn run_fail(db: &str, args: &[&str]) -> String {
     let out = mint(db).args(args).assert().failure().get_output().clone();
