@@ -231,14 +231,15 @@ fn rclone_push(conn: &Connection, dir: &Path, remote: &str) -> Result<(), Error>
     let gz = snap.with_extension("sql.gz");
     run_gzip(true, &snap, &gz)?;
     let snaps = snap.parent().expect("snapshots dir");
+    // --filter 替代 --include/--exclude 组合（rclone 提示组合顺序不确定，推荐 filter）。
     run_rclone(&[
         "copy",
         snaps.to_str().expect("path"),
         remote,
-        "--include",
-        "*.sql.gz",
-        "--exclude",
-        "*",
+        "--filter",
+        "+ *.sql.gz",
+        "--filter",
+        "- *",
     ])?;
     println!("pushed {} via rclone to {remote}", gz.display());
     Ok(())

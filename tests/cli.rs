@@ -3945,7 +3945,8 @@ fn st_sync_rclone_backend_push_pull() {
     let dir_a = TempDir::new().unwrap();
     let dir_b = TempDir::new().unwrap();
     let remote_dir = tempfile::tempdir().unwrap();
-    let remote = format!("local:{}", remote_dir.path().join("mint").display());
+    // 纯本地路径模拟远端（未配置 rclone remote 时 `local:` 前缀不可用）。
+    let remote = format!("{}", remote_dir.path().join("mint").display());
     let run = |dir: &TempDir, mid: &str, args: &[&str]| {
         let mut c = Command::cargo_bin("mint").unwrap();
         c.env("XDG_DATA_HOME", dir.path())
