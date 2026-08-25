@@ -457,3 +457,33 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 - 去内置 SQLite 的评估方法与替换候选（系统 libsqlite3 / 其它）——0.5.0 前
 - i18n 实现方式（gettext / 内建表 / 编译期）——1.0 前
+
+---
+
+## D41：plan 模式 hook 机制研究结论（2026-08-25，#413）
+
+**背景**：mint 的 skill 要求「宿主 plan 模式 ⟷ mint plan 双向绑定」（#275），当前依赖主 LLM 自觉。研究宿主（Claude Code）是否提供 plan 模式 hook。
+
+**研究结论**（claude-code-guide 交叉验证）：
+- **无 plan 模式专用事件**（`PlanModeEnter`/`PlanModeExit` 未实现，feature request #21282/#59420 已关闭）。
+- **`ExitPlanMode` 是真实工具调用**，可被 `PreToolUse`/`PostToolUse`/`PermissionRequest` 捕获：PreToolUse 的 `tool_input.plan` 含完整 plan markdown；PostToolUse 的 `tool_response.plan` + `filePath`（批准后）；PermissionRequest 的 `permission_mode:"plan"`。
+- **`EnterPlanMode` 无可靠 hook**（官方 matcher 清单不含，社区插件版本相关不可靠）；无 plan 模式状态信号（无 env/statusline mode 字段）。
+- 已知 bug：`#50660`（ExitPlanMode 上 `deny` 被静默忽略）。
+
+**决策**：用**提示词方案**落地退出绑定（非新增 mint 子命令）——hook 在 `ExitPlanMode` 时注入简短英文提示（ensure a matching mint plan exists），由 LLM 用 skill 流程判断是否 `plan create/attach`；不做确定性校验。
+
+**理由**：
+- 绑定本就半强制（Enter 不可 hook，进入靠 skill 约束）；hook 只做「退出时提醒」。
+- 子命令的确定性优点被两点抵消：① plan 标题模糊匹配不可靠；② 跨宿主（codex/opencode）需各自 hook 调命令，复杂度×3。
+- 提示词方案跨宿主天然友好：各宿主 hook 注入同一文案即可（机制差异、内容一致）。
+
+---
+
+## D42：commit hook 行为修正（2026-08-25，#411/#412）
+
+**背景**：commit 提醒 hook 发现两个缺陷。
+
+**结论**：
+- **触发范围过宽**：hooks.json 的 PostToolUse matcher 为 `"Bash"`（未限定 git commit 命令），导致**任何 Bash 命令都触发**提醒（被去重掩蔽）。修复：matcher 改 `"Bash:git commit*"`。
+- **去重机器级共享**：`$TMPDIR/mint_last_commit_sha` 多会话互踩。修复：从 hook stdin 事件 JSON 解析 `session_id`，去重文件按会话隔离。
+- **文案冗余**：~150 token 中文说明（skill 流程已知）。修复：精简为英文一行 `mint: commit <sha> — run \`mint issue state commit <id> --sha <sha>\``。

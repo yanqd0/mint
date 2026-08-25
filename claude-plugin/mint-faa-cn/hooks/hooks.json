@@ -1,8 +1,20 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/inject_plan_bind.sh",
+            "timeout": 100
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash:git commit*",
         "hooks": [
           {
             "type": "command",
