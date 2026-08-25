@@ -5,7 +5,7 @@ description: >-
   reports bugs, problems, requirements, TODOs, leftovers, review findings, or
   plans (milestone/milestone/sprint). When called without arguments, takes over
   the session and recommends next steps. Trigger words: issue bug problem
-  requirement todo leftover review plan milestone milestone sprint.
+  requirement todo leftover review plan milestone sprint sync push pull merge.
 allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
 ---
 
@@ -33,6 +33,7 @@ Before any flow, determine the current host agent and `Read` **only** the matchi
    - **leftover / TODO / observation** → `references/flow-todo.md` (record, optionally mount)
    - **version / plan / milestone** → `references/flow-planning.md` (milestone/milestone create / plan/sprint create + split issues)
    - **conditional branches** (mount rules / no tests / non-git / either-or) → `references/flow-conditions.md`
+  - **sync / push / pull / merge** → `references/flow-sync.md` (multi-machine data sync)
 
 2. **Execute**: Follow the reference steps to run mint command sequences (issue creation / mount / link / state machine advancement),
    advancing state-by-state and verifying with `show`. Search with `list --json` before recording (fuzzy title match) to avoid duplicates.
@@ -121,6 +122,13 @@ mint issue link create 42 blocked_by 55
 # Plans (plan/sprint under milestone/milestone)
 mint plan create "sprint-1" --body "goal…" --milestone 4
 mint plan attach 12 42              # single arg: one issue per call, repeat for multiple (not the batch form above)
+
+# sync (multi-machine; first use specifies backend/remote, then cached)
+mint sync push --backend rclone --remote jianguo:/mint   # first time
+mint sync push                # later, no flags (reuse cache)
+mint sync pull
+mint sync merge --prune       # land local snapshots + prune merged remote
+mint sync push --all          # multi-project
 ```
 
 See `references/commands.md` for the full command reference and `mint <sub> --help` for per-command details.

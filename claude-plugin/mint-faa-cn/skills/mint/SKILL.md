@@ -4,7 +4,7 @@ description: >-
   用 mint CLI 管理开发 issue 与流程。当用户描述 bug/问题/需求/遗留项/TODO/观察项/
   审查发现/计划/里程碑/milestone/sprint 等值得记录的内容时自动触发；无参数调用时
   接管 session，推测下一步开发计划。触发词：issue bug problem requirement todo
-  leftover review plan milestone milestone sprint 登记 记录 排期 修复 需求 问题 遗留 审查 计划 里程碑 下一步。
+  leftover review plan milestone milestone sprint sync push pull merge 登记 记录 排期 修复 需求 问题 遗留 审查 计划 里程碑 同步 推送 拉取 合并 下一步。
 allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
 ---
 
@@ -33,6 +33,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
    - **遗留 / TODO / 观察项** → `references/flow-todo.md`（登记，可选挂载）
    - **版本 / 计划 / 里程碑** → `references/flow-planning.md`（milestone/milestone create / plan/sprint create + 拆 issues）
    - **条件分支**（挂载规则/无测试/非 git/二选一）→ `references/flow-conditions.md`
+   - **同步/推送/拉取/合并** → `references/flow-sync.md`（多机数据同步，push/pull/merge + 传输后端）
 
 2. **执行流程**：按 reference 步骤执行 mint 命令序列（issue 创建 / 挂载 / link / 状态机推进），
    逐态推进并 `show` 验证。登记前先 `list --json` 查重（标题模糊匹配），不重复创建。
@@ -121,6 +122,13 @@ mint issue link create 42 blocked_by 55
 # 计划（plan/sprint 挂 milestone/milestone）
 mint plan create "sprint-1" --body "目标…" --milestone 4
 mint plan attach 12 42              # 单参：一次只挂一个 issue，多 issue 逐条执行（勿与上方批量混淆）
+
+# 同步（多机；首次指定后免参复用缓存）
+mint sync push --backend rclone --remote jianguo:/mint   # 首次指定
+mint sync push                # 之后免参
+mint sync pull
+mint sync merge --prune       # 本地 snapshots 落地 + 清理远端快照
+mint sync push --all          # 多项目
 ```
 
 详细用法见 `references/commands.md` 及各子命令 `mint <sub> --help`。
