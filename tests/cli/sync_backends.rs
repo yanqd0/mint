@@ -4,6 +4,15 @@ use super::*;
 /// rsync 后端：push/pull 走 rsync 直连（本地目录模拟远端 SSH），复用 #378 落地（#373）。
 #[test]
 fn st_sync_rsync_backend_push_pull() {
+    // CI（windows）无 rsync：未装则跳过（#408）。
+    if std::process::Command::new("rsync")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("rsync not installed; skipping st_sync_rsync_backend_push_pull");
+        return;
+    }
     let dir_a = TempDir::new().unwrap();
     let dir_b = TempDir::new().unwrap();
     let remote = tempfile::tempdir().unwrap().path().join("remote-sync");

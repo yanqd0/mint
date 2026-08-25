@@ -556,6 +556,10 @@ fn ensure_git_repo(dir: &Path, remote: Option<&str>) -> Result<(), Error> {
     std::fs::create_dir_all(dir)?;
     if !dir.join(".git").exists() {
         git(dir, &["init"])?;
+        // CI/无 git 全局配置环境也能 commit：设 local identity（mint sync 专用仓库，#408）。
+        // 仅新建仓库时设置，不影响用户已有仓库的本地配置。
+        git(dir, &["config", "user.name", "mint-sync"])?;
+        git(dir, &["config", "user.email", "mint-sync@localhost"])?;
         if let Some(r) = remote {
             git(dir, &["remote", "add", "origin", r])?;
         }
