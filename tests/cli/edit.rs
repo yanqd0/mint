@@ -111,3 +111,39 @@ fn st_edit_triggers_fts() {
         0
     );
 }
+
+/// issue set --title 空串拒绝（#409 补测）。
+#[test]
+fn st_edit_empty_title_rejected() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "t");
+    let err = run_fail(&db, &["issue", "set", &id.to_string(), "--title", ""]);
+    assert!(err.contains("must not be empty"), "{err}");
+}
+
+/// issue get 各字段可读 + unknown field 报错（#409 补测）。
+#[test]
+fn st_issue_get_fields_and_unknown() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "get fields");
+    for f in [
+        "id",
+        "title",
+        "kind",
+        "status",
+        "priority",
+        "project",
+        "test_cmd",
+        "last_commit_id",
+        "plan_id",
+        "hit_count",
+        "labels",
+        "created_at",
+        "updated_at",
+    ] {
+        let v = run_json(&db, &["issue", "get", &id.to_string(), f, "--json"]);
+        assert_eq!(v["field"], f, "{f}");
+    }
+    let err = run_fail(&db, &["issue", "get", &id.to_string(), "bogus"]);
+    assert!(err.contains("unknown field"), "{err}");
+}

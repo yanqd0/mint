@@ -258,3 +258,13 @@ fn st_project_db_isolation() {
     assert!(text.contains("alpha"), "缺 alpha: {text}");
     assert!(text.contains("beta"), "缺 beta: {text}");
 }
+
+/// --project 路径穿越拒绝（#393/#409 补测）。
+#[test]
+fn st_project_name_traversal_rejected() {
+    let (_dir, db) = empty_db();
+    let err = run_fail(&db, &["--project", "..", "issue", "add", "x"]);
+    assert!(err.contains("invalid project name"), "{err}");
+    let err = run_fail(&db, &["--project", "a/b", "issue", "add", "x"]);
+    assert!(err.contains("invalid project name"), "{err}");
+}

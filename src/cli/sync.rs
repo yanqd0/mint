@@ -642,3 +642,31 @@ mod tests {
         assert_eq!(current_branch(&conn2).as_deref(), Some("project/current"));
     }
 }
+
+/// load_sync_config：损坏 JSON / 非法 backend → None（回退默认）；合法 → 读取（#409 补测）。
+#[test]
+fn load_sync_config_handles_corrupt() {
+    let dir = tempfile::TempDir::new().unwrap();
+    std::fs::write(dir.path().join("sync.json"), "{broken").unwrap();
+    assert!(
+        load_sync_config(dir.path()).unwrap().is_none(),
+        "损坏 JSON 应回退"
+    );
+    std::fs::write(
+        dir.path().join("sync.json"),
+        "{\"backend\":\"ftp\",\"remote\":\"x\"}",
+    )
+    .unwrap();
+    assert!(
+        load_sync_config(dir.path()).unwrap().is_none(),
+        "非法 backend 应回退"
+    );
+    std::fs::write(
+        dir.path().join("sync.json"),
+        "{\"backend\":\"rclone\",\"remote\":\"jianguo:/m\"}",
+    )
+    .unwrap();
+    let c = load_sync_config(dir.path()).unwrap().unwrap();
+    assert_eq!(c.0, SyncBackend::Rclone);
+    assert_eq!(c.1.as_deref(), Some("jianguo:/m"));
+}

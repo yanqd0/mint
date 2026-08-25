@@ -120,3 +120,15 @@ fn st_delete_issue_removes_row() {
     let v = run_json(&db, &["issue", "link", "list", &b.to_string(), "--json"]);
     assert_eq!(v.as_array().unwrap().len(), 0);
 }
+
+/// delete 不存在的资源 → not found（#409 补测）。
+#[test]
+fn st_delete_not_found() {
+    let (_dir, db) = empty_db();
+    let err = run_fail(&db, &["delete", "issue", "999"]);
+    assert!(err.contains("not found"), "{err}");
+    let err = run_fail(&db, &["delete", "plan", "999"]);
+    assert!(err.contains("not found"), "{err}");
+    let err = run_fail(&db, &["delete", "milestone", "999"]);
+    assert!(err.contains("not found"), "{err}");
+}

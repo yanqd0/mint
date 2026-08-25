@@ -239,3 +239,38 @@ fn st_add_duplicate_json_shape() {
     assert_eq!(v["merged"], true);
     assert_eq!(v["id"], id);
 }
+
+/// add 去重：同标题 issue 已挂 plan → 新建而非合并（#409 补测）。
+#[test]
+fn st_add_no_merge_when_issue_in_plan() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "dup title");
+    mint(&db).args(["plan", "create", "p1"]).assert().success();
+    mint(&db)
+        .args(["plan", "attach", "1", &id.to_string()])
+        .assert()
+        .success();
+    // 同标题再 add → 新建（挂 plan 的不合并）。
+    let v = run_json(&db, &["issue", "add", "dup title", "--json"]);
+    assert_eq!(v["merged"], serde_json::Value::Null);
+    let list = run_json(&db, &["list", "--json"]);
+    assert_eq!(
+        list["items"].as_array().map(|a| a.len()),
+        Some(2),
+        "挂 plan 的 issue 不合并，应新建"
+    );
+}
+
+/// add --priority 0（最高）边界；越界被 clap 拒绝（#409 补测）。
+#[test]
+fn st_issue_add_priority_zero() {
+    let (_dir, db) = empty_db();
+    mint(&db)
+        .args(["issue", "add", "p0", "--priority", "0"])
+        .assert()
+        .success();
+    let v = run_json(&db, &["issue", "get", "1", "priority", "--json"]);
+    assert_eq!(v["value"], "0");
+    let err = run_fail(&db, &["issue", "add", "x", "--priority", "5"]);
+    assert!(err.contains("5"), "{err}");
+}

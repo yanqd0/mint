@@ -281,3 +281,14 @@ fn st_search_default_tsv() {
 }
 
 // ── mint tui（dashboard 大屏）────────────────────────────────────
+
+/// list --page-size 0 不 panic（#337/#409 补测）。
+#[test]
+fn st_list_page_size_zero_ok() {
+    let (_dir, db) = empty_db();
+    add_issue(&db, "a");
+    mint(&db)
+        .args(["list", "--page-size", "0"])
+        .assert()
+        .success();
+}
