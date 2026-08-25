@@ -120,6 +120,7 @@ mod plan;
 mod plan_ext;
 mod plan_list;
 mod project;
+mod project_ext;
 mod search;
 mod search_typed;
 mod state;

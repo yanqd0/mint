@@ -440,6 +440,34 @@ mod tests {
         assert_eq!(count, 1);
     }
 
+    /// ensure 已存在：不同 cwd 的 abs_dir 追加（CSV 逗号分隔），同 name 返回同 id（#416 补测）。
+    #[test]
+    fn ensure_existing_appends_new_abs_dir() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::migrate_for_test(&conn);
+        let d1 = TempDir::new().unwrap();
+        let d2 = TempDir::new().unwrap();
+        let id1 = ensure(&conn, "p", d1.path()).unwrap();
+        let id2 = ensure(&conn, "p", d2.path()).unwrap();
+        assert_eq!(id1, id2, "同 name 应返回同 id");
+        let p = get(&conn, id1).unwrap().unwrap();
+        let abs = p.abs_dir.unwrap();
+        let c1 = d1
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let c2 = d2
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        assert!(abs.contains(&c1), "应含首个路径: {abs}");
+        assert!(abs.contains(&c2), "应追加新路径: {abs}");
+    }
+
     /// default 兜底自动注册。
     #[test]
     fn ensure_registers_default() {
