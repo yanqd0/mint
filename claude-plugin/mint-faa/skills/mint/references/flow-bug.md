@@ -6,7 +6,7 @@ Trigger: user describes finding a bug/problem ("found a bug: X causes Y"). kind=
 
 ## Steps
 
-1. **Record**: run `list --json` to check for duplicates (fuzzy title match); if not duplicate → `add "<bug title>" --body "<repro/impact>" --kind problem`.
+1. **Record**: run `list` to check for duplicates (fuzzy title match); if not duplicate → `add "<bug title>" --body "<repro/impact>" --kind problem`.
    - If introduced by another change (regression) → find the introducing issue → `link create <bug_id> solves <introducing_issue_id>`.
 2. **Mount** (per flow-conditions decision table):
    - Has an associated plan (active development plan) → `plan attach <PLAN> <ISSUE>`.

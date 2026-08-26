@@ -36,7 +36,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
    - **同步/推送/拉取/合并** → `references/flow-sync.md`（多机数据同步，push/pull/merge + 传输后端）
 
 2. **执行流程**：按 reference 步骤执行 mint 命令序列（issue 创建 / 挂载 / link / 状态机推进），
-   逐态推进并 `show` 验证。登记前先 `list --json` 查重（标题模糊匹配），不重复创建。
+   逐态推进并 `show` 验证。登记前先 `list` 查重（标题模糊匹配），不重复创建。
 
 3. **执行排序**：有 `blocks` 其它 issue 的先行（被依赖者先完成，类比 make）；
    同层按 priority 升序（P0→P3），同 priority 按 id 升序。
@@ -97,7 +97,7 @@ mint list --status open --priority 0
 mint list --kind requirement --plan 7 --created-after 2026-08   # 筛选可混合（kind/plan/时间）
 mint plan list --milestone '' --status running                  # '' = 筛未挂 milestone 的 plan
 mint plan list --milestone 5 --updated-after 2026-08-10
-mint search "登录" --project mint --json
+mint search "登录" --project mint
 mint issue get 42 body   # 详情正文走 get body（裸值最准；show 的 TSV 已含状态/标题等）
 
 # 状态机（逐态推进）

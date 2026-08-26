@@ -28,7 +28,7 @@ mint list --kind requirement --plan 7        # 按 kind / plan 筛选
 mint list --created-after 2026-08            # 按创建时间筛选（支持前缀 2026/2026-08/2026-08-10）
 mint list --updated-after 2026-08-10         # 按更新时间筛选
 mint list --search "登录"                    # 文本过滤（title/body/status/id/kind/label 子串，大小写不敏感）
-mint issue list --search running --json      # 容器/issue 均可 --search；与 TUI / 搜索同语义
+mint issue list --search running            # 容器/issue 均可 --search；与 TUI / 搜索同语义
 mint plan list --milestone ''                # 筛未挂 milestone 的 plan（空串）
 mint plan list --milestone 5 --status running # 按 milestone + 状态筛选（筛选可混合拼复杂条件）
 ```
@@ -37,7 +37,6 @@ mint plan list --milestone 5 --status running # 按 milestone + 状态筛选（�
 
 ```bash
 mint show 42            # 默认 TSV：ID/Status/Kind/Priority/Title/Plan/Labels/TestCmd/…/Body
-mint show 42 --json
 mint show 42 --tui      # TUI 详情页（复用 mint tui 对应页面）
 ```
 
@@ -66,7 +65,7 @@ mint search "keyword" --label bug --priority 0
 ```bash
 mint plan list --search "0.5.0"              # plan 标题含 0.5.0
 mint milestone list --search running         # milestone status=running
-mint plan list --search "#7" --json          # 按 id 过滤（#7）
+mint plan list --search "#7"               # 按 id 过滤（#7）
 ```
 
 

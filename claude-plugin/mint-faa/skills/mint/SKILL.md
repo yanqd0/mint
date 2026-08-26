@@ -36,7 +36,7 @@ Before any flow, determine the current host agent and `Read` **only** the matchi
   - **sync / push / pull / merge** → `references/flow-sync.md` (multi-machine data sync)
 
 2. **Execute**: Follow the reference steps to run mint command sequences (issue creation / mount / link / state machine advancement),
-   advancing state-by-state and verifying with `show`. Search with `list --json` before recording (fuzzy title match) to avoid duplicates.
+   advancing state-by-state and verifying with `show`. Search with `list` before recording (fuzzy title match) to avoid duplicates.
 
 3. **Execution order**: Issues that `blocks` others execute first (dependencies first, analogous to `make`);
    same level ordered by priority ascending (P0→P3), same priority by id ascending.
@@ -97,7 +97,7 @@ mint list --status open --priority 0
 mint list --kind requirement --plan 7 --created-after 2026-08   # filters combine (kind/plan/time)
 mint plan list --milestone '' --status running                  # '' = filter plans not attached to any milestone
 mint plan list --milestone 5 --updated-after 2026-08-10
-mint search "login" --project mint --json
+mint search "login" --project mint
 mint issue get 42 body   # detail body via get body (raw value, most precise; show TSV already has status/title etc.)
 
 # State machine (step by step)

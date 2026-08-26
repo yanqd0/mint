@@ -35,19 +35,19 @@ mint 管**可执行 issue**（生命周期），mem-lite 管**事实/教训记�
 | 方向 | 载体 | 格式 | 示例 |
 |------|------|------|------|
 | mint → mem-lite | issue 的 `--body` | `memory#<mem-lite id>` | `--body "参考 memory#123"` |
-| mem-lite → mint | observation 文本 | `issue#<mint id>; read: mint show <id> --json` | `...（issue#3; read: mint show 3 --json）` |
+| mem-lite → mint | observation 文本 | `issue#<mint id>; read: mint show <id>` | `...（issue#3; read: mint show 3）` |
 
 **mem-lite 保存时携带 mint 关联**：当某条 observation 对应一个 mint issue 时，narrative 中追加 mint issue id 与读取命令：
 
 ```bash
-claude-mem-lite save "<内容>（关联 issue#<id>；读取: mint show <id> --json）" \
+claude-mem-lite save "<内容>（关联 issue#<id>；读取: mint show <id>）" \
   --project mint --type <decision|bugfix|discovery> --importance <1-3>
 ```
 
 **从 mem-lite 读取 mint 内容**：
 1. `mem_search <query>` 命中 observation，读到其中的 `issue#<N>`。
-2. 运行 `mint show <N> --json`，取回该 issue 完整 JSON。
-3. 需要历史/全量时 `mint list --all-states --json`。
+2. 运行 `mint show <N>`，取回该 issue 完整信息（默认 TSV 全字段含 body）。
+3. 需要历史/全量时 `mint list --all-states`。
 
 **mem-lite 不存在时（降级）**：
 - 前置探测：`which claude-mem-lite`。失败 → **跳过 mem-lite 保存**，仅用 mint 记录；本 skill 其余功能不受影响。

@@ -6,7 +6,7 @@
 
 - **No event hooks**: no SessionStart context injection, no PostToolUse failure-signal injection — recording is driven entirely by **instructions**.
 - **Instruction-driven proactive recording**: when the user / main LLM explicitly describes intent (bug/requirement/leftover/review), the skill proactively runs `mint add` per the matching flow; calling without a `<description>` argument enters **takeover mode** (scan TODO / suggest next steps).
-- **Dedup**: run `list --json` with fuzzy title matching before recording, don't create duplicates (`add` has built-in dedup as backstop).
+- **Dedup**: run `list` with fuzzy title matching before recording, don't create duplicates (`add` has built-in dedup as backstop).
 - **Context**: without hooks auto-injection, proactively run `mint list` to fetch the current issue overview (TSV).
 
 ## 2. plan mode trigger mapping (→ SKILL.md "During Implementation" section)

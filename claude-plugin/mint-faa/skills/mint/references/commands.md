@@ -28,7 +28,7 @@ mint list --kind requirement --plan 7        # filter by kind / plan
 mint list --created-after 2026-08            # filter by created time (prefix: 2026/2026-08/2026-08-10)
 mint list --updated-after 2026-08-10         # filter by updated time
 mint list --search "login"                   # text filter (title/body/status/id/kind/label substring, case-insensitive)
-mint issue list --search running --json      # containers/issues both support --search; same semantics as TUI / search
+mint issue list --search running            # containers/issues both support --search; same semantics as TUI / search
 mint plan list --milestone ''                # plans not attached to any milestone (empty string)
 mint plan list --milestone 5 --status running # filter by milestone + status (filters combine into complex conditions)
 ```
@@ -37,7 +37,6 @@ mint plan list --milestone 5 --status running # filter by milestone + status (fi
 
 ```bash
 mint show 42            # default TSV: ID/Status/Kind/Priority/Title/Plan/Labels/TestCmd/…/Body
-mint show 42 --json
 mint show 42 --tui      # TUI detail page (reuses the mint tui page)
 ```
 
@@ -66,7 +65,7 @@ Container (plan/milestone) text filtering uses list `--search` (title/body/statu
 ```bash
 mint plan list --search "0.5.0"              # plan titles containing 0.5.0
 mint milestone list --search running         # milestone status=running
-mint plan list --search "#7" --json          # filter by id (#7)
+mint plan list --search "#7"               # filter by id (#7)
 ```
 
 ## state
