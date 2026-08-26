@@ -255,3 +255,71 @@ fn st_sync_rclone_backend_push_pull() {
         "B 应含 A 的 rclone 数据: {text}"
     );
 }
+
+/// 限流失败识别（#371）：rclone copy 失败且 stderr 含限流特征 → 错误消息附加清晰提示。
+/// PATH 注入假 rclone 脚本模拟（copy 输出 429 并退出非零），不依赖真 rclone/远端。
+#[test]
+fn st_sync_rclone_rate_limited_errors_with_hint() {
+    let dir_a = TempDir::new().unwrap();
+    let remote_dir = tempfile::tempdir().unwrap();
+    // 本地路径伪远端（无冒号）：rclone_mkdirs 走 create_dir_all 不调 run_rclone。
+    let remote = format!("{}", remote_dir.path().display());
+    let bin = TempDir::new().unwrap();
+    let fake = bin.path().join("rclone");
+    std::fs::write(
+        &fake,
+        "#!/bin/sh\nif [ \"$1\" = \"copy\" ]; then echo 'Error: 429 Too Many Requests' >&2; exit 1; fi\nexit 0\n",
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = format!(
+        "{}:{}",
+        bin.path().display(),
+        std::env::var_os("PATH")
+            .unwrap_or_default()
+            .to_string_lossy()
+    );
+    let run = |dir: &TempDir, mid: &str, args: &[&str]| {
+        let mut c = Command::cargo_bin("mint").unwrap();
+        c.env("XDG_DATA_HOME", dir.path())
+            .env("MINT_MACHINE_ID", mid)
+            .env("PATH", &path)
+            .args(args);
+        c
+    };
+    run(
+        &dir_a,
+        "mach-a",
+        &["--project", "p", "issue", "add", "限流数据"],
+    )
+    .assert()
+    .success();
+    let stderr = run(
+        &dir_a,
+        "mach-a",
+        &[
+            "--project",
+            "p",
+            "sync",
+            "push",
+            "--backend",
+            "rclone",
+            "--remote",
+            remote.as_str(),
+        ],
+    )
+    .assert()
+    .failure()
+    .get_output()
+    .stderr
+    .clone();
+    let text = String::from_utf8_lossy(&stderr).to_string();
+    assert!(
+        text.contains("rate limit"),
+        "限流失败应附加清晰提示: {text}"
+    );
+}

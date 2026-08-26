@@ -384,16 +384,40 @@ fn rclone_pull(conn: &mut Connection, dir: &Path, remote: &str) -> Result<(), Er
 }
 
 /// spawn rclone（argv 数组，无 shell）；非零退出码 → Error 带 stderr。
+/// 命中限流/额度超限特征（#371）时，错误消息附加清晰说明，引导查后端免费额度。
 fn run_rclone(args: &[&str]) -> Result<(), Error> {
     let out = std::process::Command::new("rclone").args(args).output()?;
     if !out.status.success() {
-        return Err(Error::Other(format!(
-            "rclone {} failed: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&out.stderr).trim()
-        )));
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        let msg = if is_rate_limited(&stderr) {
+            format!(
+                "rclone {} failed: {}; possible rate limit / quota exceeded — \
+                 check backend free quota (e.g. Jianguo WebDAV 1G up/month)",
+                args.join(" "),
+                stderr
+            )
+        } else {
+            format!("rclone {} failed: {}", args.join(" "), stderr)
+        };
+        return Err(Error::Other(msg));
     }
     Ok(())
+}
+
+/// 检测外部命令 stderr 中的限流/额度超限特征（#371）：
+/// HTTP 429、rate limit、too many requests、quota exceeded、bandwidth limit。
+/// 大小写不敏感；命中时给用户附加清晰提示（如坚果云免费 1G 上行/月超限）。
+fn is_rate_limited(stderr: &str) -> bool {
+    let s = stderr.to_ascii_lowercase();
+    [
+        "429",
+        "rate limit",
+        "too many requests",
+        "quota exceeded",
+        "bandwidth limit",
+    ]
+    .iter()
+    .any(|kw| s.contains(kw))
 }
 
 /// gzip 压缩（-9 -c）或解压（-d -c）：捕获 stdout 写文件，避免 shell 管道；外部命令化（#364）。
@@ -640,6 +664,31 @@ mod tests {
         let db2 = dir.path().join("st.db");
         let conn2 = crate::db::open(&db2).unwrap();
         assert_eq!(current_branch(&conn2).as_deref(), Some("project/current"));
+    }
+
+    /// 限流特征识别（#371）：429/rate limit/too many requests/quota/bandwidth 命中；
+    /// 普通错误/空串不命中；大小写不敏感。
+    #[test]
+    fn is_rate_limited_matches_quota_signals() {
+        for hit in [
+            "rclone copy failed: 429 Too Many Requests",
+            "Error: rate limit exceeded, retry later",
+            "HTTP 429: too many requests",
+            "Error: quota exceeded for user",
+            "transfer bandwidth limit reached",
+        ] {
+            assert!(is_rate_limited(hit), "应识别限流: {hit}");
+        }
+        for miss in [
+            "",
+            "404 Not Found",
+            "permission denied",
+            "Error: invalid argument",
+            "rclone: Directory not found",
+        ] {
+            assert!(!is_rate_limited(miss), "不应误判: {miss}");
+        }
+        assert!(is_rate_limited("Error: Rate Limit")); // 大小写不敏感。
     }
 }
 
