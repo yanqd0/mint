@@ -271,3 +271,20 @@ fn st_reopen_clears_dropped_reason() {
     assert_eq!(v["status"], "open");
     assert_eq!(v["dropped_reason"], serde_json::Value::Null);
 }
+
+/// state 批量转换后 WAL 归零（#299 TRUNCATE；单文件模式 `-wal` 伴生文件）。
+#[test]
+fn st_state_batch_truncates_wal() {
+    let (_dir, db) = empty_db();
+    let id1 = add_issue(&db, "a");
+    let id2 = add_issue(&db, "b");
+    mint(&db)
+        .args(["issue", "state", "plan"])
+        .arg(id1.to_string())
+        .arg(id2.to_string())
+        .assert()
+        .success();
+    let wal = format!("{db}-wal");
+    let size = std::fs::metadata(&wal).map(|m| m.len()).unwrap_or(0);
+    assert_eq!(size, 0, "state 批量后 WAL 应归零: {wal} size={size}");
+}

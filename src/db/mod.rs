@@ -60,7 +60,19 @@ pub fn open(path: &Path) -> Result<rusqlite::Connection, Error> {
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     migrate(&conn)?;
     register_machine(&conn)?;
+    // 启动 PASSIVE checkpoint：合并上一进程遗留 WAL（#299），不阻塞读。
+    wal_checkpoint(&conn, false);
     Ok(conn)
+}
+
+/// 手动 WAL checkpoint（尽力而为，#299）：控制 WAL 文件增长。
+/// `truncate=true` → TRUNCATE（WAL 归零，批量/重写命令后）；`false` → PASSIVE（启动清遗留，不阻塞）。
+/// busy 等失败仅 warning（下次再清），不传播错误——checkpoint 是可选优化，不影响命令结果。
+pub fn wal_checkpoint(conn: &rusqlite::Connection, truncate: bool) {
+    let mode = if truncate { "TRUNCATE" } else { "PASSIVE" };
+    if let Err(e) = conn.execute_batch(&format!("PRAGMA wal_checkpoint({mode});")) {
+        eprintln!("mint: warning: wal_checkpoint({mode}) failed: {e}");
+    }
 }
 
 /// 本机 machine_id：MINT_MACHINE_ID env 优先，否则 hostname+user 的 FNV-1a 哈希（mach-<hex>）。
@@ -398,6 +410,22 @@ mod tests {
             plan_idx.iter().any(|n| n == "idx_plans_milestone_id"),
             "plans 缺索引 idx_plans_milestone_id: {plan_idx:?}"
         );
+    }
+
+    /// wal_checkpoint：真实文件库写后 TRUNCATE 使 WAL 归零（#299，尽力而为）。
+    #[test]
+    fn wal_checkpoint_truncate_empties_wal() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cp.db");
+        let conn = crate::db::open(&path).unwrap();
+        // 显式写产生 WAL 内容（默认 wal_autocheckpoint=1000 页，小写不触发）。
+        conn.execute_batch("CREATE TABLE t(x); INSERT INTO t VALUES (1);")
+            .unwrap();
+        let wal = path.with_extension("db-wal");
+        crate::db::wal_checkpoint(&conn, false); // PASSIVE 不 panic
+        crate::db::wal_checkpoint(&conn, true); // TRUNCATE 后 WAL 归零
+        let size = std::fs::metadata(&wal).map(|m| m.len()).unwrap_or(0);
+        assert_eq!(size, 0, "TRUNCATE 后 WAL 应归零: {size}");
     }
 
     /// 既有 v2 库升级：migrate 从 user_version=2 自动跑 003（FTS 扩展），存量数据回填。

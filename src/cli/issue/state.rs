@@ -218,6 +218,7 @@ pub(crate) fn transition(
         }
     }
     if batch {
+        crate::db::wal_checkpoint(conn, true); // 批量转换多事务后 WAL 归零（#299）
         if json {
             println!(
                 "{}",

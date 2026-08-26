@@ -67,6 +67,7 @@ fn import_inner(
     conn.execute_batch(&format!("ATTACH DATABASE '{}' AS tmp", path.display()))?;
     let res = merge_all(conn, &tmp);
     conn.execute_batch("DETACH DATABASE tmp").ok();
+    crate::db::wal_checkpoint(conn, true); // sync 合并多事务后 WAL 归零（#299）
     res
 }
 
