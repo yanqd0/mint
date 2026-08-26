@@ -18,12 +18,13 @@ const MIGRATIONS: &[(i32, &str)] = &[
     (2, MIGRATION_002),
     (3, MIGRATION_003),
     (4, MIGRATION_004),
+    (5, MIGRATION_005),
 ];
 
 /// 数据库当前 schema 版本（须与 MIGRATIONS 最后一个目标版本一致）。
 /// 开发期默认写增量 migration（002/003…每逻辑变更独立）；发布前夕合并回 001 后重定基线，
 /// 见 src/db/CLAUDE.md 迁移哲学。
-const CURRENT_VERSION: i32 = 4;
+const CURRENT_VERSION: i32 = 5;
 
 /// 打开（必要时创建）SQLite 数据库并迁移到最新版本。
 /// 父目录不存在时自动创建（首次运行的真实场景）。
@@ -252,7 +253,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
 
         let tables: Vec<String> = conn
             .prepare(
@@ -297,7 +298,7 @@ mod tests {
 
     /// 既有 v1 库升级：migrate 从 user_version=1 自动跑 002/003（machines/列/color/FTS 扩展），不崩溃（#1 回归）。
     #[test]
-    fn migrate_upgrades_v1_to_v4() {
+    fn migrate_upgrades_v1_to_v5() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         // 仅建 v1 schema（001）
         conn.execute_batch(MIGRATION_001).unwrap();
@@ -306,7 +307,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4, "v1 库应升级到 v4");
+        assert_eq!(version, 5, "v1 库应升级到 v5");
 
         let tables: Vec<String> = conn
             .prepare(
@@ -363,9 +364,45 @@ mod tests {
         }
     }
 
+    /// 005 运行时热点索引：issues 过滤 + plans.milestone_id 索引齐全（#300）。
+    #[test]
+    fn runtime_indexes_created() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let issue_idx: Vec<String> = conn
+            .prepare("PRAGMA index_list(issues)")
+            .unwrap()
+            .query_map([], |r| r.get(1))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        for name in [
+            "idx_issues_status",
+            "idx_issues_plan_id",
+            "idx_issues_machine_id",
+            "idx_issues_uid",
+        ] {
+            assert!(
+                issue_idx.iter().any(|n| n == name),
+                "issues 缺索引 {name}: {issue_idx:?}"
+            );
+        }
+        let plan_idx: Vec<String> = conn
+            .prepare("PRAGMA index_list(plans)")
+            .unwrap()
+            .query_map([], |r| r.get(1))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(
+            plan_idx.iter().any(|n| n == "idx_plans_milestone_id"),
+            "plans 缺索引 idx_plans_milestone_id: {plan_idx:?}"
+        );
+    }
+
     /// 既有 v2 库升级：migrate 从 user_version=2 自动跑 003（FTS 扩展），存量数据回填。
     #[test]
-    fn migrate_upgrades_v2_to_v4() {
+    fn migrate_upgrades_v2_to_v5() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         // 建 v2 schema（001 + 002）
         conn.execute_batch(MIGRATION_001).unwrap();
@@ -396,7 +433,7 @@ mod tests {
         let version: i32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4, "v2 库应升级到 v4");
+        assert_eq!(version, 5, "v2 库应升级到 v5");
         // 存量 labels 可搜（回填子查询聚合）。
         let hit: i64 = conn
             .query_row(

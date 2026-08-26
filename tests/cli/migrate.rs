@@ -2,16 +2,16 @@
 
 use super::*;
 use rusqlite::Connection;
-/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=4（001-004）。
+/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=5（001-005）。
 #[test]
-fn st_empty_db_initialized_v4() {
+fn st_empty_db_initialized_v5() {
     let (_dir, db) = empty_db();
     run_json(&db, &["list", "--json"]); // 首次运行触发 migrate
     let conn = mint_faa::db::open(std::path::Path::new(&db)).unwrap();
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 4);
+    assert_eq!(version, 5);
 }
 
 /// 一次性迁移：旧单一 db 自动拆分到多项目 db + .bak 备份，只做一次。
