@@ -47,7 +47,7 @@ claude-mem-lite save "<内容>（关联 issue#<id>；读取: mint show <id> --js
 **从 mem-lite 读取 mint 内容**：
 1. `mem_search <query>` 命中 observation，读到其中的 `issue#<N>`。
 2. 运行 `mint show <N> --json`，取回该 issue 完整 JSON。
-3. 需要历史/全量时 `mint list --all --json`。
+3. 需要历史/全量时 `mint list --all-states --json`。
 
 **mem-lite 不存在时（降级）**：
 - 前置探测：`which claude-mem-lite`。失败 → **跳过 mem-lite 保存**，仅用 mint 记录；本 skill 其余功能不受影响。

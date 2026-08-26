@@ -6,7 +6,7 @@
 
 ## 步骤
 
-1. **概览**：`list --json` 拉当前 open/planned 概览，`milestone list --all` / `plan list --all` 看规划现状。
+1. **概览**：`list --json` 拉当前 open/planned 概览，`milestone list --all-states` / `plan list --all-states` 看规划现状。
 2. **扫描 TODO/FIXME/XXX**：`grep -rn "TODO\|FIXME\|XXX" <项目代码目录>` → 逐个与现有 issue 查重
    （`list --json` 标题模糊匹配），未登记的转 issue（kind 按性质：问题=problem、改进=requirement、杂务=task；
    body 注明 `来源: 文件:行号`）。**不重复创建**。

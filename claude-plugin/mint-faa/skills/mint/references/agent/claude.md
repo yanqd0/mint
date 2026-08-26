@@ -47,7 +47,7 @@ claude-mem-lite save "<content> (linked issue#<id>; read: mint show <id> --json)
 **Reading mint content from mem-lite**:
 1. `mem_search <query>` finds an observation containing `issue#<N>`.
 2. Run `mint show <N> --json` to retrieve the full issue JSON.
-3. For history / full scope: `mint list --all --json`.
+3. For history / full scope: `mint list --all-states --json`.
 
 **When mem-lite is absent (fallback)**:
 - Probe: `which claude-mem-lite`. On failure → **skip mem-lite save**, use mint only; other skill functions unaffected.

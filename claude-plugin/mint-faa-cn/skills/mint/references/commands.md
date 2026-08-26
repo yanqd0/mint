@@ -21,7 +21,7 @@ add 已内置去重（同项目标题模糊匹配），重复自动合并（`hit
 
 ```bash
 mint list                                    # 活跃 issue
-mint list --all                              # 含 done/dropped
+mint list --all-states                      # 含 done/dropped
 mint list --status open --priority 0         # 按优先级筛选
 mint list --label 0.4.0 --project mint       # 按 label + 项目筛选
 mint list --kind requirement --plan 7        # 按 kind / plan 筛选
@@ -105,7 +105,7 @@ blocked_by ↔ blocks 互逆，库中归一化为 blocks 存储，查询时自�
 ## label
 
 ```bash
-mint label list --all                     # 列出全部 label（含关联数 + 颜色）
+mint label list --all-states              # 列出全部 label（含关联数 + 颜色）
 mint issue label attach 42 docs           # 给 issue 加 label（不存在自动注册 + 自动配色）
 mint issue label attach 42 agent:<宿主>   # 参与者：agent: 前缀（--label 过滤可查参与者）
 mint issue label detach 42 docs           # 从 issue 摘除 label（不删 label 本体）

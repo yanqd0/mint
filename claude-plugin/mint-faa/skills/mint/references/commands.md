@@ -21,7 +21,7 @@ add has built-in dedup (same-project fuzzy title match); duplicates auto-merge (
 
 ```bash
 mint list                                    # active issues
-mint list --all                              # include done/dropped
+mint list --all-states                      # include done/dropped
 mint list --status open --priority 0         # filter by priority
 mint list --label 0.4.0 --project mint       # filter by label + project
 mint list --kind requirement --plan 7        # filter by kind / plan
@@ -104,7 +104,7 @@ blocked_by ↔ blocks are reciprocal; stored as `blocks` internally, reverse-der
 ## label
 
 ```bash
-mint label list --all                     # list all labels (with issue counts + color)
+mint label list --all-states              # list all labels (with issue counts + color)
 mint issue label attach 42 docs           # attach a label (auto-registers + auto-color)
 mint issue label attach 42 agent:<host>   # participant: agent: prefix (filter via --label)
 mint issue label detach 42 docs           # detach a label (keeps the label itself)

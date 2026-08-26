@@ -8,7 +8,7 @@ Goal: let the user know immediately what to develop next — mint replaces initi
 ## Steps
 
 1. **Overview**: pull the current open/planned overview with `list --json`;
-   check milestone/plan state with `milestone list --all` / `plan list --all`.
+   check milestone/plan state with `milestone list --all-states` / `plan list --all-states`.
 2. **Scan TODO/FIXME/XXX**: `grep -rn "TODO\|FIXME\|XXX" <project code dir>` → check each against existing issues
    (`list --json` fuzzy title match); convert unregistered ones to issues (kind by nature: problem=problem, improvement=requirement, chore=task;
    body notes `source: file:line`). **Don't create duplicates**.
