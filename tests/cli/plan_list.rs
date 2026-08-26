@@ -308,3 +308,52 @@ fn st_milestone_list_search_filters() {
     assert!(s.contains("alpha ms"), "应含命中行: {s}");
     assert!(!s.contains("beta ms"), "不应含未命中行: {s}");
 }
+
+/// milestone list --search 状态词精准匹配 status：title 含状态词的其它状态不混入（#419）。
+#[test]
+fn st_milestone_list_search_status_exact_no_substring_leak() {
+    let (_dir, db) = empty_db();
+    // title 含 "open" 但 attach planned issue 后变 running 的 milestone（旧子串行为会被误匹配）。
+    run_json(
+        &db,
+        &[
+            "milestone",
+            "create",
+            "open legacy",
+            "--version",
+            "0.1.0",
+            "--json",
+        ],
+    );
+    run_json(
+        &db,
+        &[
+            "milestone",
+            "create",
+            "fresh",
+            "--version",
+            "0.2.0",
+            "--json",
+        ],
+    );
+    let iid = add_issue(&db, "x");
+    run_json(&db, &["issue", "state", "plan", &iid.to_string(), "--json"]);
+    run_json(
+        &db,
+        &["milestone", "attach", "1", &iid.to_string(), "--json"],
+    );
+    // milestone 1 → running（title 仍含 "open"）；milestone 2 → open。
+    let out = mint(&db)
+        .args(["milestone", "list", "--search", "open"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("fresh"), "status=open 应命中: {s}");
+    assert!(
+        !s.contains("open legacy"),
+        "title 含 open 的 running milestone 不应混入: {s}"
+    );
+}
