@@ -54,6 +54,32 @@ fn st_plan_list_search_matches_status_id() {
     assert!(s2.contains("p"), "#1 命中: {s2}");
 }
 
+/// plan list --search 状态词精准匹配 status：title 含状态词的其它状态 plan 不混入（#419）。
+#[test]
+fn st_plan_list_search_status_exact_no_substring_leak() {
+    let (_dir, db) = empty_db();
+    // title 含 "open" 但推进为 running 的 plan（旧子串行为会被 --search open 误匹配）。
+    run_json(&db, &["plan", "create", "open legacy", "--json"]); // plan 1 → open
+    run_json(&db, &["plan", "create", "sprint fresh", "--json"]); // plan 2 → open
+    let iid = add_issue(&db, "x");
+    run_json(&db, &["plan", "attach", "1", &iid.to_string(), "--json"]);
+    run_json(&db, &["issue", "state", "plan", &iid.to_string(), "--json"]);
+    // plan 1 → running（title 仍含 "open"）；plan 2 → open。
+    let out = mint(&db)
+        .args(["plan", "list", "--search", "open"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("sprint fresh"), "status=open 应命中: {s}");
+    assert!(
+        !s.contains("open legacy"),
+        "title 含 open 的 running plan 不应混入: {s}"
+    );
+}
+
 /// plan list --milestone=''：筛未挂 milestone 的 plan；--milestone <id>：筛指定。
 #[test]
 fn st_plan_list_filter_milestone() {

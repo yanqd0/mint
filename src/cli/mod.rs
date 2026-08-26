@@ -642,8 +642,33 @@ impl Cli {
 
 // ── 共享 helpers（plan/milestone 共用）───────────────────────────────
 
-/// 容器（plan/milestone）匹配 --search：title/body/status/#id，大小写不敏感子串。
+/// 容器（plan/milestone）状态别名表（5 态）。
+fn container_status_from_alias(s: &str) -> Option<ContainerStatus> {
+    match s {
+        "open" => Some(ContainerStatus::Open),
+        "running" | "active" => Some(ContainerStatus::Running),
+        "partial" => Some(ContainerStatus::Partial),
+        "drop" | "dropped" | "discard" => Some(ContainerStatus::Dropped),
+        "done" | "complete" | "completed" => Some(ContainerStatus::Done),
+        _ => None,
+    }
+}
+
+/// 容器（plan/milestone）匹配 --search：对齐 issue 的类型化筛选（#419）。
+/// 全数字 → id 精确/前缀；容器状态别名 → 精准 status；否则 title/body/#id/status 子串兜底。
 fn container_matches_search(c: &Container, q: &str) -> bool {
+    let q = q.trim();
+    if q.is_empty() {
+        return true;
+    }
+    if q.chars().all(|c| c.is_ascii_digit())
+        && let Ok(n) = q.parse::<u64>()
+    {
+        return c.id == n as i64 || c.id.to_string().starts_with(&n.to_string());
+    }
+    if let Some(s) = container_status_from_alias(&q.to_lowercase()) {
+        return c.status == s;
+    }
     let q = q.to_lowercase();
     let contains = |hay: &str| hay.to_lowercase().contains(&q);
     contains(&c.title)
