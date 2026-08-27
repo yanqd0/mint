@@ -95,23 +95,36 @@ pub fn cmd_list(conn: &Connection, _project: &str, l: &ListArgs) -> Result<(), E
     let label: Option<&str> = l.label.as_deref();
     let priority = l.priority;
 
+    // 时间过滤下推：parse_datetime_prefix 解析为本地化串（与 SELECT 的 localtime 列一致），传 ?7/?8。
+    let created_after = l
+        .created_after
+        .as_deref()
+        .filter(|t| !t.trim().is_empty())
+        .map(crate::cli::list_common::parse_datetime_prefix)
+        .transpose()?;
+    let updated_after = l
+        .updated_after
+        .as_deref()
+        .filter(|t| !t.trim().is_empty())
+        .map(crate::cli::list_common::parse_datetime_prefix)
+        .transpose()?;
     let mut stmt = conn.prepare(db::ISSUE_LIST)?;
     let rows = stmt.query_map(
-        rusqlite::params![all, status, label, priority, l.kind, l.plan],
+        rusqlite::params![
+            all,
+            status,
+            label,
+            priority,
+            l.kind,
+            l.plan,
+            created_after,
+            updated_after
+        ],
         issue_from_row,
     )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;
-    // --created-after / --updated-after 过滤（时间前缀补全后比较）。
-    if let Some(t) = l.created_after.as_deref().filter(|t| !t.trim().is_empty()) {
-        let bound = crate::cli::list_common::parse_datetime_prefix(t)?;
-        issues.retain(|i| i.created_at >= bound);
-    }
-    if let Some(t) = l.updated_after.as_deref().filter(|t| !t.trim().is_empty()) {
-        let bound = crate::cli::list_common::parse_datetime_prefix(t)?;
-        issues.retain(|i| i.updated_at >= bound);
-    }
     // --search 过滤（#260/#262 统一：类型化筛选 + 兑底子串，与 `mint search` / TUI 一致）。
     if let Some(q) = l.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         issues.retain(|i| search_filter::issue_matches(i, q));

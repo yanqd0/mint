@@ -7,6 +7,8 @@
 -- ?4: priority 过滤（NULL=不过滤）
 -- ?5: kind 过滤（NULL=不过滤）
 -- ?6: plan_id 过滤（NULL=不过滤）
+-- ?7: created_at >= 下界（本地化串，NULL=不过滤）
+-- ?8: updated_at >= 下界（本地化串，NULL=不过滤）
 SELECT
     i.id,
     i.title,
@@ -31,6 +33,8 @@ WHERE
     AND (?4 IS NULL OR i.priority = ?4)
     AND (?5 IS NULL OR i.kind = ?5)
     AND (?6 IS NULL OR i.plan_id = ?6)
+    AND (?7 IS NULL OR datetime(i.created_at, 'localtime') >= ?7)
+    AND (?8 IS NULL OR datetime(i.updated_at, 'localtime') >= ?8)
     AND (
         ?3 IS NULL OR EXISTS (
         SELECT 1 FROM issue_labels it
