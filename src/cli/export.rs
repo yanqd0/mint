@@ -18,9 +18,18 @@ pub fn cmd_export(conn: &Connection, a: &ExportArgs) -> Result<(), Error> {
     }
     // 全量 issue（含终态）：复用 issue_from_row + 批量聚合 labels/links。
     let mut stmt = conn.prepare(crate::db::ISSUE_LIST)?;
-    // ?1=all(1), ?2..?5 过滤全关（NULL）→ 无过滤全量。
+    // ?1=all(1), ?2..?8 过滤全关（NULL）→ 无过滤全量。
     let rows = stmt.query_map(
-        rusqlite::params![1, None::<String>, None::<String>, None::<i64>],
+        rusqlite::params![
+            1,
+            None::<String>,
+            None::<String>,
+            None::<i64>,
+            None::<crate::models::Kind>,
+            None::<i64>,
+            None::<String>,
+            None::<String>
+        ],
         cli::issue::list::issue_from_row,
     )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;

@@ -8,14 +8,23 @@ use crate::db;
 use crate::error::Error;
 use crate::label;
 use crate::link;
-use crate::models::{Issue, Status};
+use crate::models::{Issue, Kind, Status};
 use crate::tui::dashboard::diff::DashboardSnapshot;
 
 /// 全量快照：当前项目 issue（含 labels）+ 全部 plan + 全部 milestone。
 pub fn load_snapshot(conn: &Connection, project: &str) -> Result<DashboardSnapshot, Error> {
     let mut stmt = conn.prepare(db::ISSUE_LIST)?;
     let rows = stmt.query_map(
-        rusqlite::params![1, None::<Status>, None::<String>, None::<i64>],
+        rusqlite::params![
+            1,
+            None::<Status>,
+            None::<String>,
+            None::<i64>,
+            None::<Kind>,
+            None::<i64>,
+            None::<String>,
+            None::<String>
+        ],
         issue_from_row,
     )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;

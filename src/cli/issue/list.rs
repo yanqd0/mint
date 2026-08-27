@@ -229,7 +229,7 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
                 None,
             )?;
             if typed.is_empty() {
-                fts_search(conn, q, project, label, status, priority, kind, plan)?
+                fts_search(conn, q, label, status, priority, kind, plan)?
             } else {
                 typed
             }
@@ -241,7 +241,7 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
             typed_search(conn, project, None, None, None, Some(k))?
         }
         search_filter::SearchType::None => {
-            fts_search(conn, q, project, label, status, priority, kind, plan)?
+            fts_search(conn, q, label, status, priority, kind, plan)?
         }
     };
 
@@ -279,7 +279,6 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
 fn fts_search(
     conn: &Connection,
     q: &str,
-    _project: Option<&str>,
     label: Option<&str>,
     status: Option<Status>,
     priority: Option<i64>,
