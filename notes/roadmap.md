@@ -134,11 +134,11 @@
 
 > 同步架构（读写分离 + merged.db 派生视图 + 软链接落地 + uid/LWW）细节以 `notes/evaluation-sync-external.md` 为准。
 
-**架构（读写分离 + 派生视图）**：
+**架构（读写分离 + 本地即全局，plan #96 无感契约）**：
 - **写**：只写本机 `local.db`（单一真相源，短 id 无歧义）
-- **读**：默认本机 `local.db`（即时）；同步后读 `merged.db`（全局视图）
+- **读**：默认本机 `local.db`；`sync merge` 后**本地即全局视图**（uid 去重 + LWW 合并进本地库，非派生 merged.db）
 - **同步**：`sync push/pull` 仅碰本机 `local.db`（带机器标识）
-- **合并**：`merged.db` 是**派生视图**——同步完成后从 `local.db` + 拉取的远程库按 `uid` 去重重建（**非双写**，避免跨库 id 映射与双写原子性问题）
+- **无感**（#427）：功能入口不区分多 db；读命令（list/show/search）检测未合并的其他机器 db → stderr 提示 `mint sync pull`
 
 **范围**：
 - 每台机器维护本地 db（离线可用），S3 桶作中转（每机 push 带机器标识，pull 拉取）
@@ -154,7 +154,7 @@
 - issues 表加 `uid TEXT UNIQUE`（形如 `mach-a3f9:42`），本地自增 id 保留作 CLI 操作
 - 合并时按 uid 去重（INSERT OR IGNORE）——天然幂等
 
-**验收**：多机 push/拉取；`merged.db` 重建正确（去重幂等）；本机写路径不变、短 id 操作无歧义。
+**验收**：多机 push/拉取；本地库合并去重幂等（uid/LWW）；本机写路径不变、短 id 操作无歧义；读命令对未合并机器有提示（#428）。
 
 ## 1.0 — 正式发布（含 i18n + docs）
 

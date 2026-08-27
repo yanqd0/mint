@@ -40,6 +40,12 @@ mint 的基本单位：一个可执行的问题（problem）或需求（requirem
 
 **检测优先级**（0.1.0 实现）：自定义(`--project`) → git 库名 → dirname → 兜底 `default`。命令运行时按当前 project 打开对应项目 db 并确保本项目行存在（`project::ensure`）；`project list` = 扫描 `projects/` 目录。
 
+**多 db 无感（功能入口契约，#427）**：
+- **查询/搜索/show 查本地库**；`sync pull`/`merge` 后本地即全局视图（uid 去重 + LWW 合并，见「多机同步」）。
+- **写路径各机写自己 db**（`machine_id` + `uid = <machine>:<本地id>` 跨机唯一），sync 汇聚。
+- **命令无感**：用户不感知 machine_id/db 差异，`list`/`show`/`search` 相当于单 db。
+- **未合并提示**（#428）：读命令（list/show/search）若发现项目目录下存在**未合并**的其他机器 db（目录有 `*.db` 但本地 `machines` 表不含该机）→ stderr 提示 `mint: hint: found unmerged data from machine(s): ...; run mint sync pull`；已合并（machines 表含该机）不提示。
+
 ### Label（标签）
 
 自由创建的分类标记，便于快速分类查询。独立表 + 关联表（规范化，可索引）。
