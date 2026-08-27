@@ -690,7 +690,7 @@ impl Cli {
 // ── 共享 helpers（plan/milestone 共用）───────────────────────────────
 
 /// 容器（plan/milestone）状态别名表（5 态）。
-fn container_status_from_alias(s: &str) -> Option<ContainerStatus> {
+pub(crate) fn container_status_from_alias(s: &str) -> Option<ContainerStatus> {
     match s {
         "open" => Some(ContainerStatus::Open),
         "running" | "active" => Some(ContainerStatus::Running),
@@ -703,7 +703,8 @@ fn container_status_from_alias(s: &str) -> Option<ContainerStatus> {
 
 /// 容器（plan/milestone）匹配 --search：对齐 issue 的类型化筛选（#419）。
 /// 全数字 → id 精确/前缀；容器状态别名 → 精准 status；否则 title/body/#id/status 子串兜底。
-fn container_matches_search(c: &Container, q: &str) -> bool {
+/// TUI dashboard 复用（#434 统一 CLI/TUI 语义）。
+pub(crate) fn container_matches_search(c: &Container, q: &str) -> bool {
     let q = q.trim();
     if q.is_empty() {
         return true;

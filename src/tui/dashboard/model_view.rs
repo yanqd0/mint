@@ -25,14 +25,9 @@ fn issue_matches_search(i: &Issue, q: &str) -> bool {
     crate::cli::issue::search_filter::issue_matches(i, q)
 }
 
-/// 容器（plan/milestone）匹配搜索：title/body/status/#id，大小写不敏感子串。
+/// 容器（plan/milestone）匹配搜索：与 CLI `--search` 一致（#434 统一 typed 语义）。
 fn container_matches_search(c: &Container, q: &str) -> bool {
-    let q = q.to_lowercase();
-    let contains = |hay: &str| hay.to_lowercase().contains(&q);
-    contains(&c.title)
-        || c.body.as_deref().is_some_and(contains)
-        || format!("#{}", c.id).contains(&q)
-        || c.status.as_str().contains(&q)
+    crate::cli::container_matches_search(c, q)
 }
 
 impl DashboardModel {
