@@ -246,6 +246,10 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
     };
 
     fill_labels(conn, &mut issues)?;
+    // --kind 过滤（typed 路径补齐：#432；None 路径已 SQL 下推 ?5，retain 冗余无害）。
+    if let Some(k) = kind {
+        issues.retain(|i| i.kind == k);
+    }
     // --label / --priority 过滤（typed 与 None 分支统一；#1 修复——typed 路径此前静默忽略）。
     if let Some(lb) = label {
         issues.retain(|i| i.labels.iter().any(|x| x == lb));
