@@ -258,8 +258,8 @@ fn rsync_push(conn: &Connection, dir: &Path, remote: &str) -> Result<(), Error> 
     let target = format!("{remote}/mint/{proj}");
     let src = format!("{}/", dir.display());
     let dst = format!("{}/", target.trim_end_matches('/'));
-    // -a（递归 + 保留属性）+ --mkpath（GNU rsync 3.2+ 创建多级目标目录，空 base 可用；#408）。
-    run_rsync(&["-a", "--mkpath", &src, &dst])?;
+    // -a（递归 + 保留属性）+ -c（#439 内容校验）+ --mkpath（GNU rsync 3.2+ 创建多级目标目录，#408）。
+    run_rsync(&["-a", "-c", "--mkpath", &src, &dst])?;
     println!("pushed {} via rsync to {target}", snap.display());
     Ok(())
 }
@@ -271,7 +271,7 @@ fn rsync_pull(conn: &mut Connection, dir: &Path, remote: &str) -> Result<(), Err
     std::fs::create_dir_all(dir)?;
     let src = format!("{}/", target.trim_end_matches('/'));
     let dst = format!("{}/", dir.display());
-    run_rsync(&["-a", &src, &dst])?;
+    run_rsync(&["-a", "-c", &src, &dst])?; // -c 内容校验（#439）
     let snaps_dir = dir.join("snapshots");
     let report = merge_remote_snapshots(conn, &snaps_dir, false)?;
     println!(
@@ -344,6 +344,7 @@ fn rclone_push(conn: &Connection, dir: &Path, remote: &str) -> Result<(), Error>
     // --filter 替代 --include/--exclude 组合（rclone 提示组合顺序不确定，推荐 filter）。
     run_rclone(&[
         "copy",
+        "--checksum", // #439 内容校验（比较源/目标 checksum，替代仅大小/时间）
         snaps.to_str().expect("path"),
         &target,
         "--filter",
@@ -362,7 +363,12 @@ fn rclone_pull(conn: &mut Connection, dir: &Path, remote: &str) -> Result<(), Er
     let target = format!("{remote}/mint/{proj}/snapshots");
     let snaps_dir = dir.join("snapshots");
     std::fs::create_dir_all(&snaps_dir)?;
-    run_rclone(&["copy", &target, snaps_dir.to_str().expect("path")])?;
+    run_rclone(&[
+        "copy",
+        "--checksum",
+        &target,
+        snaps_dir.to_str().expect("path"),
+    ])?; // #439 内容校验
     // gunzip 每个 `.sql.gz` → `.sql`（merge 读裸 .sql），随后清理 .gz。
     if let Ok(entries) = std::fs::read_dir(&snaps_dir) {
         for entry in entries.flatten() {
