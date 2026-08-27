@@ -97,20 +97,12 @@ pub fn cmd_list(conn: &Connection, _project: &str, l: &ListArgs) -> Result<(), E
 
     let mut stmt = conn.prepare(db::ISSUE_LIST)?;
     let rows = stmt.query_map(
-        rusqlite::params![all, status, label, priority],
+        rusqlite::params![all, status, label, priority, l.kind, l.plan],
         issue_from_row,
     )?;
     let mut issues: Vec<Issue> = rows.collect::<Result<_, _>>()?;
 
     fill_labels(conn, &mut issues)?;
-    // --kind 过滤（problem/requirement/task）。
-    if let Some(k) = l.kind {
-        issues.retain(|i| i.kind == k);
-    }
-    // --plan 过滤（属指定 plan）。
-    if let Some(pid) = l.plan {
-        issues.retain(|i| i.plan_id == Some(pid));
-    }
     // --created-after / --updated-after 过滤（时间前缀补全后比较）。
     if let Some(t) = l.created_after.as_deref().filter(|t| !t.trim().is_empty()) {
         let bound = crate::cli::list_common::parse_datetime_prefix(t)?;
