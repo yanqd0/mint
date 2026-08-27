@@ -710,8 +710,9 @@ fn container_matches_search(c: &Container, q: &str) -> bool {
     }
     if q.chars().all(|c| c.is_ascii_digit())
         && let Ok(n) = q.parse::<u64>()
+        && c.id == n as i64
     {
-        return c.id == n as i64 || c.id.to_string().starts_with(&n.to_string());
+        return true; // 全数字：id 精确命中；否则回落 title/body/#id 子串（#433，不阻塞子串、去前缀过度）。
     }
     if let Some(s) = container_status_from_alias(&q.to_lowercase()) {
         return c.status == s;
