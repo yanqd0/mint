@@ -8,8 +8,8 @@
 commit_sha=$(git rev-parse HEAD 2>/dev/null) || exit 0
 [ -z "$commit_sha" ] && exit 0
 
-# 从 stdin 解析 session_id；解析失败兜底 pid（仍 per-进程隔离）。
-sid=$(python3 -c "import json,sys; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null || true)
+# 从 stdin 解析 session_id；python3 缺失时 bash grep 兜底（#435，否则每次新进程 pid 不同致去重失效）。
+sid=$(python3 -c "import json,sys; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null || grep -o '"session_id":"[^"]*"' | head -1 | cut -d'"' -f4)
 [ -z "$sid" ] && sid="$$"
 
 last_file="${TMPDIR:-/tmp}/mint_last_commit_sha.$sid"
