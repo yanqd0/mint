@@ -43,6 +43,79 @@ fn st_sync_push_pull_dual() {
     );
 }
 
+/// 无感多 db（#428）：读命令检测未合并的其他机器数据并提示；merge 后提示消失。
+#[test]
+fn st_unmerged_machine_hint_and_after_merge() {
+    let dir = TempDir::new().unwrap();
+    let rdir = tempfile::TempDir::new().unwrap();
+    let remote = rdir.path().join("remote.git");
+    std::process::Command::new("git")
+        .args(["init", "--bare"])
+        .arg(&remote)
+        .output()
+        .unwrap();
+    let remote_s = remote.to_str().unwrap().to_string();
+    // A/B 机同一 XDG_DATA_HOME（项目目录下双机 db 并存），项目模式。
+    let run = |mid: &str, args: &[&str]| {
+        let mut c = Command::cargo_bin("mint").unwrap();
+        c.env("XDG_DATA_HOME", dir.path())
+            .env("MINT_MACHINE_ID", mid)
+            .args(args);
+        c
+    };
+    run("mach-a", &["--project", "p", "issue", "add", "a数据"])
+        .assert()
+        .success();
+    run("mach-b", &["--project", "p", "issue", "add", "b数据"])
+        .assert()
+        .success();
+    // A 机 list → stderr 提示未合并 mach-b
+    let out = run("mach-a", &["--project", "p", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let err = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(err.contains("mach-b"), "应提示未合并 mach-b: {err}");
+    // B 机 push → A 机 pull → 合并
+    run(
+        "mach-b",
+        &[
+            "--project",
+            "p",
+            "sync",
+            "push",
+            "--remote",
+            remote_s.as_str(),
+        ],
+    )
+    .assert()
+    .success();
+    run(
+        "mach-a",
+        &[
+            "--project",
+            "p",
+            "sync",
+            "pull",
+            "--remote",
+            remote_s.as_str(),
+        ],
+    )
+    .assert()
+    .success();
+    // A 机 list → 不再提示 + 含 b 数据
+    let out2 = run("mach-a", &["--project", "p", "list"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let err2 = String::from_utf8_lossy(&out2.stderr).to_string();
+    let text = String::from_utf8_lossy(&out2.stdout).to_string();
+    assert!(!err2.contains("mach-b"), "合并后不应再提示: {err2}");
+    assert!(text.contains("b数据"), "合并后 A 应含 b 数据: {text}");
+}
+
 // ── 多 db 架构（plan #78：每 project 独立 db + 一次性迁移）─────────
 
 /// sync --all：多项目遍历，项目名分支避免共用一个 remote 冲突；跨机器同步。
