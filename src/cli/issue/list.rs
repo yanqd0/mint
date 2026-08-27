@@ -58,6 +58,12 @@ pub struct ListArgs {
 pub struct SearchArgs {
     /// FTS5 query (trigram tokenizer, at least 3 characters; ≤2 chars falls back to LIKE)
     pub query: String,
+    /// Filter by kind (problem/requirement/task)
+    #[arg(long, value_enum)]
+    pub kind: Option<Kind>,
+    /// Filter by plan id
+    #[arg(long)]
+    pub plan: Option<i64>,
     /// Filter by label name
     #[arg(long)]
     pub label: Option<String>,
@@ -206,6 +212,8 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
     let label: Option<&str> = s.label.as_deref();
     let status = s.status;
     let priority = s.priority;
+    let kind = s.kind;
+    let plan = s.plan;
 
     // 类型化搜索（#260）：query 匹配 ID/status/kind 时旁路 FTS，直接按类型查库。
     // 无类型命中（SearchType::None）或 typed 无结果 → 兑底旧行为（FTS5/LIKE 子串，#262）。
@@ -221,7 +229,7 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
                 None,
             )?;
             if typed.is_empty() {
-                fts_search(conn, q, project, label, status, priority)?
+                fts_search(conn, q, project, label, status, priority, kind, plan)?
             } else {
                 typed
             }
@@ -232,7 +240,9 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
         search_filter::SearchType::Kind(k) => {
             typed_search(conn, project, None, None, None, Some(k))?
         }
-        search_filter::SearchType::None => fts_search(conn, q, project, label, status, priority)?,
+        search_filter::SearchType::None => {
+            fts_search(conn, q, project, label, status, priority, kind, plan)?
+        }
     };
 
     fill_labels(conn, &mut issues)?;
@@ -242,6 +252,10 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
     }
     if let Some(p) = priority {
         issues.retain(|i| i.priority == p);
+    }
+    // --plan 过滤（typed 路径无 plan 参数，统一 retain 补；FTS/LIKE 路径已下推 ?6）。
+    if let Some(pid) = plan {
+        issues.retain(|i| i.plan_id == Some(pid));
     }
     let (issues, total, page) = paginate(
         issues,
@@ -269,6 +283,8 @@ fn fts_search(
     label: Option<&str>,
     status: Option<Status>,
     priority: Option<i64>,
+    kind: Option<Kind>,
+    plan: Option<i64>,
 ) -> Result<Vec<Issue>, Error> {
     let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if q.chars().count() < 3 {
         let like = format!("%{}%", escape_like(q));
@@ -279,6 +295,8 @@ fn fts_search(
                 Box::new(label.map(|s| s.to_owned())),
                 Box::new(status),
                 Box::new(priority),
+                Box::new(kind),
+                Box::new(plan),
             ],
         )
     } else {
@@ -289,6 +307,8 @@ fn fts_search(
                 Box::new(label.map(|s| s.to_owned())),
                 Box::new(status),
                 Box::new(priority),
+                Box::new(kind),
+                Box::new(plan),
             ],
         )
     };

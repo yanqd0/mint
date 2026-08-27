@@ -6,6 +6,8 @@
 -- ?2: label 名过滤（NULL=不过滤）
 -- ?3: 状态过滤（NULL=不过滤）
 -- ?4: priority 过滤（NULL=不过滤）
+-- ?5: kind 过滤（NULL=不过滤）
+-- ?6: plan_id 过滤（NULL=不过滤）
 SELECT
     i.id,
     i.title,
@@ -50,4 +52,6 @@ WHERE
     )
     AND (?3 IS NULL OR i.status = ?3)
     AND (?4 IS NULL OR i.priority = ?4)
+    AND (?5 IS NULL OR i.kind = ?5)
+    AND (?6 IS NULL OR i.plan_id = ?6)
 ORDER BY i.priority ASC, i.id DESC;
