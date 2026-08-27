@@ -122,6 +122,7 @@ mod plan_list;
 mod project;
 mod project_ext;
 mod search;
+mod search_perf;
 mod search_typed;
 mod state;
 mod state_commit;
