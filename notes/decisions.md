@@ -247,6 +247,12 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 **理由**：中文场景 trigram 可搜子串；external content 省空间且保留 snippet/highlight 能力；
 全状态搜索便于 agent 查历史避免重复。
 
+**D23 修正（0.7.0，plan #95）**：
+- **`<3` 字符行为已变**：不再"报错"——`fts_search` 现按 `q.chars().count()<3` 路由到 `issue_search_like.sql`（六字段 LIKE 全表扫）兜底出结果。
+- **#424 取舍（≤2 字符路径）**：实测 trigram 索引物理不含 `<3` 字符 token（`MATCH 'ab'/'登录'/'ab*'` 全静默空集，非报错），LIKE 全扫是唯一出结果路径（EXPLAIN `SCAN issues`）。unicode61 二级索引对中文无效（整段成 token）且语义从"任意子串"变"词前缀"——排除。**维持现状**：搜索低频，中小库 LIKE 全扫可接受（#426 基准：5000 条阈值内）。
+- **#425 取舍（FTS 体积）**：自包含 6 列 5000 行 4.34MB，external 2 列 3.05MB（大 ~42%，多 4 列 trigram + `_content` 副本）；精简列（title/body/labels）可省 ~50% `_data`，但 kind/status/priority 低基数列等值过滤本就精确。**维持现状**：低频同步场景体积可接受，006 迁移重建成本（DROP+CREATE+5 触发器+回填）> 收益。
+- **004 注释偏差**："自包含表 rebuild 会清空"不准确——实测自包含 `rebuild` 保留数据（contentless 表才拒绝）；004 不用 rebuild 的真实原因是 issues 重建后 shadow `_content` 陈旧，须 DELETE+手动回填。
+
 ---
 
 ## D24. 多 agent 适配与 capture/context 定案
