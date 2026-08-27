@@ -428,6 +428,28 @@ mod tests {
         assert_eq!(size, 0, "TRUNCATE 后 WAL 应归零: {size}");
     }
 
+    /// EXPLAIN QUERY PLAN：issues.plan_id 过滤命中 idx_issues_plan_id（#423，#300 索引被使用）。
+    #[test]
+    fn explain_plan_id_filter_uses_index() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO projects (name) VALUES ('p'); INSERT INTO issues (title) VALUES ('x');",
+        )
+        .unwrap();
+        let detail: Vec<String> = conn
+            .prepare("EXPLAIN QUERY PLAN SELECT * FROM issues WHERE plan_id = 1")
+            .unwrap()
+            .query_map([], |r| r.get(3))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(
+            detail.iter().any(|d| d.contains("idx_issues_plan_id")),
+            "plan_id 过滤应命中索引: {detail:?}"
+        );
+    }
+
     /// 既有 v2 库升级：migrate 从 user_version=2 自动跑 003（FTS 扩展），存量数据回填。
     #[test]
     fn migrate_upgrades_v2_to_v5() {

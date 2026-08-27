@@ -59,3 +59,35 @@ fn st_list_search_filters_title() {
     assert!(s.contains("alpha target"), "应含命中行: {s}");
     assert!(!s.contains("beta other"), "不应含未命中行: {s}");
 }
+
+/// mint search --kind/--plan 过滤（#422 下推）：FTS 路径 SQL 参数化 + typed 路径 retain 补。
+#[test]
+fn st_search_filter_kind_plan() {
+    let (_dir, db) = empty_db();
+    let t1 = add_task(&db, "alpha target"); // kind=task
+    add_issue(&db, "beta other"); // kind=requirement
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    run_json(&db, &["plan", "attach", "1", &t1.to_string(), "--json"]);
+    // FTS 路径（"alpha" ≥3 字符）：--kind task 下推 → 只 t1
+    let v = run_json(&db, &["search", "alpha", "--kind", "task", "--json"]);
+    let items = v["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "kind=task 过滤应 1 条");
+    assert_eq!(items[0]["title"], "alpha target");
+    // FTS 路径：--plan 1 下推 → 只挂 plan 1 的 t1
+    let v = run_json(&db, &["search", "alpha", "--plan", "1", "--json"]);
+    let items = v["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "plan=1 过滤应 1 条");
+    assert_eq!(items[0]["title"], "alpha target");
+    // FTS 路径：--kind problem（add_issue 默认 problem）→ 只 beta
+    let v = run_json(&db, &["search", "beta", "--kind", "problem", "--json"]);
+    let items = v["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "kind=problem 过滤应 1 条");
+    assert_eq!(items[0]["title"], "beta other");
+    // typed 路径（query="task" 为 kind 别名）：--plan 1 retain 补 → t1
+    let v = run_json(&db, &["search", "task", "--plan", "1", "--json"]);
+    let items = v["items"].as_array().unwrap();
+    assert!(
+        items.iter().any(|i| i["title"] == "alpha target"),
+        "typed+plan 应含 alpha target: {items:?}"
+    );
+}
