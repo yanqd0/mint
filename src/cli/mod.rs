@@ -560,6 +560,8 @@ fn detect_unmerged_machines(conn: &Connection, data_dir: &Path, project: &str) -
             if let Some(stem) = name.strip_suffix(".db")
                 && stem != mine
                 && !known.contains(stem)
+                && is_mint_machine_db(&dir.join(&name))
+            // #436 排除 rsync 残留/损坏 .db
             {
                 others.push(stem.to_string());
             }
@@ -567,6 +569,22 @@ fn detect_unmerged_machines(conn: &Connection, data_dir: &Path, project: &str) -
     }
     others.sort();
     others
+}
+
+/// 校验 `.db` 是有效 mint 机器库：打开可读且含 `machines` 表（#436）。
+/// 只在发现非本机 `.db` 时打开（单机场景无额外热路径开销，#438）。
+fn is_mint_machine_db(path: &Path) -> bool {
+    rusqlite::Connection::open(path)
+        .ok()
+        .and_then(|conn| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='machines'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .ok()
+        })
+        .is_some_and(|n| n > 0)
 }
 
 // ── Cli::run ──────────────────────────────────────────────────────
@@ -603,7 +621,9 @@ impl Cli {
         };
 
         // 无感多 db（#428）：读命令检测未合并的其他机器数据，提示 sync pull 聚合。
+        // --db 单文件模式无多机语义，跳过（#437）；项目模式才检测，降频热路径开销（#438）。
         if needs_conn
+            && self.db.is_none()
             && matches!(
                 &self.command,
                 Commands::List(_) | Commands::Show(_) | Commands::Search(_)
