@@ -306,15 +306,56 @@ jobs:
             npm publish --access public --provenance "./npm/${pkg}"
           done
 
+  publish-npm-github:
+    # GitHub Packages：npmjs 成功后才发（双发，参考 covtrim publish-github）；scoped 名 @yanqd0/mint-faa
+    needs:
+      - plan
+      - host
+      - publish-npm
+    runs-on: "ubuntu-22.04"
+    permissions:
+      contents: read
+      packages: write   # 发布到 GitHub Packages（GITHUB_TOKEN，无需 PAT）
+    env:
+      PLAN: ${{ needs.plan.outputs.val }}
+    if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
+    steps:
+      - name: Fetch npm packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-*
+          path: npm/
+          merge-multiple: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+          registry-url: 'https://npm.pkg.github.com'
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }} # setup-node 只写 .npmrc 占位符，需显式注入 token
+        run: |
+          for release in $(echo "$PLAN" | jq --compact-output '.releases[] | select([.artifacts[] | endswith("-npm-package.tar.gz")] | any)'); do
+            pkg=$(echo "$release" | jq '.artifacts[] | select(endswith("-npm-package.tar.gz"))' --raw-output)
+            pkgpath="./npm/${pkg}"
+            work=$(mktemp -d)
+            tar -xzf "$pkgpath" -C "$work"
+            pkgdir="$work/package"
+            # 改 scoped 包名（@yanqd0/mint-faa）后重新 pack 发布到 GitHub Packages
+            node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('$pkgdir/package.json'));p.name='@yanqd0/mint-faa';fs.writeFileSync('$pkgdir/package.json',JSON.stringify(p,null,2))"
+            (cd "$pkgdir" && npm pack --silent)
+            npm publish "$pkgdir"/*.tgz
+          done
+
   announce:
     needs:
       - plan
       - host
       - publish-npm
+      - publish-npm-github
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
-    if: ${{ always() && needs.host.result == 'success' && (needs.publish-npm.result == 'skipped' || needs.publish-npm.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' && (needs.publish-npm.result == 'skipped' || needs.publish-npm.result == 'success') && (needs.publish-npm-github.result == 'skipped' || needs.publish-npm-github.result == 'success') }}
     runs-on: "ubuntu-22.04"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
