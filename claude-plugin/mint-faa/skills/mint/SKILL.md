@@ -72,7 +72,7 @@ Before any flow, determine the current host agent and `Read` **only** the matchi
    - **All green** → `mint plan close <plan_id> --test-cmd "cargo test"` (or close each with `mint issue state close <id> --test-cmd ...`; `not-tested` if skipped)
    - **Failure** → `mint issue state retest <id> --test-cmd "<precise method>"` (test→dev, keeps old SHA marking the failed commit) → fix → new commit → `state commit --sha $(git rev-parse --short=7 HEAD)` (new SHA overwrites) → re-test
    - retest test_cmd should be precise (test case/file/lint); a generic command is OK to save an interaction
-4. **After all issues in a phase are closed**, the plan auto-derives to done (no manual plan close needed).
+4. **After all issues in a phase are closed**, the plan auto-derives to done (no manual plan close needed); **if any issue was dropped, the plan derives to `partial` — `partial` = {done, dropped} mix, a completed state** (equivalent to done, containing absorbed/abandoned items), not "unfinished".
 5. **After each phase, run `mint list` to verify issue statuses under the current plan are correct**.
 
 ## Takeover Mode (no arguments)

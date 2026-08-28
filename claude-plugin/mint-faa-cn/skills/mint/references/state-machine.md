@@ -56,3 +56,17 @@ kind=task（杂务/文档/调研/CI 等不改行为的工程工作）复用 6 �
 - **plan 级批量**：
   - `mint plan plan <plan_id>`：该 plan 下全部 `open` issue → `planned`（挂入即排期锁定）。
   - `mint plan close <plan_id> --test-cmd "cargo test"`：该 plan 下全部 `test` issue → `done`（统一测试后统一 close）。
+
+## 容器（plan/milestone）5 态派生（区别于 issue 6 态）
+
+plan/milestone 状态由**子项集合派生**（CLI 只读，非手动设置，`state-machine.md` 上文的 6 态是 issue 的）：
+
+| 容器状态 | 派生条件 |
+|---|---|
+| running | 任一子项活跃（open/planned/dev/test 混 done） |
+| done | 全部 done |
+| dropped | 全部 dropped |
+| **partial** | **恰为 {done, dropped} 混合（无 open/active）——是完成态**（等同 done，因含 dropped 无法全 done） |
+| open | 全 open / 空 |
+
+> **判断 plan 是否完成看 issue 是否全终止（done/dropped）**，而非只看 status 标签；`partial` 即完成（含被吸收/废弃项），不要把 partial 当"未完成"。

@@ -57,3 +57,17 @@ All other transitions (plan/close/reset/drop/reopen) behave like the generic 6-s
 - **Plan-level batch**:
   - `mint plan plan <plan_id>`: all `open` issues of the plan → `planned` (schedule-lock on attach).
   - `mint plan close <plan_id> --test-cmd "cargo test"`: all `test` issues of the plan → `done` (unified close after unified testing).
+
+## Container (plan/milestone) 5-state derivation (distinct from issue 6-state)
+
+plan/milestone status is **derived from its children** (read-only on CLI, not manually set; the 6-state above is for issues):
+
+| Container status | Derivation |
+|---|---|
+| running | any child active (open/planned/dev/test mixed with done) |
+| done | all done |
+| dropped | all dropped |
+| **partial** | **exactly {done, dropped} mix (no open/active) — a completed state** (equivalent to done, since dropped prevents full done) |
+| open | all open / empty |
+
+> **Judge plan completion by whether issues are all terminated (done/dropped)**, not by the status label alone; `partial` means completed (contains absorbed/abandoned items) — don't treat it as "unfinished".

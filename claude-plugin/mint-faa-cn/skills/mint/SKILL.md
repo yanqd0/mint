@@ -72,7 +72,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
    - **全绿** → `mint plan close <plan_id> --test-cmd "cargo test"` 统一 close（或逐个 `mint issue state close <id> --test-cmd ...`；无测试 `not-tested`）
    - **失败** → `mint issue state retest <id> --test-cmd "<精确手法>"`（test→dev 打回，保留旧 SHA 标记失败）→ 修复 → 新 commit → `state commit --sha $(git rev-parse --short=7 HEAD)`（新 SHA 覆盖）→ 再测试
    - retest 的 test_cmd 尽量精确（用例/文件/lint 命令）；省一次交互可用通用命令
-4. **一个 phase 的全部 issue close 后**，plan 自动派生为 done（无需手动关 plan）。
+4. **一个 phase 的全部 issue close 后**，plan 自动派生为 done（无需手动关 plan）；**若有 dropped issue，plan 派生为 partial——partial = {done,dropped} 混合，是完成态（等同 done，含被吸收/废弃项）**，非未完成。
 5. **每完成一个 phase，必须 `mint list` 确认当前计划下 issue 状态正确**。
 
 ## 接管模式（无参数调用）
