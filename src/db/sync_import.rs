@@ -83,10 +83,22 @@ fn sanitize_snapshot(sql: &str) -> Result<String, Error> {
             continue;
         }
         let up = s.to_ascii_uppercase();
+        // 剔除触发器：导入端不依赖它（FTS 触发器为 CREATE TRIGGER IF NOT EXISTS），且体内可含任意语句。
         if up.starts_with("CREATE TRIGGER") {
-            continue; // 剔除触发器：导入端不依赖它，且其体内可含任意语句（注入面）。
+            continue;
         }
-        if up.starts_with("CREATE") || up.starts_with("INSERT INTO") {
+        // 白名单（发布审查修复）：仅放行 make_idempotent 产出的精确 CREATE 变体
+        // （表/虚表/索引 IF NOT EXISTS）与数据 INSERT；其余 CREATE*（含 CREATE TEMP TRIGGER/VIEW
+        // /TEMP TABLE/注释变体）一律拒绝——杜绝触发器体内嵌任意 DML 的信任边界绕过。
+        let is_allowed_create = [
+            "CREATE TABLE IF NOT EXISTS ",
+            "CREATE VIRTUAL TABLE IF NOT EXISTS ",
+            "CREATE INDEX IF NOT EXISTS ",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ",
+        ]
+        .iter()
+        .any(|p| up.starts_with(p));
+        if is_allowed_create || up.starts_with("INSERT INTO") {
             if up.starts_with("INSERT INTO") {
                 let table = s["INSERT INTO".len()..]
                     .split_whitespace()
@@ -764,6 +776,8 @@ mod tests {
             "INSERT INTO issues (title) VALUES ('x'); DROP TABLE issues;",
             "INSERT INTO sqlite_master (type) VALUES ('table');",
             "PRAGMA writable_schema=ON;",
+            // 发布审查（security Low）：CREATE TEMP TRIGGER 绕过触发器剔除 → 应拒绝。
+            "CREATE TEMP TRIGGER evil AFTER INSERT ON issues BEGIN UPDATE issues SET title='x'; END;",
         ] {
             assert!(import_sql(&mut b, evil).is_err(), "应拒绝恶意快照: {evil}");
         }

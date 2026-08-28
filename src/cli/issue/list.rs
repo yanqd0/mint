@@ -251,6 +251,10 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
     if let Some(k) = kind {
         issues.retain(|i| i.kind == k);
     }
+    // --status 过滤（typed 路径补齐：发布审查；None 路径已 SQL 下推 ?3）。
+    if let Some(st) = status {
+        issues.retain(|i| i.status == st);
+    }
     // --label / --priority 过滤（typed 与 None 分支统一；#1 修复——typed 路径此前静默忽略）。
     if let Some(lb) = label {
         issues.retain(|i| i.labels.iter().any(|x| x == lb));

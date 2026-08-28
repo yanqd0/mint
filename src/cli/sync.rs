@@ -581,7 +581,7 @@ fn each_project_db(data_dir: &Path) -> Result<Vec<(String, Connection)>, Error> 
     Ok(dbs)
 }
 
-/// 确保 sync 目录是 git 仓库（懒初始化；--remote 提供时配置 origin）。
+/// 确保 sync 目录是 git 仓库（懒初始化；--remote 提供时配置/切换 origin）。
 fn ensure_git_repo(dir: &Path, remote: Option<&str>) -> Result<(), Error> {
     std::fs::create_dir_all(dir)?;
     if !dir.join(".git").exists() {
@@ -590,8 +590,21 @@ fn ensure_git_repo(dir: &Path, remote: Option<&str>) -> Result<(), Error> {
         // 仅新建仓库时设置，不影响用户已有仓库的本地配置。
         git(dir, &["config", "user.name", "mint-sync"])?;
         git(dir, &["config", "user.email", "mint-sync@localhost"])?;
-        if let Some(r) = remote {
-            git(dir, &["remote", "add", "origin", r])?;
+    }
+    // 配置 origin（发布审查修复）：新建时 add；已存在且与请求 remote 不同 → set-url 切换。
+    if let Some(r) = remote {
+        let out = std::process::Command::new("git")
+            .args(["remote", "get-url", "origin"])
+            .current_dir(dir)
+            .output();
+        match out {
+            Ok(o) if o.status.success() => {
+                let cur = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                if cur != r {
+                    git(dir, &["remote", "set-url", "origin", r])?;
+                }
+            }
+            _ => git(dir, &["remote", "add", "origin", r])?,
         }
     }
     Ok(())
