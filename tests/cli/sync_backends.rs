@@ -260,6 +260,12 @@ fn st_sync_rclone_backend_push_pull() {
 /// PATH 注入假 rclone 脚本模拟（copy 输出 429 并退出非零），不依赖真 rclone/远端。
 #[test]
 fn st_sync_rclone_rate_limited_errors_with_hint() {
+    // 假 rclone 为 POSIX sh 脚本，仅 unix 平台可执行；Windows 无 sh → 跳过（否则 program not found）。
+    #[cfg(not(unix))]
+    {
+        eprintln!("skipping on non-unix (fake rclone is a sh script)");
+        return;
+    }
     let dir_a = TempDir::new().unwrap();
     let remote_dir = tempfile::tempdir().unwrap();
     // 本地路径伪远端（无冒号）：rclone_mkdirs 走 create_dir_all 不调 run_rclone。
