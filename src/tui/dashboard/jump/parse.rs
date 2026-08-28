@@ -24,10 +24,15 @@ pub(crate) fn raw_jumps_from_events(events: &[ChangeEvent]) -> Vec<RawJump> {
                 Some(pid) => out.push(RawJump {
                     target: JumpTarget::PlanDetail(pid),
                 }),
-                // 无 plan：直属 milestone 跳转需 Issue 带 direct_milestone 数据（TODO），兜底跳 issues 列表。
-                None => out.push(RawJump {
-                    target: JumpTarget::Issues,
-                }),
+                // 无 plan：直属 milestone（#258）→ milestone 详情；否则兜底 issues 列表。
+                None => match issue.direct_milestone {
+                    Some(mid) => out.push(RawJump {
+                        target: JumpTarget::MilestoneDetail(mid),
+                    }),
+                    None => out.push(RawJump {
+                        target: JumpTarget::Issues,
+                    }),
+                },
             },
             ChangeEvent::IssueUpdated { issue } => {
                 out.push(RawJump {
@@ -99,6 +104,7 @@ mod tests {
             dropped_reason: None,
             last_commit_id: None,
             plan_id,
+            direct_milestone: None,
             machine_id: None,
             uid: None,
             hit_count: 0,
@@ -165,6 +171,21 @@ mod tests {
         assert_eq!(
             raw_jumps_from_events(&no_plan)[0].target,
             JumpTarget::Issues
+        );
+    }
+
+    #[test]
+    fn status_change_no_plan_direct_milestone_jumps_milestone() {
+        let mut issue = mk_issue(2, Status::Dev, None);
+        issue.direct_milestone = Some(9); // 无 plan 但直属挂 milestone（#258）
+        let ev = [ChangeEvent::IssueStatusChanged {
+            issue,
+            from: Status::Planned,
+            to: Status::Dev,
+        }];
+        assert_eq!(
+            raw_jumps_from_events(&ev)[0].target,
+            JumpTarget::MilestoneDetail(9)
         );
     }
 

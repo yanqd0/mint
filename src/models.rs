@@ -126,6 +126,9 @@ pub struct Issue {
     pub dropped_reason: Option<String>,
     pub last_commit_id: Option<String>,
     pub plan_id: Option<i64>,
+    /// 直属挂载的 milestone（无 plan 的 issue 经 milestone_direct_issues；TUI 跳转用，#258）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct_milestone: Option<i64>,
     pub machine_id: Option<String>,
     pub uid: Option<String>,
     pub hit_count: i64,

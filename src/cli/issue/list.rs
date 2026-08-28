@@ -167,6 +167,7 @@ pub(crate) fn issue_from_row(r: &rusqlite::Row) -> rusqlite::Result<Issue> {
         dropped_reason: r.get(8)?,
         last_commit_id: r.get(9)?,
         plan_id: r.get(10)?,
+        direct_milestone: None, // #258：由 TUI load_snapshot 按 milestone_direct_issues 填充
         machine_id: r.get(11)?,
         uid: r.get(12)?,
         hit_count: r.get(13)?,

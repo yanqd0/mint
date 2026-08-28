@@ -245,6 +245,7 @@ mod tests {
             dropped_reason: None,
             last_commit_id: None,
             plan_id: None,
+            direct_milestone: None,
             machine_id: None,
             uid: None,
             hit_count: 0,

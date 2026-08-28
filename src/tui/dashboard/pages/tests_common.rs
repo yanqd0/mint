@@ -19,6 +19,7 @@ pub fn mk_issue(id: i64, title: &str, status: Status, plan_id: Option<i64>) -> I
         dropped_reason: None,
         last_commit_id: None,
         plan_id,
+        direct_milestone: None,
         machine_id: None,
         uid: None,
         hit_count: 0,

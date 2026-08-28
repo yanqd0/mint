@@ -50,6 +50,14 @@ pub fn load_snapshot(conn: &Connection, project: &str) -> Result<DashboardSnapsh
         let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
         rows.collect::<Result<Vec<_>, _>>()?
     };
+    // 填充 issue.direct_milestone（#258）：直属挂载的 milestone（milestone_directs 已查）。
+    let direct_map: std::collections::HashMap<i64, i64> = milestone_directs
+        .iter()
+        .map(|&(mid, iid)| (iid, mid))
+        .collect();
+    for i in issues.iter_mut() {
+        i.direct_milestone = direct_map.get(&i.id).copied();
+    }
     Ok(DashboardSnapshot {
         issues,
         plans,
