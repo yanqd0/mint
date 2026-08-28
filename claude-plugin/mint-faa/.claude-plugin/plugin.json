@@ -1,6 +1,6 @@
 {
   "name": "mint-faa",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "mint issue tracker — record and manage development issues via the mint CLI.",
   "author": {
     "name": "yanqd0"

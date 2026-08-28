@@ -1,6 +1,6 @@
 [package]
 name = "mint-faa"
-version = "0.7.0-alpha.1"
+version = "0.7.0"
 edition = "2024"
 license = "MIT"
 description = "Minimal Issue & Needs Tracker — global SQLite issue system for AI agents"
