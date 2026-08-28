@@ -1,5 +1,32 @@
 # Change Log
 
+## 0.7.0
+
+### Features
+
+- Multi-machine sync via external commands (rclone/rsync/git backends + WebDAV), with uid-idempotent snapshot merge and LWW conflict resolution.
+  - `sync push/pull/merge` with global config caching (no repeat `--backend`/`--remote`).
+  - Transfer artifact verification (rclone `--checksum`, rsync `-c`).
+  - Seamless multi-db: unmerged-machine hint on reads; local DB is the full view after sync.
+- Query performance: runtime indexes (issues status/plan_id/machine_id) with filter push-down into SQL.
+  - `list`/`search` kind/plan/time filters push down to SQL, activating indexes.
+  - Container `--search` status words match precisely; CLI/TUI semantics unified.
+- Search: `mint search` supports `--kind`/`--plan`; FTS large-DB evaluation with trade-off recorded.
+- Runtime: WAL checkpoint (PASSIVE on startup + TRUNCATE after bulk writes).
+- TUI: no-plan issue state changes jump to its direct milestone detail.
+
+### Bug Fixes
+
+- Fixed sync snapshot determinism: machines rows no longer rewritten on every open (fixes spurious empty-commit on push).
+- Fixed plugin hooks: commit-reminder matcher never fired; dedup no-op without python3.
+- Fixed search filters: `--kind` lost on typed paths; all-digit container search blocked title substring.
+- Fixed unmerged-machine hint: validates real DBs, skipped under `--db` single-file mode.
+
+### Others
+
+- Documentation: skill CN/EN (container status derivation, `--all-states`, `--json` cleanup), notes trade-offs.
+- Tests: functional/boundary ST, FTS benchmark, seamless multi-db ST.
+
 ## 0.6.0
 
 ### Optimizations
