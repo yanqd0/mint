@@ -24,8 +24,8 @@ dsh-mint 插件把 mint 接入 DSH。agent 侧宿主能力与其它宿主对应�
 
 ## 3. 挂载行与安装
 
-- 插件挂载：`~/.dsh/profiles/<profile>/cordis.patch.yml` 加一行
-  `- id: mint / name: dsh-mint / config: {...}`；裸包名从 harness node_modules 解析（相对 `./` 随 profile 目录、绝对路径亦支持）。
+- 插件挂载：`~/.dsh/profiles/<profile>/cordis.patch.yml` 用 insert 列表加新插件（裸 `- id/name` 行是覆盖语义，会报 `patch: entry not found`）：
+  `- insert: [{ id: mint, name: dsh-mint, config: {...} }]`；裸包名从 harness node_modules 解析；相对 `./` 随 profile 目录、绝对路径须指向**文件**（ESM 不支持目录导入，如 `/path/dsh-mint/dist/index.js`）。
 - skill 安装：`~/.dsh/skills/mint/`（SKILL.md + references/），被 `dsh-skill-filesystem` 以 `user-dsh` 源发现。
 - **接口签名复核**：宿主面事件/工具签名以运行时 `cordis_inspect_list` / `cordis_inspect_query` 读真实定义为准，不凭示例硬编码。
 
