@@ -1,6 +1,7 @@
 -- 004_drop_issues_project_id.sql：issues 表去 project_id（多 db 架构，每库单项目）。
 -- 破坏性：重建 issues 表（CREATE issues_new → 搬数据 → DROP → RENAME），连带重建绑定在
--- issues 上的 FTS 触发器（issues_fts_ai/ad/au + issues_fts_labels_ai/ad）与 idx_issues_uid 索引。
+-- issues 上的 FTS 触发器（issues_fts_ai/ad/au + issues_fts_labels_ai/ad）
+-- 与 idx_issues_uid 索引。
 -- foreign_keys=OFF 须在事务外（本文件第一条，无活跃事务时生效）；COMMIT 后恢复 ON。
 
 PRAGMA foreign_keys=OFF;
@@ -38,12 +39,12 @@ uid         TEXT
 
 -- 数据搬移（去 project_id 列；id 保留，AUTOINCREMENT 回退 max+1）。
 INSERT INTO issues_new (
-    id, title, body, kind, status, priority, hit_count, test_cmd,
-    dropped_reason, last_commit_id, plan_id, created_at, updated_at, machine_id, uid
+id, title, body, kind, status, priority, hit_count, test_cmd,
+dropped_reason, last_commit_id, plan_id, created_at, updated_at, machine_id, uid
 )
 SELECT
-    id, title, body, kind, status, priority, hit_count, test_cmd,
-    dropped_reason, last_commit_id, plan_id, created_at, updated_at, machine_id, uid
+id, title, body, kind, status, priority, hit_count, test_cmd,
+dropped_reason, last_commit_id, plan_id, created_at, updated_at, machine_id, uid
 FROM issues;
 
 -- 删旧表（连带 DROP 绑定触发器 + idx_issues_uid）。
