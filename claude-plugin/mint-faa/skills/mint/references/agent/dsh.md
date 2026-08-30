@@ -24,7 +24,7 @@ dsh-mint integrates mint into DSH. Agent-side host capabilities correspond to th
 
 ## 3. Mount row and installation
 
-- Plugin mount: in `~/.dsh/profiles/<profile>/cordis.patch.yml` add new plugins with an insert list (a bare `- id/name` row has override semantics and fails with `patch: entry not found`): `- insert: [{ id: mint, name: dsh-mint, config: {...} }]`; bare package names resolve from the harness node_modules; relative `./` follows the profile directory, and absolute paths must point to a **file** (ESM does not import directories, e.g. `/path/dsh-mint/dist/index.js`).
+- Plugin mount: in `~/.dsh/profiles/<profile>/cordis.patch.yml` add new plugins with an insert list (a bare `- id/name` row has override semantics and fails with `patch: entry not found`): `- insert: [{ id: mint, name: '@yanqd0/dsh-mint', config: {...} }]`; bare package names resolve from the harness node_modules; relative `./` follows the profile directory, and absolute paths must point to a **file** (ESM does not import directories, e.g. `/path/dsh-mint/dist/index.js`).
 - Skill install: `~/.dsh/skills/mint/` (SKILL.md + references/), discovered by `dsh-skill-filesystem` as a `user-dsh` source.
 - **Re-verify interface signatures**: host event/tool signatures come from the runtime `cordis_inspect_list` / `cordis_inspect_query` — never hard-code from examples.
 
