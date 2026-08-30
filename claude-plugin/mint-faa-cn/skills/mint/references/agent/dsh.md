@@ -35,3 +35,22 @@ dsh-mint 插件把 mint 接入 DSH。agent 侧宿主能力与其它宿主对应�
 - 事件均 scope-filtered（按 `exec.agent` 路由）；`tools/result` 观察失败被容错。
 - `tools/pre-execute` 的 `ask` 在无审批支持时自动降级 `deny`。
 - 参与者 label 用 `agent:dsh` 前缀。
+
+## 5. mint 命令的沙箱放行（B-v2 审批 gate）
+
+dsh-mint 宿主面挂了一个审批放行 gate：mint 的 db 在 workspace 外，裸跑 mint 会被
+文件沙箱拒绝；**每会话首条 mint 命令经用户批准一次后，同会话后续 mint bash 命令
+不再弹窗、不再产生拒绝往返**。
+
+- **首条 mint 命令**：正常执行被沙箱拒绝后，按常规提权重试一次——
+  `sandbox_permissions: danger-full-access` + justification `mint`——用户批准后 gate
+  记住该 agent 已授权。
+- **此后同会话**：mint bash 命令**直接预置** `sandbox_permissions: danger-full-access`
+  与 justification `mint`，gate 自动放行（每次仍落 approval 审计对）。
+- **严格匹配**：只有单独一条 `mint ...`（无 shell 元字符/引号/env 前缀）才被 gate
+  识别；复合命令退化为常规拒绝→提权流程。
+- **非 mint 命令禁止预置提权**，保持常规沙箱与审批。
+- **autoApprove**：挂载行 `config: { autoApprove: true }` 时首次也免批（显式信任
+  mint CLI，跨会话生效）；默认 false。
+- **已知限制**：子代理被 pin 到 approval `never`，gate 不适用；gate 失效时退化为
+  逐次审批，不劣于无 gate。
