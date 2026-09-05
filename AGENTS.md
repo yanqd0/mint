@@ -5,6 +5,7 @@ mint is a global, single-machine, SQLite-backed issue system CLI for AI agents. 
 ## Hard constraints
 
 - Do **not** edit `mint.db` directly (SQLite at `$XDG_DATA_HOME/mint/mint.db`, `MINT_DB_PATH` overrides).
+- Do **not** run/dogfood-test against the real `mint` project or real data dir (`~/.local/share/mint`) — it holds **production & dogfooding** data. Test mint itself only against a dedicated `mint-test` project or an isolated data dir (`XDG_DATA_HOME` / `MINT_DB_PATH`). Automated tests already use isolated temp dirs; keep manual/feature verification off the real data.
 - Do **not** push to remote yourself — local commits/tags only; remote publish is manual.
 - CLI output is English; code comments and `notes/` docs are Chinese.
 

@@ -493,3 +493,18 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 - **触发范围过宽**：hooks.json 的 PostToolUse matcher 为 `"Bash"`（未限定 git commit 命令），导致**任何 Bash 命令都触发**提醒（被去重掩蔽）。修复：matcher 改 `"Bash:git commit*"`。
 - **去重机器级共享**：`$TMPDIR/mint_last_commit_sha` 多会话互踩。修复：从 hook stdin 事件 JSON 解析 `session_id`，去重文件按会话隔离。
 - **文案冗余**：~150 token 中文说明（skill 流程已知）。修复：精简为英文一行 `mint: commit <sha> — run \`mint issue state commit <id> --sha <sha>\``。
+
+---
+
+## D43：mint 数据禁测试，测试只走 mint-test（2026-09-05，#443）
+
+**背景**：多机 `mint sync` 开发时，特征验证/手测直接落在真实 `~/.local/share/mint`（project `mint`），把旧开发机（mach-a069055b）的开发记录并入了正式库。`mint` 项目是 **dogfooding 乃至正式数据**，绝非测试残留。
+
+**决策**：
+- `mint` 项目与 `~/.local/share/mint` 数据目录视为**关键数据**：禁止用于任何测试、清理不可逆删除。
+- 对 mint 自身的开发测试（含 `mint sync` 手测、特征端到端验证）一律走**独立 `mint-test` 项目**或**隔离数据目录**（`XDG_DATA_HOME`/`MINT_DB_PATH`/`--project mint-test`）。
+- 自动化测试已用隔离临时 `XDG_DATA_HOME`（`tests/`），维持不变；只约束手工/仓库级验证。
+
+**固化**：写入 `AGENTS.md` Hard constraints（D42 之后新增条目），供后续 agent 一律遵守。
+
+**理由**：多机同步闭环后真实数据会被拉齐/写回，一旦混入测试项目即扩散到各机器；从源头隔离最省心。
