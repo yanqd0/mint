@@ -563,6 +563,19 @@ fn sync_milestone(conn: &Connection, milestone_id: i64) -> Result<(), Error> {
     Ok(())
 }
 
+/// 手动设置 plan 状态（丢弃空 plan → dropped）。
+pub fn set_plan_status(
+    conn: &Connection,
+    plan_id: i64,
+    status: ContainerStatus,
+) -> Result<(), Error> {
+    let affected = conn.execute(db::PLAN_UPDATE_STATUS, params![status, plan_id])?;
+    if affected == 0 {
+        return Err(Error::Other(format!("plan #{plan_id} not found")));
+    }
+    Ok(())
+}
+
 /// 手动设置 milestone 状态（发布 → done；取消 → dropped）。done/dropped 为终态，派生不覆盖。
 pub fn set_milestone_status(
     conn: &Connection,

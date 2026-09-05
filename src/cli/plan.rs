@@ -8,7 +8,7 @@ use crate::cli::{
 };
 use crate::container::{self, ContainerKind};
 use crate::error::Error;
-use crate::models::{Container, Status};
+use crate::models::{Container, ContainerStatus, Status};
 use crate::state::Action;
 
 /// Plan create：可带 --milestone。
@@ -130,7 +130,39 @@ pub fn dispatch(conn: &Connection, project: &str, cmd: &super::PlanCmd) -> Resul
         super::PlanCmd::Set(s) => cmd_plan_set(conn, s),
         super::PlanCmd::Plan(a) => cmd_plan_batch(conn, a, Action::Plan),
         super::PlanCmd::Close(a) => cmd_plan_batch(conn, a, Action::Close),
+        super::PlanCmd::Drop(a) => cmd_plan_drop(conn, a),
     }
+}
+
+/// plan drop：仅允许丢弃**空 plan**（无 issue），将其状态标记为 dropped（#444）。
+/// 有 issue 的 plan 拒绝丢弃（防误删带工作项的容器）。
+pub fn cmd_plan_drop(conn: &Connection, a: &super::ContainerIdArgs) -> Result<(), Error> {
+    let c = container::get(conn, ContainerKind::Plan, a.id)?
+        .ok_or_else(|| Error::Other(format!("plan #{} not found", a.id)))?;
+    let issues = container::issues_for(conn, ContainerKind::Plan, a.id)?;
+    if !issues.is_empty() {
+        return Err(Error::Other(format!(
+            "plan #{} has {} issue(s); drop only empty plans",
+            a.id,
+            issues.len()
+        )));
+    }
+    container::set_plan_status(conn, a.id, ContainerStatus::Dropped)?;
+    if a.json {
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "id": a.id, "title": c.title, "status": "dropped",
+            }))?
+        );
+    } else {
+        println!(
+            "Dropped plan #{} ({})",
+            a.id,
+            crate::output::sanitize_terminal(&c.title)
+        );
+    }
+    Ok(())
 }
 
 /// Plan/Milestone get：读取单字段，裸值输出。

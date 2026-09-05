@@ -402,6 +402,8 @@ pub enum PlanCmd {
     Plan(PlanTransArgs),
     /// Batch-close all test issues of this plan (test -> done, requires --test-cmd)
     Close(PlanTransArgs),
+    /// Mark an empty plan (no issues) as dropped
+    Drop(ContainerIdArgs),
 }
 
 #[derive(clap::Args)]
