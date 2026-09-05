@@ -112,11 +112,15 @@ pub fn draw_issues_panel(frame: &mut Frame, m: &mut DashboardModel, area: Rect) 
                 Some(q) => highlight_spans(&title, q, Style::default()),
                 None => vec![Span::raw(title)],
             };
-            // VERSION：所属 plan 的 milestone version（issue.plan_id → plan.milestone_id → milestone.version；无则空）。
+            // VERSION：直属 milestone（issue.direct_milestone）版本优先；无直属则回退所属 plan 的
+            // milestone version（plan.milestone_id → milestone.version）；两者皆无则空。
             let version = i
-                .plan_id
-                .and_then(|pid| m.plans.iter().find(|(p, _)| p.id == pid))
-                .and_then(|(p, _)| p.milestone_id)
+                .direct_milestone
+                .or_else(|| {
+                    i.plan_id
+                        .and_then(|pid| m.plans.iter().find(|(p, _)| p.id == pid))
+                        .and_then(|(p, _)| p.milestone_id)
+                })
                 .and_then(|mid| m.milestones.iter().find(|(ms, _)| ms.id == mid))
                 .and_then(|(ms, _)| ms.version.clone())
                 .unwrap_or_default();
@@ -178,7 +182,7 @@ mod tests {
     use super::*;
     use crate::models::Status;
     use crate::tui::dashboard::pages::tests_common::{
-        buffer_text, mk_issue, model_with, test_backend,
+        buffer_text, mk_container, mk_issue, model_full, model_with, test_backend,
     };
     use crate::tui::dashboard::types::View;
     use ratatui::style::Color;
@@ -335,6 +339,45 @@ mod tests {
             .unwrap();
         let text = buffer_text(terminal.backend().buffer()).join("\n");
         assert!(text.contains("/foo█"), "搜索激活 footer 显 /foo█: {text}");
+    }
+
+    /// VERSION 列取直属 milestone（direct_milestone）版本；无直属才回退 plan 的 milestone（#445）。
+    #[test]
+    fn issue_version_prefers_direct_milestone_then_plan() {
+        // plan 1 挂 milestone 7（v0.7.0）；issue 同时直属挂 milestone 9（v2.0.0）。
+        let plan = mk_container(1, "plan", None, Some(7));
+        let ms7 = mk_container(7, "0.7.0", Some("v0.7.0"), None);
+        let ms9 = mk_container(9, "2.0.0", Some("v2.0.0"), None);
+        let mut direct = mk_issue(1, "direct ms", Status::Open, Some(1));
+        direct.direct_milestone = Some(9);
+        let mut in_plan = mk_issue(2, "only plan", Status::Open, Some(1)); // direct_milestone 无
+        in_plan.direct_milestone = None;
+        let mut m = model_full(
+            vec![direct, in_plan],
+            vec![(plan, 0)],
+            vec![(ms7, 0), (ms9, 0)],
+        );
+        let mut terminal = test_backend(120, 12);
+        terminal
+            .draw(|f| draw_issues_panel(f, &mut m, f.area()))
+            .unwrap();
+        let text = buffer_text(terminal.backend().buffer()).join("\n");
+        // 直属优先：显示直属 milestone v2.0.0，而非 plan 的 v0.7.0。
+        let row_direct = text.lines().find(|l| l.contains("#1")).expect("direct 行");
+        assert!(
+            row_direct.contains("v2.0.0"),
+            "直属应显 v2.0.0: {row_direct}"
+        );
+        assert!(
+            !row_direct.contains("v0.7.0"),
+            "直属不应回退 plan 版本: {row_direct}"
+        );
+        // 无直属：回退所属 plan 的 milestone v0.7.0。
+        let row_plan = text.lines().find(|l| l.contains("#2")).expect("plan 行");
+        assert!(
+            row_plan.contains("v0.7.0"),
+            "仅属 plan 应显 v0.7.0: {row_plan}"
+        );
     }
 
     /// 无搜索时 footer 含 / search 提示。
