@@ -197,7 +197,9 @@ fn pull(
                     "--remote <rclone-remote>:<base> required for rclone backend".to_string(),
                 )
             })?;
-            return rclone_pull(conn, &dir, remote);
+            // pull --all 时 branch 传 Some（见 pull_all），据此区分单项目（缺失要 warn）
+            // 与批量（跨机项目集差异属正常，静默跳过远端缺失）。
+            return rclone_pull(conn, &dir, remote, branch.is_some());
         }
         SyncBackend::Git => {}
     }
@@ -358,17 +360,23 @@ fn rclone_push(conn: &Connection, dir: &Path, remote: &str) -> Result<(), Error>
 
 /// rclone 传输 pull：rclone copy 远端 → 本地 gunzip 解压 → 复用 merge_remote_snapshots 落地（#378）。
 /// 远端结构 `mint/<project>/snapshots`（与 push 对应，自动定位，#405）。
-fn rclone_pull(conn: &mut Connection, dir: &Path, remote: &str) -> Result<(), Error> {
+fn rclone_pull(conn: &mut Connection, dir: &Path, remote: &str, all: bool) -> Result<(), Error> {
     let proj = project_name(conn)?;
     let target = format!("{remote}/mint/{proj}/snapshots");
     let snaps_dir = dir.join("snapshots");
     std::fs::create_dir_all(&snaps_dir)?;
-    run_rclone(&[
+    // 远端源目录不存在（该机器/项目从未向远端推送过）不是失败：等效无数据可拉。
+    // 单项目 pull 时 warn 提示；pull --all（跨机项目集有差异，正常）静默忽略。
+    let remote_missing = match run_rclone(&[
         "copy",
         "--checksum",
         &target,
         snaps_dir.to_str().expect("path"),
-    ])?; // #439 内容校验
+    ]) {
+        Ok(()) => false,
+        Err(Error::Other(msg)) if is_missing_source(&msg) => true,
+        Err(e) => return Err(e),
+    }; // #439 内容校验
     // gunzip 每个 `.sql.gz` → `.sql`（merge 读裸 .sql），随后清理 .gz。
     if let Ok(entries) = std::fs::read_dir(&snaps_dir) {
         for entry in entries.flatten() {
@@ -380,6 +388,9 @@ fn rclone_pull(conn: &mut Connection, dir: &Path, remote: &str) -> Result<(), Er
             run_gzip(false, &path, &out)?;
             let _ = std::fs::remove_file(&path);
         }
+    }
+    if remote_missing && !all {
+        eprintln!("mint: warning: no remote data for '{proj}' at {target}; nothing to pull");
     }
     let report = merge_remote_snapshots(conn, &snaps_dir, false)?;
     println!(
@@ -408,6 +419,21 @@ fn run_rclone(args: &[&str]) -> Result<(), Error> {
         return Err(Error::Other(msg));
     }
     Ok(())
+}
+
+/// 检测 rclone copy 的源端缺失特征（#xxx）：远端源目录/文件不存在时 rclone 报
+/// "directory not found" / "file not found" 等，pull 视作无数据而非失败。大小写不敏感。
+fn is_missing_source(s: &str) -> bool {
+    let s = s.to_ascii_lowercase();
+    [
+        "directory not found",
+        "file not found",
+        "no such file or directory",
+        "object not found",
+        "not found",
+    ]
+    .iter()
+    .any(|kw| s.contains(kw))
 }
 
 /// 检测外部命令 stderr 中的限流/额度超限特征（#371）：
@@ -708,6 +734,24 @@ mod tests {
             assert!(!is_rate_limited(miss), "不应误判: {miss}");
         }
         assert!(is_rate_limited("Error: Rate Limit")); // 大小写不敏感。
+    }
+
+    /// 源端缺失特征识别：目录/文件不存在命中；其他错误/空串不命中；大小写不敏感。
+    #[test]
+    fn is_missing_source_matches_absent_remote() {
+        for hit in [
+            "error reading source root directory: directory not found",
+            "webdav root 'x': directory not found",
+            "file not found",
+            "No such file or directory",
+            "object not found",
+        ] {
+            assert!(is_missing_source(hit), "应识别缺失: {hit}");
+        }
+        for miss in ["", "permission denied", "Network timeout", "quota exceeded"] {
+            assert!(!is_missing_source(miss), "不应误判: {miss}");
+        }
+        assert!(is_missing_source("Directory Not Found")); // 大小写不敏感。
     }
 }
 
