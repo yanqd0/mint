@@ -576,15 +576,82 @@ fn has_changes(dir: &Path) -> Result<bool, Error> {
     Ok(!out.stdout.is_empty())
 }
 
-/// pull --all：遍历 projects/，每项目独立 pull（git-safe 项目分支）。
+/// pull --all：遍历本地项目；rclone 等可枚举远端后端额外发现**远端独有**项目并
+/// 建本机 db + 注册后拉取——新开发机/新项目据此一次性拉齐所有项目（多机同步），
+/// 而非仅拉本地已存在项目（#442）。git/rsync 暂只处理本地已有项目。
 fn pull_all(data_dir: &Path, backend: &SyncBackend, remote: Option<&str>) -> Result<(), Error> {
     let mut pulled = 0;
+    let mut local: Vec<String> = Vec::new();
+    // 1) 本地已有项目（含本机 db）。
     for (name, mut conn) in each_project_db(data_dir)? {
+        local.push(name.clone());
         pull(&mut conn, backend, remote, Some(&git_branch_for(&name)))?;
         pulled += 1;
     }
+    // 2) rclone 可枚举远端：发现远端独有项目 → 建本机 db + 注册后拉齐。
+    if matches!(backend, SyncBackend::Rclone)
+        && let Some(r) = remote
+    {
+        for name in remote_only_projects(&local, &rclone_remote_projects(r)?) {
+            let db_path = data_dir
+                .join("projects")
+                .join(&name)
+                .join(format!("{}.db", crate::db::machine_id()));
+            let mut conn = crate::db::open(&db_path)?;
+            crate::project::create(&conn, &name, None, None, None)?;
+            println!(
+                "mint: created local project '{}' (remote-only); pulling",
+                crate::output::sanitize_terminal(&name)
+            );
+            pull(&mut conn, backend, Some(r), Some(&git_branch_for(&name)))?;
+            pulled += 1;
+        }
+    }
     println!("pulled {pulled} project(s)");
     Ok(())
+}
+
+/// 计算需新建的远端独有项目：远端有而本地没有，且项目名合法。
+/// 非法名（路径穿越等）单独 warn 跳过而非传播——远端目录来自他人，属信任边界。#442
+fn remote_only_projects(local: &[String], remote: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    for name in remote {
+        if local.iter().any(|l| l == name) {
+            continue;
+        }
+        if let Err(e) = crate::project::validate_project_name(name) {
+            eprintln!("mint: warning: skip invalid remote project '{name}': {e}");
+            continue;
+        }
+        out.push(name.clone());
+    }
+    out
+}
+
+/// 枚举 rclone 远端 `{remote}/mint` 下的项目目录（多机新机器引导，#442）。
+/// 远端从未同步（基目录缺失）时返回空，不视为错误。
+fn rclone_remote_projects(remote: &str) -> Result<Vec<String>, Error> {
+    let base = format!("{remote}/mint");
+    let out = std::process::Command::new("rclone")
+        .args(["lsd", &base])
+        .output()?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        if is_missing_source(&stderr) {
+            return Ok(Vec::new());
+        }
+        return Err(Error::Other(format!(
+            "rclone lsd {base} failed: {}",
+            stderr.trim()
+        )));
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    Ok(text
+        .lines()
+        .filter_map(|l| l.split_whitespace().next_back()) // lsd 行末列 = 目录名
+        .filter(|n| !n.is_empty())
+        .map(str::to_string)
+        .collect())
 }
 
 /// 遍历 projects/ 目录，打开每项目的本机 db（machine_id.db）。
@@ -752,6 +819,30 @@ mod tests {
             assert!(!is_missing_source(miss), "不应误判: {miss}");
         }
         assert!(is_missing_source("Directory Not Found")); // 大小写不敏感。
+    }
+
+    /// 远端独有项目计算：本地已有剔除；非法名（穿越/分隔符）warn 跳过（#442）。
+    #[test]
+    fn remote_only_projects_skips_local_and_invalid() {
+        let local = vec!["mint".to_string(), "herdr".to_string()];
+        let remote = vec![
+            "mint".to_string(),
+            "herdr".to_string(),
+            "covtrim".to_string(),
+            "p".to_string(),
+            "..".to_string(), // 非法：拒绝
+            "a/b".to_string(),
+        ];
+        let got = remote_only_projects(&local, &remote);
+        assert_eq!(got, vec!["covtrim".to_string(), "p".to_string()]);
+    }
+
+    /// 全部本地都有 / 空远端 → 无可新建。#442
+    #[test]
+    fn remote_only_projects_all_local_or_empty() {
+        let local = vec!["mint".to_string()];
+        assert!(remote_only_projects(&local, &[]).is_empty());
+        assert!(remote_only_projects(&local, &["mint".to_string()]).is_empty());
     }
 }
 
