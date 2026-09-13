@@ -74,13 +74,14 @@ mint plan list --search "#7"               # filter by id (#7)
 mint issue state plan 42                           # open → planned
 mint issue state start 42                          # planned → dev
 mint issue state commit 42 --sha $(git rev-parse HEAD)  # dev → test
+mint issue state retest 42 --test-cmd "cargo test"  # test → dev (rework after failed tests)
 mint issue state close 42 --test-cmd "cargo test"  # test → done
 mint issue state drop 42 --reason "no longer needed"    # any → dropped
 mint issue state reopen 42                         # done/dropped → open
 mint issue state reset 42                          # planned/dev/test → open
 ```
 
-## edit
+## set (replaces the removed edit)
 
 ```bash
 mint issue set 42 --title "new title"
@@ -127,7 +128,7 @@ mint milestone detach 4 42               # detach
 ## delete
 
 ```bash
-mint delete issue 99    # DANGEROUS: permanent deletion. Prefer state drop
+mint delete issue 99    # DANGEROUS: permanent deletion. Prefer issue state drop
 mint delete plan 12
 mint delete milestone 4
 ```
@@ -143,4 +144,4 @@ blocked_by / blocks`
 
 ## Data Location
 
-Default: `$XDG_DATA_HOME/mint/mint.db` (override with `MINT_DB_PATH` or `--db`).
+Default: `$XDG_DATA_HOME/mint/projects/<project>/<machine_id>.db` (one db per project; `MINT_DB_PATH` or `--db` switches to single-file mode).

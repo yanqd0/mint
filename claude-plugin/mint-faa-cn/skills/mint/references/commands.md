@@ -75,13 +75,14 @@ mint plan list --search "#7"               # 按 id 过滤（#7）
 mint issue state plan 42                           # open → planned
 mint issue state start 42                          # planned → dev
 mint issue state commit 42 --sha $(git rev-parse HEAD)  # dev → test
+mint issue state retest 42 --test-cmd "cargo test"  # test → dev（测试失败回炉）
 mint issue state close 42 --test-cmd "cargo test"  # test → done
 mint issue state drop 42 --reason "不再需要"        # 任意 → dropped
 mint issue state reopen 42                         # done/dropped → open
 mint issue state reset 42                          # planned/dev/test → open
 ```
 
-## edit
+## set（替代已移除的 edit）
 
 ```bash
 mint issue set 42 --title "新标题"
@@ -128,7 +129,7 @@ mint milestone detach 4 42               # 解挂
 ## delete
 
 ```bash
-mint delete issue 99    # 危险：物理删除。优先用 state drop
+mint delete issue 99    # 危险：物理删除。优先用 issue state drop
 mint delete plan 12
 mint delete milestone 4
 ```
@@ -144,4 +145,4 @@ blocked_by / blocks`
 
 ## 数据位置
 
-默认：`$XDG_DATA_HOME/mint/mint.db`（`MINT_DB_PATH` 或 `--db` 覆盖）。
+默认：`$XDG_DATA_HOME/mint/projects/<project>/<machine_id>.db`（每项目独立库；`MINT_DB_PATH` 或 `--db` 覆盖为单文件模式）。
