@@ -2,11 +2,12 @@
 
 use std::path::{Path, PathBuf};
 
+use clap::CommandFactory;
 use rusqlite::Connection;
 
 use crate::cli::label::{cmd_label_list, cmd_label_set};
 use crate::cli::{Cli, Commands, LabelCmd, ProjectCmd, SyncCmd};
-use crate::cli::{delete, export, import, issue, milestone, plan, project, sync};
+use crate::cli::{delete, export, help_llm, import, issue, milestone, plan, project, sync};
 use crate::error::Error;
 
 use super::sync::hint::detect_unmerged_machines;
@@ -14,6 +15,19 @@ use super::sync::hint::detect_unmerged_machines;
 impl Cli {
     /// 执行命令分发。
     pub fn run(&self) -> Result<(), Error> {
+        // `--help-llm` 是纯输出：先于 project/db 解析返回，保证零副作用（不建库、不迁移）。
+        if self.help_llm {
+            return help_llm::cmd_help_llm();
+        }
+        // 无子命令：保持 clap 用法错误语义（退出码 2），并指路 `--help-llm`（#466）。
+        let Some(command) = self.command.as_ref() else {
+            let mut cmd = Cli::command();
+            cmd.error(
+                clap::error::ErrorKind::MissingSubcommand,
+                "no command given: run `mint --help-llm` for the full reference",
+            )
+            .exit()
+        };
         let cwd = std::env::current_dir()?;
         // project 检测：纯函数（detect_name），先于 open（多 db 按 project 定位路径）。
         let project = self.resolve_project(&cwd)?;
@@ -21,7 +35,7 @@ impl Cli {
         self.maybe_split_legacy()?;
         // 不需要当前项目 db 的命令（project create/list、sync --all）在任意目录运行
         // 不应物化假项目（open+ensure 会新建 projects/<dirname>/<machine>.db 并注册行，#399）。
-        let needs_conn = match &self.command {
+        let needs_conn = match command {
             Commands::Project(p) => {
                 !matches!(p.command, ProjectCmd::Create(_) | ProjectCmd::List(_))
             }
@@ -47,7 +61,7 @@ impl Cli {
         if needs_conn
             && self.db.is_none()
             && matches!(
-                &self.command,
+                command,
                 Commands::List(_) | Commands::Show(_) | Commands::Search(_)
             )
         {
@@ -60,7 +74,7 @@ impl Cli {
             }
         }
 
-        match &self.command {
+        match command {
             Commands::Issue(i) => issue::dispatch(&mut conn, &cwd, &project, &i.command),
             Commands::List(l) => issue::list::cmd_list(&conn, &project, l),
             Commands::Show(s) => issue::list::cmd_show(&conn, &project, s),

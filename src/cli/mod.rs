@@ -11,6 +11,7 @@ mod args;
 mod container_cmd;
 pub mod delete;
 pub mod export;
+mod help_llm;
 pub mod import;
 pub mod issue;
 pub mod label;
@@ -44,8 +45,12 @@ pub struct Cli {
     #[arg(short = 'p', long, env = "MINT_PROJECT")]
     project: Option<String>,
 
+    /// Print the complete CLI reference for LLM/agent use (English, one page, no DB access)
+    #[arg(long = "help-llm")]
+    help_llm: bool,
+
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]

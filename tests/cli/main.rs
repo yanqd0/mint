@@ -109,6 +109,7 @@ mod delete;
 /// retest：test→dev 打回，保留 last_commit_id，更新 test_cmd。
 mod edit;
 mod export;
+mod help;
 mod issue;
 mod label;
 mod link;
