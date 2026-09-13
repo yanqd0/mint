@@ -16,12 +16,14 @@ use crate::error::Error;
 
 mod all;
 mod git;
+pub(crate) mod hint;
 mod merge;
 mod rclone;
 mod rsync;
 
 use all::{merge_all, pull_all, push_all};
 use git::{pull, push};
+
 use merge::merge;
 
 #[cfg(test)]
