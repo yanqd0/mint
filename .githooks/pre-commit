@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+# 项目级 pre-commit hook（全宿主通用：DSH / PI / Codex / CC / 人工提交）。
+#
+# 作用：对本次提交涉及的 .rs / .sql 文件做格式化（cargo fmt / sqruff fix），
+# 并把被格式化的 staged 文件重新入 index。CC 的 Stop hook 是另一条补充通道。
+#
+# 启用：scripts/install-hooks.sh（core.hooksPath 是本机配置，不随 clone 分发）
+# 跳过：git commit --no-verify
+
+set -u
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$ROOT" || exit 0
+
+if [ ! -f scripts/format-staged.sh ]; then
+  exit 0
+fi
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs' '*.sql')"
+[ -z "$staged" ] && exit 0
+
+if ! sh scripts/format-staged.sh; then
+  echo "[pre-commit] 格式化脚本失败，提交中止（可用 --no-verify 跳过）" >&2
+  exit 1
+fi
+
+echo "[pre-commit] 已格式化本次提交涉及的 Rust/SQL 文件（--no-verify 可跳过）" >&2
+exit 0
