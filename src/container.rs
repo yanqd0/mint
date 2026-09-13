@@ -523,9 +523,17 @@ pub fn sync_container_status(conn: &Connection, issue_id: i64) -> Result<(), Err
 /// 重算某 plan 状态并写回；随后同步其所属 milestone。
 fn sync_plan(conn: &Connection, plan_id: i64) -> Result<(), Error> {
     let statuses = issue_statuses_from(conn, db::PLAN_ISSUE_STATUSES, plan_id)?;
-    let st = derive_status(&statuses);
-    conn.execute(db::PLAN_UPDATE_STATUS, params![st, plan_id])?;
-    // plan 变更 → 检查 milestone
+    // #446：空 plan 的手动 dropped（`plan drop` 仅允许空 plan）不被派生覆盖——空集合派生为
+    // open，否则任何同步入口（如 `plan set --milestone`）都会把显式废弃的 plan 复活。
+    // 非空 plan 的 dropped 是派生结果（其下 issue 全 dropped），仍随后续状态变化重算。
+    let manual_drop = statuses.is_empty()
+        && get(conn, ContainerKind::Plan, plan_id)?.map(|c| c.status)
+            == Some(ContainerStatus::Dropped);
+    if !manual_drop {
+        let st = derive_status(&statuses);
+        conn.execute(db::PLAN_UPDATE_STATUS, params![st, plan_id])?;
+    }
+    // plan 变更 → 检查 milestone（手动 dropped 时 plan 状态未变，但归属可能已变，仍需同步）
     let milestone_ids: Vec<i64> = conn
         .prepare(db::MILESTONE_IDS_FOR_PLAN)?
         .query_map(params![plan_id], |r| r.get(0))?
@@ -1018,6 +1026,89 @@ mod tests {
             statuses,
             vec!["open", "dev", "test", "done", "dropped"],
             "planned→open，其余保持"
+        );
+    }
+
+    /// #446：手动 drop 的空 plan 跨 milestone 移动后不被派生复活（仍 dropped），
+    /// 两侧 milestone 照常重算（旧侧回落 open、新侧纳入该 plan）。
+    #[test]
+    fn move_plan_keeps_manually_dropped_empty_plan() {
+        let (conn, _) = setup();
+        let ms_a = create(
+            &conn,
+            ContainerKind::Milestone,
+            "a",
+            Some("0.5.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let ms_b = create(
+            &conn,
+            ContainerKind::Milestone,
+            "b",
+            Some("0.8.0"),
+            None,
+            None,
+        )
+        .unwrap();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, Some(ms_a)).unwrap();
+        set_plan_status(&conn, pid, ContainerStatus::Dropped).unwrap();
+        let reset = move_plan(&conn, pid, ms_b).unwrap();
+        assert_eq!(reset, 0, "空 plan 无 planned issue 可重置");
+        assert_eq!(
+            get(&conn, ContainerKind::Plan, pid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Dropped,
+            "手动 drop 的空 plan 不被派生覆盖（#446）"
+        );
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, ms_a)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open,
+            "旧侧回落 open"
+        );
+        // 新侧纳入该 plan：子项全 dropped 派生 dropped → milestone 版本桶映射为 running。
+        assert_eq!(
+            get(&conn, ContainerKind::Milestone, ms_b)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Running,
+            "新侧同步（派生 dropped → running）"
+        );
+    }
+
+    /// #446 反向保护：非空 plan 的 dropped 是派生结果，其下 issue 重开后必须重算，
+    /// 不被手动 dropped 守卫误锁死。
+    #[test]
+    fn derived_dropped_plan_rederives_on_reopen() {
+        let (conn, iid) = setup();
+        let pid = create(&conn, ContainerKind::Plan, "p", None, None, None).unwrap();
+        set_issue_plan(&conn, iid, pid).unwrap();
+        set_status(&conn, iid, "dropped");
+        sync_container_status(&conn, iid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Plan, pid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Dropped,
+            "全 dropped → 派生 dropped"
+        );
+        set_status(&conn, iid, "open");
+        sync_container_status(&conn, iid).unwrap();
+        assert_eq!(
+            get(&conn, ContainerKind::Plan, pid)
+                .unwrap()
+                .unwrap()
+                .status,
+            ContainerStatus::Open,
+            "issue 重开 → plan 重算（派生 dropped 不锁死）"
         );
     }
 

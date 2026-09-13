@@ -32,3 +32,35 @@ fn st_plan_boundary_errors_and_text() {
     let err = run_fail(&db, &["plan", "plan", "999"]);
     assert!(err.contains("plan #999 not found"), "stderr: {err}");
 }
+
+/// #444 + #446：plan drop 仅允许空 plan（有 issue 拒绝、不存在报错）；手动 drop 的空
+/// plan 移动 milestone 后仍为 dropped（不被派生复活）。
+#[test]
+fn st_plan_drop_empty_only_and_survives_move() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["milestone", "create", "ms", "--version", "0.8.0", "--json"],
+    );
+    run_json(
+        &db,
+        &["milestone", "create", "ms2", "--version", "2.0.0", "--json"],
+    );
+    // 空 plan 可 drop。
+    run_json(&db, &["plan", "create", "p", "--json"]);
+    let v = run_json(&db, &["plan", "drop", "1", "--json"]);
+    assert_eq!(v["status"], "dropped");
+    // #446：移动到另一 milestone 后状态仍为 dropped（旧行为被派生覆盖成 open）。
+    run_json(&db, &["plan", "set", "1", "--milestone", "2", "--json"]);
+    let st = run_json(&db, &["plan", "get", "1", "status", "--json"]);
+    assert_eq!(st["value"], "dropped", "手动 drop 的空 plan 不被复活");
+    // 有 issue 的 plan 拒绝 drop。
+    run_json(&db, &["plan", "create", "p2", "--json"]);
+    let i = add_issue(&db, "x");
+    run_json(&db, &["plan", "attach", "2", &i.to_string(), "--json"]);
+    let err = run_fail(&db, &["plan", "drop", "2"]);
+    assert!(err.contains("drop only empty plans"), "stderr: {err}");
+    // drop 不存在的 plan → 报错。
+    let err = run_fail(&db, &["plan", "drop", "999"]);
+    assert!(err.contains("plan #999 not found"), "stderr: {err}");
+}
