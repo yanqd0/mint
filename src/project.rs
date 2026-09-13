@@ -5,8 +5,11 @@ use std::path::Path;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::db;
+
 use crate::error::Error;
 use crate::models::Project;
+use csv::{CsvField, append_csv};
+use git::{git_repo_name, git_repo_url};
 
 /// 兜底的全局默认 project。
 pub const DEFAULT_PROJECT: &str = "default";
@@ -42,19 +45,6 @@ pub fn validate_project_name(name: &str) -> Result<(), Error> {
     Ok(())
 }
 
-/// 从 `git remote get-url origin` 提取库名（末段去 .git 后缀）。
-fn git_repo_name(cwd: &Path) -> Option<String> {
-    let url = git_repo_url(cwd)?;
-    // 取路径末段：git@host:user/repo.git | https://host/user/repo.git | file:///a/b/repo
-    let last = url.split('/').next_back()?;
-    let name = last.strip_suffix(".git").unwrap_or(last);
-    if name.is_empty() {
-        None
-    } else {
-        Some(name.to_string())
-    }
-}
-
 /// 取目录 basename。
 fn dir_basename(cwd: &Path) -> Option<String> {
     cwd.file_name()
@@ -86,79 +76,6 @@ pub fn ensure(conn: &Connection, name: &str, cwd: &Path) -> Result<i64, Error> {
     )?;
     query_id(conn, name)?
         .ok_or_else(|| Error::Other(format!("project '{name}' just inserted but not found")))
-}
-
-/// 可追加的 project CSV 字段（git / abs_dir）——白名单枚举化，消除任意字符串拼 SQL 列名。
-enum CsvField {
-    Git,
-    AbsDir,
-}
-
-impl CsvField {
-    /// 固定白名单列名（非用户输入），供 SELECT/UPDATE 拼接。
-    fn col(&self) -> &'static str {
-        match self {
-            CsvField::Git => "git",
-            CsvField::AbsDir => "abs_dir",
-        }
-    }
-}
-
-/// CSV 单元格编码：含逗号/引号/换行时引号包裹 + 内部引号加倍（RFC 4180 子集），
-/// 避免含逗号路径（如 abs_dir `/path/with,comma`）被 split 误拆致每次 ensure 重复追加。
-fn csv_escape(v: &str) -> String {
-    if v.contains(',') || v.contains('"') || v.contains('\n') {
-        format!("\"{}\"", v.replace('"', "\"\""))
-    } else {
-        v.to_string()
-    }
-}
-
-/// 解析 CSV 行（引号包裹 + 双引号转义），返回字段列表。
-fn csv_parse(line: &str) -> Vec<String> {
-    let mut fields = Vec::new();
-    let mut cur = String::new();
-    let mut in_quotes = false;
-    let mut chars = line.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            '"' if in_quotes && chars.peek() == Some(&'"') => {
-                cur.push('"');
-                chars.next();
-            }
-            '"' => in_quotes = !in_quotes,
-            ',' if !in_quotes => fields.push(std::mem::take(&mut cur)),
-            c => cur.push(c),
-        }
-    }
-    fields.push(cur);
-    fields
-}
-
-/// 追加值到 CSV 字段（不存在时追加，逗号分隔；含逗号/引号值转义存储）。
-fn append_csv(conn: &Connection, id: i64, field: CsvField, value: &str) -> Result<(), Error> {
-    let col = field.col(); // 白名单列名："git" / "abs_dir"
-    let current: String = conn
-        .query_row(
-            &format!("SELECT {col} FROM projects WHERE id = ?1"),
-            params![id],
-            |r| r.get(0),
-        )
-        .unwrap_or_default();
-    let current = current.trim();
-    if current.is_empty() {
-        conn.execute(
-            &format!("UPDATE projects SET {col} = ?2, updated_at = datetime('now') WHERE id = ?1"),
-            params![id, csv_escape(value)],
-        )?;
-    } else if !csv_parse(current).iter().any(|s| s == value) {
-        let merged = format!("{current},{}", csv_escape(value));
-        conn.execute(
-            &format!("UPDATE projects SET {col} = ?2, updated_at = datetime('now') WHERE id = ?1"),
-            params![id, merged],
-        )?;
-    }
-    Ok(())
 }
 
 /// 显式创建 project（name + 可选 description/git/abs_dir）。
@@ -288,53 +205,6 @@ pub fn query_id(conn: &Connection, name: &str) -> Result<Option<i64>, Error> {
         .map_err(Error::from)
 }
 
-/// 判断 git config 段头是否为 `[remote "origin"]` 形式（#339 精确匹配）。
-///
-/// 支持 `[remote "origin"]`、`[remote 'origin']`、`[remote.origin]`；
-/// 键必须恰为 `remote`、值恰为 `origin`（排除 `[remote "myorigin"]` 等误命中）。
-fn remote_section_is_origin(section: &str) -> bool {
-    let inner = section.trim().trim_start_matches('[').trim_end_matches(']');
-    let (key, val) = if let Some(dot) = inner.find('.') {
-        (
-            &inner[..dot],
-            inner[dot + 1..].trim_matches('"').trim_matches('\''),
-        )
-    } else {
-        // `remote "origin"` / `remote 'origin'`：空格分隔，值带引号。
-        let mut it = inner.split_whitespace();
-        match (it.next(), it.next()) {
-            (Some(k), Some(v)) => (k, v.trim_matches('"').trim_matches('\'')),
-            _ => return false,
-        }
-    };
-    key == "remote" && val == "origin"
-}
-
-/// 查询 git remote url（检测用，非关键路径可失败）。
-///
-/// 读 `.git/config` 的 `[remote "origin"]` 段 `url =` 值，不调 git 子进程。
-fn git_repo_url(cwd: &Path) -> Option<String> {
-    let git_dir = crate::git::find_git_dir(cwd)?;
-    let config = std::fs::read_to_string(git_dir.join("config")).ok()?;
-    let mut in_origin = false;
-    for line in config.lines() {
-        let line = line.trim();
-        if line.starts_with('[') {
-            // 精确匹配 `[remote "origin"]` / `[remote 'origin']` / `[remote.origin]`；
-            // 子串匹配会误判 `[remote "myorigin"]`/`[remote "origin2"]` 为 origin（#339）。
-            in_origin = remote_section_is_origin(line);
-            continue;
-        }
-        if in_origin && line.starts_with("url =") {
-            let url = line["url =".len()..].trim();
-            if !url.is_empty() {
-                return Some(url.to_string());
-            }
-        }
-    }
-    None
-}
-
 /// 列出所有 project。
 pub fn list(conn: &Connection) -> Result<Vec<Project>, Error> {
     let mut stmt = conn.prepare(db::PROJECT_LIST)?;
@@ -351,6 +221,11 @@ pub fn list(conn: &Connection) -> Result<Vec<Project>, Error> {
     })?;
     rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
 }
+
+#[path = "project_csv.rs"]
+mod csv;
+#[path = "project_git.rs"]
+mod git;
 
 #[cfg(test)]
 #[path = "project_tests.rs"]

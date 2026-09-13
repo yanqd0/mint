@@ -1,5 +1,7 @@
 //! project.rs 拆分的独立测试模块。
 
+use super::csv::{csv_escape, csv_parse};
+use super::git::remote_section_is_origin;
 use super::*;
 use rstest::rstest;
 use tempfile::TempDir;

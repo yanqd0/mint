@@ -10,6 +10,8 @@ pub mod jump;
 pub mod model;
 pub mod model_nav;
 pub mod model_view;
+mod model_view_page;
+mod model_view_search;
 pub mod pages;
 pub mod run;
 pub mod types;

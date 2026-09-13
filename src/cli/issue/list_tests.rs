@@ -1,6 +1,6 @@
 //! list.rs 拆分的独立测试模块。
 
-use super::*;
+use crate::cli::issue::list_search::{escape_like, fts_phrase};
 
 /// escape_like：转义 \、%、_，避免被当作 LIKE 通配符。
 #[test]
