@@ -1,0 +1,130 @@
+//! milestone list 的筛选与搜索 ST（plan_list.rs 拆分）。
+
+use super::*;
+
+/// milestone list --status：容器状态筛选。
+#[test]
+fn st_milestone_list_filter_status() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["milestone", "create", "m1", "--version", "0.1.0", "--json"],
+    );
+    let out = mint(&db)
+        .args(["milestone", "list", "--status", "open"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("m1"), "open 命中: {s}");
+    let out2 = mint(&db)
+        .args(["milestone", "list", "--status", "done"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s2 = String::from_utf8_lossy(&out2);
+    assert!(!s2.contains("m1"), "done 排除 open: {s2}");
+}
+
+/// plan list --search --json 与 TSV 内容一致。
+#[test]
+fn st_plan_list_search_json_same_content() {
+    let (_dir, db) = empty_db();
+    run_json(&db, &["plan", "create", "alpha target", "--json"]);
+    run_json(&db, &["plan", "create", "beta other", "--json"]);
+    let v = run_json(&db, &["plan", "list", "--search", "target", "--json"]);
+    let items = v["items"].as_array().expect("items 数组");
+    assert_eq!(items.len(), 1, "json 过滤 1 条");
+    assert_eq!(items[0]["title"], "alpha target");
+}
+
+/// milestone list --search：同样支持。
+#[test]
+fn st_milestone_list_search_filters() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &[
+            "milestone",
+            "create",
+            "alpha ms",
+            "--version",
+            "0.1.0",
+            "--json",
+        ],
+    );
+    run_json(
+        &db,
+        &[
+            "milestone",
+            "create",
+            "beta ms",
+            "--version",
+            "0.2.0",
+            "--json",
+        ],
+    );
+    let out = mint(&db)
+        .args(["milestone", "list", "--search", "alpha"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("alpha ms"), "应含命中行: {s}");
+    assert!(!s.contains("beta ms"), "不应含未命中行: {s}");
+}
+
+/// milestone list --search 状态词精准匹配 status：title 含状态词的其它状态不混入（#419）。
+#[test]
+fn st_milestone_list_search_status_exact_no_substring_leak() {
+    let (_dir, db) = empty_db();
+    // title 含 "open" 但 attach planned issue 后变 running 的 milestone（旧子串行为会被误匹配）。
+    run_json(
+        &db,
+        &[
+            "milestone",
+            "create",
+            "open legacy",
+            "--version",
+            "0.1.0",
+            "--json",
+        ],
+    );
+    run_json(
+        &db,
+        &[
+            "milestone",
+            "create",
+            "fresh",
+            "--version",
+            "0.2.0",
+            "--json",
+        ],
+    );
+    let iid = add_issue(&db, "x");
+    run_json(&db, &["issue", "state", "plan", &iid.to_string(), "--json"]);
+    run_json(
+        &db,
+        &["milestone", "attach", "1", &iid.to_string(), "--json"],
+    );
+    // milestone 1 → running（title 仍含 "open"）；milestone 2 → open。
+    let out = mint(&db)
+        .args(["milestone", "list", "--search", "open"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8_lossy(&out);
+    assert!(s.contains("fresh"), "status=open 应命中: {s}");
+    assert!(
+        !s.contains("open legacy"),
+        "title 含 open 的 running milestone 不应混入: {s}"
+    );
+}

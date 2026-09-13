@@ -37,6 +37,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
+  # 文件行数门禁：src/ tests/ 下 .rs 一律 ≤300 行（src/CLAUDE.md 提交前检查清单）。
+  filesize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check .rs file length (max 300 lines)
+        run: |
+          over="$(find src tests -name '*.rs' -print0 | xargs -0 wc -l \
+            | awk '$1 > 300 && $2 != "total" { print $1 " " $2 }' | sort -rn)"
+          if [ -n "$over" ]; then
+            echo "::error::found .rs files over 300 lines:"
+            printf '%s\n' "$over"
+            exit 1
+          fi
+
   # 依赖治理门禁：CVE(advisories) + license + 版本漂移(bans) + 来源(sources)。
   # deny.toml 为权威配置；advisories 数据由 action 缓存（与本地 cargo audit 同源 RustSec）。
   deny:
