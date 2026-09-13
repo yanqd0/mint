@@ -33,7 +33,7 @@ const MIGRATIONS: &[(i32, &str)] = &[
 
 /// 数据库当前 schema 版本（须与 MIGRATIONS 最后一个目标版本一致）。
 /// 开发期默认写增量 migration（002/003…每逻辑变更独立）；发布前夕合并回 001 后重定基线，
-/// 见 src/db/CLAUDE.md 迁移哲学。
+/// 见 src/db/AGENTS.md 迁移哲学。
 const CURRENT_VERSION: i32 = 5;
 
 /// 打开（必要时创建）SQLite 数据库并迁移到最新版本。

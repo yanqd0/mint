@@ -10,7 +10,7 @@
 claude-plugin/
 ├── .claude-plugin/
 │   └── marketplace.json    # 私有 marketplace 聚合（name + plugins 列表，source 相对本目录 ./mint-faa*）
-├── CLAUDE.md               # 本文档
+├── AGENTS.md               # 本文档
 ├── README.md               # 安装说明
 ├── mint-faa/               # 英文版
 │   ├── .claude-plugin/
@@ -59,7 +59,7 @@ claude-plugin/
 
 ### Agent 规范
 
-- Plugin 内不定义 agent（agent 定义放项目 `.claude/agents/`）
+- Plugin 内不定义 agent；中性 agent 定义放仓库 `.agents/agents/`（`.claude/agents` 为指向它的软链接）
 - 若未来有需求：放 `agents/<name>.md`，在 plugin.json 加 `"agents": "./agents/"`
 
 ## 项目特有规范

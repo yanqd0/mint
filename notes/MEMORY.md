@@ -6,7 +6,7 @@
 - [开发路线图](roadmap.md) — 版本规划（0.4 TUI 已完成 → 0.5 agent 生态 + 发布准备 → 0.6 体积优化 → 0.7 多机同步 → 1.0 发布含 i18n/docs → 2.0 MCP 集成）、发布策略（1.0 前公开预览）、每版目标。
 - [状态生命周期与着色](status.md) — issue 6 态生命周期（open/planned/dev/test/done/dropped，含 plan→auto 统一排期）+ 容器派生传递 + TUI 着色速查（issue/容器两组色）。
 - [技术选型与决策](decisions.md) — ADR 式记录（D1-D31）：命名/ORM/CLI 框架/SQLite 集成/体积目标/状态机/close 语义/语言策略/label/project 检测/容器建模/轻量迁移/issue links/容器 5 态派生/state commit/skill 多 agent 化（D29 Codex / D30 OpenCode 适配形态 / D31 CI 发布架构）。
-- [notes 使用规范](CLAUDE.md) — notes/ 全中文、新增概念登记 DDD、技术选型记录 decisions 的写作约定。
+- [notes 使用规范](AGENTS.md) — notes/ 全中文、新增概念登记 DDD、技术选型记录 decisions 的写作约定。
 - [多 SQLite 合并方案调研](evaluation-sync.md) — 0.5.0 同步背景：社区方案分类（物理复制派/CRDT 派）、uid 方案印证、借鉴点、独立项目评估。
 - [同步外部命令化评估](evaluation-sync-external.md) — 0.7.0（D33）：同步绝不内化、传输层走外部 CLI 的候选评估矩阵（rclone 生态/国内网盘/自建直连/git+SQL）与结论。
 - [每 project 独立 db（多 db 架构）](DDD.md) — D36 定案：project 变隔离边界（每项目 `projects/<name>/<machine_id>.db`），一次性迁移拆分 + sync 复用。

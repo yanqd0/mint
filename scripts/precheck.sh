@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # mint 发布预检（precheck）：版本一致性 + CHANGELOG + lint 一键检查。
 #
-# 规则（对齐 claude-plugin/CLAUDE.md「版本同步」）：
+# 规则（对齐 claude-plugin/AGENTS.md「版本同步」）：
 #   - Cargo.toml `version` 是权威版本号。
 #   - 正式版（无 -alpha/-beta 后缀）：必须同步 plugin.json ×2 + marketplace.json ×2 的 version。
 #   - 预发布版（-alpha.N / -beta.N）：不碰 plugin 版本，跳过版本一致性检查。
 #   - CHANGELOG：正式版必须有 `## <version>` 当前段；预发布版跳过。
 #   - lint：sqruff（SQL）+ clippy + fmt 全绿。
-#   - 文件行数：src/ tests/ 下无超过 300 行的 .rs（src/CLAUDE.md 规范）。
+#   - 文件行数：src/ tests/ 下无超过 300 行的 .rs（src/AGENTS.md 规范）。
 #
 # 用法：scripts/precheck.sh
 # 退出码 0 = 全通过；1 = 任一检查失败。
@@ -83,7 +83,7 @@ else
   err "cargo clippy 失败"
 fi
 
-# ── 5. 文件行数（src/CLAUDE.md 规范：无超过 300 行的 .rs）─────────
+# ── 5. 文件行数（src/AGENTS.md 规范：无超过 300 行的 .rs）─────────
 OVER="$(find src tests -name '*.rs' -print0 | xargs -0 wc -l | awk '$1 > 300 && $2 != "total" { print $1 " " $2 }' | sort -rn)"
 if [ -z "$OVER" ]; then
   ok "文件行数规范（全部 .rs ≤300 行）"

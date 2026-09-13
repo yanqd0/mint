@@ -37,7 +37,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
-  # 文件行数门禁：src/ tests/ 下 .rs 一律 ≤300 行（src/CLAUDE.md 提交前检查清单）。
+  # 文件行数门禁：src/ tests/ 下 .rs 一律 ≤300 行（src/AGENTS.md 提交前检查清单）。
   filesize:
     runs-on: ubuntu-latest
     steps:

@@ -57,9 +57,9 @@ use crate::label;
 
 每个 commit 前本地自查，全部通过再提交：
 
-- [ ] `cargo fmt --check`（Claude Code Stop hook 会自动执行 `cargo fmt --all`，见 `.claude/hooks/rust_format.py`）
+- [ ] `cargo fmt --check`（CC Stop hook 与项目级 pre-commit 自动格式化：`scripts/format.sh` → `.claude/hooks/rust_format.py`）
 - [ ] `cargo clippy --all-targets -- -D warnings` 零警告
-- [ ] `sqruff lint`（SQL 文件，src/db/**/*.sql，见 `src/db/CLAUDE.md`）
+- [ ] `sqruff lint`（SQL 文件，src/db/**/*.sql，见 `src/db/AGENTS.md`）
 - [ ] `cargo test` 全绿（UT + IT + ST）
 - [ ] **commit 自洽**：拆分跨模块重构为多个 commit 时，每个 commit 必须可编译、测试绿（测试层改动紧跟对应代码层，不留坏节点）
 - [ ] 生产代码无 `unwrap()`/`expect()`（仅 `#[cfg(test)]` 内可用）；无 `todo!()`/`unimplemented!()`
@@ -82,7 +82,7 @@ use crate::label;
 
 ## SQL 编程规范
 
-见 `src/db/CLAUDE.md`（组织约定 / 简易规范 / sqruff 格式化 lint / 迁移哲学 / 项目偏好）。
+见 `src/db/AGENTS.md`（组织约定 / 简易规范 / sqruff 格式化 lint / 迁移哲学 / 项目偏好）。
 
 ## UT 测试规范
 
@@ -106,4 +106,4 @@ use crate::label;
 - 状态转换写 `updated_at`；`state commit` 必填 `--sha`（写 last_commit_id）；`close` 必填 `test_cmd`；`drop` 写 `dropped_reason`；**不做 `resolution`/`resolved_at`**。
 - FTS5（0.3.0 实现）用 external content + 触发器同步 `issues_fts`；0.1.0 不建 FTS。
 
-> 迁移方案哲学见 `src/db/CLAUDE.md`。
+> 迁移方案哲学见 `src/db/AGENTS.md`。

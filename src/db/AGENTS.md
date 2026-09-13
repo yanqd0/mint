@@ -78,7 +78,7 @@ ORDER BY i.id DESC
 - 工具：**sqruff**（Rust 单二进制，`cargo install sqruff`，dialect=sqlite），配置在根 `sqruff.toml`
   （扫描 `src/db/**/*.sql`）。
 - 命令（从项目根执行）：`sqruff lint src/db`（提交前检查）；`sqruff fix src/db`（自动格式化）。
-- Stop hook `.claude/hooks/sqruff_format.py` 会在每次 Claude Code Stop 时自动 `sqruff fix`。
+- 自动格式化有两条通道：CC Stop hook（`.claude/hooks/sqruff_format.py`）与项目级 pre-commit（`scripts/format.sh`，内部调用同一脚本）。
 - 约定：关键字大写；`SELECT` 列每行一列、4 空格缩进；子查询独立缩进；多行 `AND` 前导；字符串单引号；
   每条语句以分号结尾；参数占位符在顶部 `-- ?N:` 注释说明含义。
 - sqruff 是**开发期工具**，服务于 mint 项目自身；"轻量、无配置"原则针对发布交付件，二者不冲突。

@@ -45,7 +45,7 @@ claude plugin update mint-faa@mint       # 或 mint-faa-cn@mint
 # 重启会话生效（hooks 在启动时快照）
 ```
 
-> 版本号在正式版发布时同步更新（见仓库根 CLAUDE.md「版本同步」）。
+> 版本号在正式版发布时同步更新（见仓库根 AGENTS.md「版本同步」）。
 
 ## 卸载
 

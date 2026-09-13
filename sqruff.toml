@@ -1,5 +1,5 @@
 # sqruff 配置：SQL 格式化与 lint（mint 开发期工具，服务于项目自身）。
-# 用法：`sqruff lint src/db` / `sqruff fix src/db`；提交前检查见 src/CLAUDE.md。
+# 用法：`sqruff lint src/db` / `sqruff fix src/db`；提交前检查见 src/AGENTS.md。
 
 dialect = "sqlite"
 
