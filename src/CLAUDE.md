@@ -63,7 +63,22 @@ use crate::label;
 - [ ] `cargo test` 全绿（UT + IT + ST）
 - [ ] **commit 自洽**：拆分跨模块重构为多个 commit 时，每个 commit 必须可编译、测试绿（测试层改动紧跟对应代码层，不留坏节点）
 - [ ] 生产代码无 `unwrap()`/`expect()`（仅 `#[cfg(test)]` 内可用）；无 `todo!()`/`unimplemented!()`
-- [ ] 无超过 300 行的 `.rs` 文件（`find src tests -name '*.rs' | xargs wc -l | sort -rn | head`）
+- [ ] 无超过 300 行的 `.rs` 文件（`find src tests -name '*.rs' | xargs wc -l | sort -rn | head`；
+      `scripts/precheck.sh` 与 CI `filesize` job 已强制）
+
+## 模块拆分约定（>300 行时）
+
+拆分**只移动代码**，不改逻辑；公开路径靠 `pub use` 再导出保持稳定。三种既有形态：
+
+| 场景 | 做法 | 示例 |
+|------|------|------|
+| 单文件按关注点拆 | `foo.rs` → `foo/` 目录 + `foo/mod.rs`（`mod` 声明与 `pub use` 集中在 mod.rs） | `container/mod.rs`、`model/mod.rs`、`sync/mod.rs` |
+| 子模块与父文件同目录 | 父文件内 `#[path = "foo_bar.rs"] mod bar;` | `model_view.rs` + `model_view_page.rs` |
+| 测试外迁 | 父文件内 `#[cfg(test)] #[path = "foo_tests.rs"] mod tests;`，测试文件用 `use super::*;` | `label.rs` + `label_tests.rs` |
+
+- 跨文件使用的私有项升为 `pub(super)`（模块内）/`pub(crate)`（crate 内），**不新增 `pub` API**。
+- 测试外迁**不改测试内容**：用例名与数量必须与拆分前一致（`cargo test` 计数比对）。
+- 拆分后跑一次 `scripts/precheck.sh`，确认行数与 lint 均通过。
 
 ## SQL 编程规范
 
