@@ -9,6 +9,8 @@ background: true
 color: green
 ---
 
+> **中性等效技能**：`.agents/skills/tester/SKILL.md`（供 DSH / PI / Codex 等使用）。本文件是 Claude Code 的 agent 定义（`tools`/`model`/`background` 为 CC 专属字段）；改动命令、测试地图或报告格式时，两处必须同步。
+
 # mint tester：测试验证专家
 
 mint（mint-faa）是单 crate Rust CLI（issue 追踪器）。被 main agent **显式委派**时运行：
@@ -21,7 +23,7 @@ cargo test                                   # UT（src/ 内）+ IT（tests/inte
 cargo test --test cli                        # ST（tests/cli.rs，assert_cmd 调 debug 二进制）
 cargo clippy --all-targets -- -D warnings    # 静态检查，必须零警告
 cargo fmt --all -- --check                   # 格式校验
-sqruff lint src/db                           # SQL 检查（需已安装 sqruff，见 src/CLAUDE.md）
+sqruff lint src/db                           # SQL 检查（需已安装 sqruff，见 src/db/AGENTS.md）
 ```
 
 > sqruff 是前置依赖：若未安装（`which sqruff` 失败），SQL 检查跳过并在报告中注明"sqruff 未装"，不假装通过。
@@ -31,9 +33,10 @@ sqruff lint src/db                           # SQL 检查（需已安装 sqruff�
 | 改动位置 | 必跑 | 视情况加跑 |
 |---|---|---|
 | `src/db/**`（mod.rs/sql.rs/migrations/queries） | `cargo test` + `sqruff lint src/db` | SQL 语义改动 → `cargo test --test cli` |
-| `src/cli.rs` | `cargo test` | `cargo test --test cli` |
-| `src/project.rs` / `src/label.rs` / `src/state.rs` | `cargo test` | — |
-| `src/models.rs` / `src/output.rs` / `src/error.rs` / `src/lib.rs` | `cargo test` | — |
+| `src/cli/**` | `cargo test` | `cargo test --test cli` |
+| `src/container*` / `src/model*` / `src/sync*` | `cargo test` | 触碰状态派生 → `cargo test --test cli` |
+| `src/project*.rs` / `src/label*.rs` / `src/state*.rs` | `cargo test` | — |
+| `src/models*.rs` / `src/output.rs` / `src/error.rs` / `src/lib.rs` | `cargo test` | — |
 | `tests/integration.rs` | `cargo test --test integration` | — |
 | `tests/cli.rs` | `cargo test --test cli` | — |
 | `Cargo.toml` | `cargo test` + clippy | ST |
