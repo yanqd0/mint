@@ -5,7 +5,7 @@
 ## 1. Integration mechanism (no-hooks fallback)
 
 - **No event hooks**: no SessionStart context injection, no PostToolUse failure-signal injection — recording is driven entirely by **instructions**.
-- **Instruction-driven proactive recording**: when the user / main LLM explicitly describes intent (bug/requirement/leftover/review), the skill proactively runs `mint add` per the matching flow; calling without a `<description>` argument enters **takeover mode** (scan TODO / suggest next steps).
+- **Instruction-driven proactive recording**: when the user / main LLM explicitly describes intent (bug/requirement/leftover/review), the skill proactively runs `mint issue add` per the matching flow; calling without a `<description>` argument enters **takeover mode** (scan TODO / suggest next steps).
 - **Dedup**: run `list` with fuzzy title matching before recording, don't create duplicates (`add` has built-in dedup as backstop).
 - **Context**: without hooks auto-injection, proactively run `mint list` to fetch the current issue overview (TSV).
 
@@ -17,7 +17,7 @@
 ## 3. Signal → judge → record (same shape as other hosts)
 
 - Without auto signals, judgment is entirely up to the main LLM: whether to record and how to write title/body is decided by the main LLM using the skill.
-- Recording goes through `mint add "<title>" --body "<detail>"` (dedup built-in); context via `mint list` (TSV).
+- Recording goes through `mint issue add "<title>" --body "<detail>"` (dedup built-in); context via `mint list` (TSV).
 
 ## 4. Differences vs other hosts
 

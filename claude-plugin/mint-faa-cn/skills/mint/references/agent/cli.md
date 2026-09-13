@@ -5,7 +5,7 @@
 ## 1. 接入机制（无 hooks 降级）
 
 - **无事件 hooks**：无 SessionStart 上下文注入、无 PostToolUse 失败信号注入——登记全靠**指令驱动**。
-- **指令驱动主动登记**：用户/主 LLM 显式描述意图（bug/需求/遗留/审查）时，skill 按对应 flow 主动 `mint add` 登记；无 `<description>` 参数调用进入**接管模式**（扫描 TODO/建议下一步）。
+- **指令驱动主动登记**：用户/主 LLM 显式描述意图（bug/需求/遗留/审查）时，skill 按对应 flow 主动 `mint issue add` 登记；无 `<description>` 参数调用进入**接管模式**（扫描 TODO/建议下一步）。
 - **查重**：登记前先 `list` 标题模糊匹配，不重复创建（`add` 内置去重兜底）。
 - **上下文**：无 hooks 自动注入时，主动 `mint list` 拉取当前 issue 概览（TSV）。
 
@@ -17,7 +17,7 @@
 ## 3. 信号 → 判断 → 登记（与其它宿主同构）
 
 - 无自动信号 → 判断完全靠主 LLM：是否记录、怎么写标题/正文由主 LLM 用 skill 判断。
-- 登记统一走 `mint add "<title>" --body "<detail>"`（去重内置）；上下文走 `mint list`（TSV）。
+- 登记统一走 `mint issue add "<title>" --body "<detail>"`（去重内置）；上下文走 `mint list`（TSV）。
 
 ## 4. 与其它宿主的差异
 

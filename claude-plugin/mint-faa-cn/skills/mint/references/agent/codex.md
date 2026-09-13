@@ -17,7 +17,7 @@
 ## 3. 信号 → 判断 → 登记（与其它宿主同构）
 
 - hook 只做**确定性信号注入**；是否记录、怎么写标题/正文由主 LLM 用 skill 判断。
-- 登记统一走 `mint add "<title>" --body "<detail>"`（去重内置）；上下文走 `mint list`（TSV）。
+- 登记统一走 `mint issue add "<title>" --body "<detail>"`（去重内置）；上下文走 `mint list`（TSV）。
 
 ## 4. 与其它宿主的差异
 

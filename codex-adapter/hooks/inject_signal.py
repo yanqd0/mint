@@ -10,7 +10,7 @@
 - 明确错误段落：`[stderr]` 段首行含错误词
 
 只注入确定性失败信号；是否记录、怎么写标题/正文由主 LLM 用 skill 判断，
-然后主动 `mint add "<title>" --body "<detail>"`（去重内置）。
+然后主动 `mint issue add "<title>" --body "<detail>"`（去重内置）。
 """
 import json
 import re
@@ -76,7 +76,7 @@ def main():
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
             "additionalContext": "\n".join(parts)
-            + "\nIf this is worth recording, run `mint add \"<title>\" --body \"<detail>\"` "
+            + "\nIf this is worth recording, run `mint issue add \"<title>\" --body \"<detail>\"` "
             + "(dedupe is built in).",
         }
     }

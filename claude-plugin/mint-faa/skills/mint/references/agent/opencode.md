@@ -16,7 +16,7 @@
 ## 3. Signal → judge → record (same shape as other hosts)
 
 - The plugin does only **deterministic signal injection**; whether to record and how to write title/body is judged by the main LLM with the skill.
-- Recording goes through `mint add "<title>" --body "<detail>"` (dedup built-in); context via `mint list` (TSV).
+- Recording goes through `mint issue add "<title>" --body "<detail>"` (dedup built-in); context via `mint list` (TSV).
 - Note: MCP calls do not trigger `tool.execute` hooks, but the event stream sees them.
 - **Capability difference**: within the same turn the model natively sees the tool error (tool result is already in context); the plugin signal serves **contract normalization + cross-turn fallback** (batch-injected on idle, visible on the next generation).
 

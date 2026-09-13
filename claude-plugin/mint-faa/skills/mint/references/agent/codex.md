@@ -17,7 +17,7 @@
 ## 3. Signal → judge → record (same shape as other hosts)
 
 - hooks do only **deterministic signal injection**; whether to record and how to write title/body is judged by the main LLM with the skill.
-- Recording goes through `mint add "<title>" --body "<detail>"` (dedup built-in); context via `mint list` (TSV).
+- Recording goes through `mint issue add "<title>" --body "<detail>"` (dedup built-in); context via `mint list` (TSV).
 
 ## 4. Differences vs other hosts
 

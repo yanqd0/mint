@@ -1,7 +1,7 @@
 // OpenCode mint adapter 插件
 //
 // 目标：OpenCode 会话中可主动 add/list issue。与 Claude（hooks）/ Codex（hooks.json）
-// 同构：插件只做确定性信号注入 → 主 LLM 用 skill 判断是否 `mint add`（去重内置）。
+// 同构：插件只做确定性信号注入 → 主 LLM 用 skill 判断是否 `mint issue add`（去重内置）。
 //
 // 事件映射（对照 codex-adapter 三 hooks）：
 //   A. session.created          → 上下文注入（mint list TSV + 宿主 marker），对应 SessionStart

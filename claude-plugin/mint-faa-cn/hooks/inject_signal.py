@@ -2,7 +2,7 @@
 """PostToolUseFailure hook：读 stdin 事件，把工具失败信号格式化注入主对话。
 
 只注入信号（确定性部分）；是否登记、怎么写标题/正文由主 Claude 用 skill 判断
-（模糊部分需 LLM），然后主动 `mint add "<title>" --body "<detail>"`（去重内置）。
+（模糊部分需 LLM），然后主动 `mint issue add "<title>" --body "<detail>"`（去重内置）。
 """
 import json
 import sys
@@ -31,7 +31,7 @@ out = {
     "hookSpecificOutput": {
         "hookEventName": "PostToolUseFailure",
         "additionalContext": "\n".join(parts)
-        + "\nIf this is worth recording, run `mint add \"<title>\" --body \"<detail>\"` "
+        + "\nIf this is worth recording, run `mint issue add \"<title>\" --body \"<detail>\"` "
         + "(dedupe is built in).",
     }
 }

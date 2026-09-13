@@ -8,7 +8,7 @@ mint（Minimal Issue & Needs Tracker）的 Claude Code 适配。两个 plugin，
 | `mint-faa-cn` | 中文 | `mint` | 中文流程注入 |
 
 两者都提供：
-- `mint` skill（登记前先 `mint search`、`mint add` 内置去重、状态机推进）
+- `mint` skill（登记前先 `mint search`、`mint issue add` 内置去重、状态机推进）
 - hooks：`PostToolUseFailure` 注入失败信号供 LLM 判断；`SessionStart` 注入当前项目活跃 issue（TSV 表头 + top 8）
 
 前置：mint 已安装且在 `$PATH`（`cargo install mint-faa` 或 `cargo build --release` + `~/bin/mint` 软链接）。
@@ -59,11 +59,11 @@ claude plugin marketplace remove mint
 
 - **PostToolUseFailure hook**：读失败事件，经 `hookSpecificOutput.additionalContext`
   注入信号；主 Claude 用 skill **判断是否值得记录**（模糊判断由 LLM 完成），值得则
-  `mint add "<标题>" --body "<错误细节>"`（去重内置，重复自动合并、`hit_count+1`）。
+  `mint issue add "<标题>" --body "<错误细节>"`（去重内置，重复自动合并、`hit_count+1`）。
 - **SessionStart hook**：`mint list` 输出注入当前项目活跃 issue（TSV 表头 + top 8，`head -9`）。
 
 ## 注入失效的退化方案
 
 插件 hook 的 `additionalContext` 在部分版本曾有回归报告。若失败信号未到达主 Claude，
-可让 hook 脚本自行 `mint add`（确定性提取标题/正文，放弃 LLM 判断）——改
-`hooks/inject_signal.py` 在输出前追加一次 `mint add` 调用即可。
+可让 hook 脚本自行 `mint issue add`（确定性提取标题/正文，放弃 LLM 判断）——改
+`hooks/inject_signal.py` 在输出前追加一次 `mint issue add` 调用即可。

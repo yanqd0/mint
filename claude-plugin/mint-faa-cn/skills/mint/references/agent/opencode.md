@@ -16,7 +16,7 @@
 ## 3. 信号 → 判断 → 登记（与其它宿主同构）
 
 - 插件只做**确定性信号注入**；是否记录、怎么写标题/正文由主 LLM 用 skill 判断。
-- 登记统一走 `mint add "<title>" --body "<detail>"`（去重内置）；上下文走 `mint list`（TSV）。
+- 登记统一走 `mint issue add "<title>" --body "<detail>"`（去重内置）；上下文走 `mint list`（TSV）。
 - 注意：MCP 调用不触发 `tool.execute` hooks，但事件流可见。
 - **能力差异**：同 turn 内模型原生可见工具报错（tool result 已在上下文），插件信号用于**契约标准化 + 跨 turn 兜底**（idle 批量注入，下一次生成必然可见）。
 
