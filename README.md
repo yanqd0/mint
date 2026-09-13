@@ -32,7 +32,7 @@ Most of the time, it changes by itself.
 
 ## Features
 
-- **Single global database** at `$XDG_DATA_HOME/mint/mint.db` (`MINT_DB_PATH` overrides) — no per-project install, cross-project shared via refs
+- **Per-project SQLite databases** at `$XDG_DATA_HOME/mint/projects/<project>/<machine_id>.db` (`MINT_DB_PATH` / `--db` switches to a single-file db), with multi-machine sync built in
 - **6-state state machine** (`open/planned/dev/test/done/dropped`) with mandatory `test_cmd` on close
 - **Containers**: milestones (versioned releases) + plans (agent execution plans) with 5-state derived status
 - **Built-in dedup** (normalized-title fuzzy match) + full-text search (FTS5)
@@ -121,4 +121,4 @@ The adapter injects failure signals (`mint: tool X failed — <cmd>`) and issue 
 
 The plugin injects failure signals (`mint: tool X failed — <cmd>`), issue context (`mint list`), and commit reminders into OpenCode sessions, and marks the host (`mint-adapter: opencode`) so the shared skill routes to its OpenCode rules. Full flow lives in `.agents/skills/mint/SKILL.md`.
 
-Data lives in a single global SQLite database at `$XDG_DATA_HOME/mint/mint.db` (`MINT_DB_PATH` overrides).
+Data lives in per-project SQLite databases at `$XDG_DATA_HOME/mint/projects/<project>/<machine_id>.db` (`MINT_DB_PATH` / `--db` switches to single-file mode).

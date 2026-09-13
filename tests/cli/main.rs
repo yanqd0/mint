@@ -5,7 +5,7 @@
 //!
 //! 用 `assert_cmd::Command::cargo_bin` 调 debug 产物（CARGO_BIN_EXE 自动指向，
 //! 无需手动 build）；每用例独立 `TempDir` + `--db`，绝不触碰真实全局库
-//! `~/.local/share/mint/mint.db`。性能用 `std::time::Instant` 断言阈值，不引 criterion。
+//! `~/.local/share/mint/projects/<project>/<machine_id>.db`。性能用 `std::time::Instant` 断言阈值，不引 criterion。
 
 use std::time::{Duration, Instant};
 

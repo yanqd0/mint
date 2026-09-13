@@ -7,7 +7,7 @@ mint stores everything in a single local SQLite database. This document covers *
 | Precedence | Path |
 |---|---|
 | `--db <path>` / env `MINT_DB_PATH` | explicit override |
-| default | `$XDG_DATA_HOME/mint/mint.db` (`~/.local/share/mint/mint.db` on Linux/macOS with `HOME` set) |
+| default | `$XDG_DATA_HOME/mint/projects/<project>/<machine_id>.db` (`~/.local/share/mint/projects/<project>/<machine_id>.db` on Linux/macOS with `HOME` set) — one db per project |
 
 Run `mint --db /path/to/db list` to point any command at a specific database.
 
@@ -18,7 +18,7 @@ Run `mint --db /path/to/db list` to point any command at a specific database.
 Use the SQLite `.backup` command against a **live** database — it produces a consistent snapshot without locking writers for the whole duration:
 
 ```sh
-sqlite3 "$HOME/.local/share/mint/mint.db" ".backup 'backup-mint-YYYYMMDD.db'"
+sqlite3 "$HOME/.local/share/mint/projects/<project>/<machine_id>.db" ".backup 'backup-mint-YYYYMMDD.db'"
 ```
 
 Safe to run while mint is in use. Verify afterwards:
@@ -32,7 +32,7 @@ sqlite3 backup-mint-YYYYMMDD.db "PRAGMA integrity_check;"   # → ok
 Only when mint is **not** running (or use `SQLite backup` if uncertain):
 
 ```sh
-cp "$HOME/.local/share/mint/mint.db" mint-backup.db
+cp "$HOME/.local/share/mint/projects/<project>/<machine_id>.db" mint-backup.db
 ```
 
 SQLite databases are portable across architectures and OSes (the file is platform-independent), so a copied `.db` works anywhere.
@@ -73,7 +73,7 @@ The 0.7.0 multi-machine sync (S3-bucket relay, `notes/roadmap.md`) builds on thi
 
 | Task | Command |
 |---|---|
-| Locate db | `mint list --db <path>` or default `~/.local/share/mint/mint.db` |
+| Locate db | `mint project show 1` (current project) or `mint list --db <path>`; default `~/.local/share/mint/projects/<project>/<machine_id>.db` |
 | Backup (safe while running) | `sqlite3 <db> ".backup 'bak.db'"` |
 | Backup (data-level) | `mint export --format json > bak.json` |
 | Verify backup | `sqlite3 bak.db "PRAGMA integrity_check;"` |
