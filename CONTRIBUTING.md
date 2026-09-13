@@ -68,6 +68,38 @@ On first run, mint creates a per-project database at
 
 Configuration is kept minimal — no config files. All environment variables use the `MINT_` prefix.
 
+## Local agent setup (multi-host)
+
+This repo is arranged so several coding agents (Claude Code, Codex, PI, DSH) can work on it:
+
+- **Instructions** live in `AGENTS.md` (root plus nested directories) and are the single source for every agent. `CLAUDE.md` is **not tracked** — Claude Code users create local symlinks (below).
+- **Neutral resources** live in `.agents/` (`skills/`, `agents/`). `.claude/` holds Claude Code-specific wiring (hooks, settings) whose `agents` and `skills` entries are committed symlinks into `.agents/`.
+- **Project-level hook**: enable it once per clone.
+
+  ```bash
+  scripts/install-hooks.sh       # sets core.hooksPath=.githooks (pre-commit formatting)
+  ```
+
+  The pre-commit hook formats staged `.rs` / `.sql` files; skip it with `git commit --no-verify`. Claude Code additionally has the Stop hook in `.claude/settings.json`.
+
+### Claude Code users
+
+Create the git-ignored instruction symlinks once per clone:
+
+```bash
+ln -s AGENTS.md CLAUDE.md
+ln -s AGENTS.md src/CLAUDE.md
+ln -s AGENTS.md src/db/CLAUDE.md
+ln -s AGENTS.md notes/CLAUDE.md
+ln -s AGENTS.md claude-plugin/CLAUDE.md
+```
+
+On Windows, enable Developer Mode (or `git config core.symlinks true`) so symlinks resolve.
+
+### PI users
+
+PI discovers `.agents/skills/` from the current directory upwards. The first time you open this repo it asks whether to trust it — accept to load the project skills.
+
 ## Commit convention
 
 - One logical change per commit, small commits preferred.

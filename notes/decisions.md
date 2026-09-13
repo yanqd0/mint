@@ -508,3 +508,23 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 **固化**：写入 `AGENTS.md` Hard constraints（D42 之后新增条目），供后续 agent 一律遵守。
 
 **理由**：多机同步闭环后真实数据会被拉齐/写回，一旦混入测试项目即扩散到各机器；从源头隔离最省心。
+
+---
+
+## D44：多宿主项目级适配——AGENTS.md 为唯一指令源（2026-09-13，#453–#459）
+
+**背景**：本项目要同时被 Claude Code / Codex / PI / DSH 继续开发，但此前的项目级接线是分裂的：
+
+- 根 `AGENTS.md`（英文，mint 用法）与根 `CLAUDE.md`（中文，项目导航）内容不同，DSH 等宿主**两份都注入**（按内容去重只对完全相同的候选生效）；4 个嵌套 `CLAUDE.md` 同理只有 CC 能读到。
+- `.claude/` 是唯一的宿主专属目录，其中的 agent 定义与 Stop hook 其它宿主拿不到；格式化只挂在 CC 的 Stop hook 上。
+- mint 用法被写进项目级 context 亦已过时：无论宿主是什么，mint 流程都由宿主 skill 或插件承载。
+
+**决策**：
+
+- **指令源唯一 `AGENTS.md`**（根 + 各层嵌套，中文为主）。`CLAUDE.md` 加入 `.gitignore`，CC 用户在本机建软链接即可（内容相同 → DSH 侧按内容去重，不会重复注入）。项目级 context **不再描述 mint 用法**，只留 dogfooding 说明与两条数据安全约束。
+- **中性资源在 `.agents/`**：`.agents/skills/`（DSH rank 200 / PI 从 cwd 向上发现 / Codex 用 `.agents/skills`）与 `.agents/agents/`；`.claude/agents`、`.claude/skills` 改为指向 `.agents/` 的**软链接**，CC 行为不变（`.claude/` 其余内容完整保留）。
+- **项目级 hook**：提交前格式化走 `.githooks/pre-commit`（`scripts/format.sh` → 复用 `.claude/hooks/*.py` 实现，`scripts/install-hooks.sh` 一次性启用 `core.hooksPath`）；CC 的 Stop hook 保留，两条通道互补。**DSH 无项目级 hook 机制**（插件只能挂 `$DSH_HOME/profiles/<name>`，项目级仅 `.env`），故项目级等效取 git hook。
+
+**理由**：宿主差异只应存在于**接线**（`.claude/settings.json`、git hook 的启用），内容（指令、skill、agent 定义）只维护一份；用软链而非副本，避免双份漂移。git hook 又天然覆盖所有宿主与人工提交。
+
+**固化**：根 `AGENTS.md`「宿主适配」节 + `CONTRIBUTING.md`「Local agent setup」；`.agents/skills/tester/SKILL.md` 与 `.claude/agents/tester.md` 互指并要求同步。

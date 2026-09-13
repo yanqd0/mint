@@ -32,4 +32,7 @@ tags
 !.claude/settings.json
 !.claude/skills
 
+### Agent 指令（本地软链接，不入库；见 CONTRIBUTING「Local agent setup」）###
+CLAUDE.md
+
 __pycache__/

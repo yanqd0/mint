@@ -122,3 +122,13 @@ The adapter injects failure signals (`mint: tool X failed — <cmd>`) and issue 
 The plugin injects failure signals (`mint: tool X failed — <cmd>`), issue context (`mint list`), and commit reminders into OpenCode sessions, and marks the host (`mint-adapter: opencode`) so the shared skill routes to its OpenCode rules. Full flow lives in `.agents/skills/mint/SKILL.md`.
 
 Data lives in per-project SQLite databases at `$XDG_DATA_HOME/mint/projects/<project>/<machine_id>.db` (`MINT_DB_PATH` / `--db` switches to single-file mode).
+
+## Development
+
+Project instructions for coding agents live in `AGENTS.md` (nested per directory); host-neutral skills and agent definitions live in `.agents/`. Enable the project-level pre-commit formatting hook once per clone:
+
+```bash
+scripts/install-hooks.sh
+```
+
+Claude Code users create local, git-ignored `CLAUDE.md` symlinks — see `CONTRIBUTING.md`.
