@@ -22,6 +22,12 @@ This is a global, single-machine, SQLite-backed issue system CLI for AI agents.
 
 Most of the time, it works by itself.
 
+Agents can load the whole CLI surface in one call:
+
+```sh
+mint --help-llm   # complete English reference: every subcommand, argument, value and state transition
+```
+
 ### In Shell (Optional)
 
 ```sh
