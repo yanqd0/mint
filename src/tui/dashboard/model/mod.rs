@@ -1,0 +1,237 @@
+//! dashboard 状态机：视图切换、变更流、面板自动切换（无 ratatui，可单测）。
+//! 从 dashboard.rs 拆分而来；入口聚合导出见 `dashboard`。
+
+use std::collections::VecDeque;
+
+use crossterm::event::KeyCode;
+
+use crate::models::{Container, Issue};
+use crate::tui::TuiKey;
+use crate::tui::dashboard::diff::{DashboardSnapshot, diff_snapshots};
+use crate::tui::dashboard::types::{
+    FlashItem, IssueFilter, JumpRequest, MAX_FEED, RawJump, SearchState,
+};
+
+pub use crate::tui::dashboard::types::{FeedItem, KeyAction, RefreshResult, View};
+
+mod model_cursor;
+mod model_input;
+mod model_search;
+
+#[cfg(test)]
+mod model_tests;
+
+/// dashboard 状态机。
+pub struct DashboardModel {
+    /// 当前项目名（外框标题）。
+    pub project: String,
+    pub view: View,
+    /// 变更流，index 0 = 最新。
+    pub feed: Vec<FeedItem>,
+    /// 当前面板列表内选中下标。
+    pub selected: usize,
+    /// 最新快照（详情/进度数据源）。
+    pub issues: Vec<Issue>,
+    pub plans: Vec<(Container, i64)>,
+    pub milestones: Vec<(Container, i64)>,
+    /// milestone 直属 issue 关联（详情页直属 issue 列表用）。
+    pub milestone_directs: Vec<(i64, i64)>,
+    /// 初始筛选（list --tui 传入；TUI 内固定不变）。
+    pub filter: Option<IssueFilter>,
+    pub(crate) prev: Option<DashboardSnapshot>,
+    /// 当前面板页（0-based，每页 page_size 行）。
+    pub page: usize,
+    /// MilestoneDetail plans 面板页（与 issues 面板各自独立翻页）。
+    pub plans_page: usize,
+    /// MilestoneDetail 直属 issues 面板页。
+    pub issues_page: usize,
+    /// 每页行数（渲染器按列表面板高度写回，动态）。
+    pub page_size: usize,
+    /// MilestoneDetail plans 面板页大小（与 issues 面板独立，内容定高）。
+    pub(crate) plans_page_size: usize,
+    /// MilestoneDetail issues 面板页大小（按面板高度动态）。
+    pub(crate) issues_page_size: usize,
+    /// 用户空闲 tick（handle_key 重置 0，refresh 递增）；自动切换前置 ≥ AUTO_SWITCH_IDLE。
+    pub(crate) user_idle: u32,
+    /// 距上次自动切换的 tick；两次自动切换间隔 ≥ AUTO_SWITCH_GAP。
+    pub(crate) auto_last: u32,
+    /// 三大 list tab 各保存手动离开时的 (page, selected)，返回恢复；自动跳转清空。
+    /// 索引：Issues=0, Plans=1, Milestones=2（详情归其 tab）。
+    pub(crate) saved_cursor: [(usize, usize); 3],
+    /// 各 list tab 的搜索 filter（提交后持久，切 tab 保留；自动跳转清空）。
+    /// 索引同 saved_cursor。None = 无搜索。
+    pub(crate) tab_search: [Option<String>; 3],
+    /// 瞬时搜索输入态（/ 唤出；视图切换清输入缓冲）。
+    pub search: Option<SearchState>,
+    /// queue1：原始跳转请求（事件驱动，合并器每 tick 读空）。
+    pub(crate) pending: VecDeque<RawJump>,
+    /// queue2：就绪复合请求（每 5s 执行队首，容量 JUMP_QUEUE_LIMIT）。
+    pub(crate) ready: VecDeque<JumpRequest>,
+    /// 合并器延迟 tick（检测到请求后延迟 JUMP_MERGE_DELAY 再合并）。
+    pub(crate) merge_delay: u32,
+    /// 进行中的闪烁项（渲染层读取）。
+    pub flash: Vec<FlashItem>,
+    /// 路由历史链（视图级）。history_pos 指向当前视图；Backspace 后退 / Shift+Backspace 前进；
+    /// 中间节点产生新导航 → 永久截断前进段（链非树）。
+    pub(crate) history: Vec<View>,
+    pub(crate) history_pos: usize,
+}
+
+impl Default for DashboardModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DashboardModel {
+    pub fn new() -> Self {
+        Self {
+            project: String::new(),
+            view: View::Issues,
+            feed: Vec::new(),
+            selected: 0,
+            issues: Vec::new(),
+            plans: Vec::new(),
+            milestones: Vec::new(),
+            milestone_directs: Vec::new(),
+            filter: None,
+            prev: None,
+            page: 0,
+            plans_page: 0,
+            issues_page: 0,
+            page_size: 10,
+            plans_page_size: 10,
+            issues_page_size: 10,
+            user_idle: 0,
+            auto_last: 0,
+            saved_cursor: [(0, 0); 3],
+            tab_search: [None, None, None],
+            search: None,
+            pending: VecDeque::new(),
+            ready: VecDeque::new(),
+            merge_delay: 0,
+            flash: Vec::new(),
+            history: vec![View::Issues],
+            history_pos: 0,
+        }
+    }
+
+    /// 首轮基线：feed = 当前全量按 updated_at 倒序，无事件。
+    pub fn init(&mut self, snapshot: DashboardSnapshot) {
+        let mut baseline: Vec<FeedItem> = snapshot
+            .issues
+            .iter()
+            .map(|i| FeedItem::Baseline { issue: i.clone() })
+            .collect();
+        baseline.sort_by(|a, b| {
+            b.issue()
+                .map(|i| &i.updated_at)
+                .cmp(&a.issue().map(|i| &i.updated_at))
+        });
+        self.feed = baseline;
+        let mut issues = snapshot.issues.clone();
+        issues.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        self.issues = issues;
+        self.plans = snapshot.plans.clone();
+        self.milestones = snapshot.milestones.clone();
+        self.milestone_directs = snapshot.milestone_directs.clone();
+        self.project = snapshot.project.clone();
+        self.filter = None;
+        self.prev = Some(snapshot);
+        self.view = View::Issues;
+        self.selected = 0;
+        self.history = vec![View::Issues];
+        self.history_pos = 0;
+        self.plans_page = 0;
+        self.issues_page = 0;
+        self.user_idle = 0;
+        self.auto_last = 0;
+        self.saved_cursor = [(0, 0); 3];
+        self.tab_search = [None, None, None];
+        self.search = None;
+        self.pending.clear();
+        self.ready.clear();
+        self.merge_delay = 0;
+        self.flash.clear();
+    }
+
+    /// 每 tick：diff 上一轮 → 事件前置 feed；面板自动切换。
+    pub fn refresh(&mut self, snapshot: &DashboardSnapshot) -> RefreshResult {
+        let events = self
+            .prev
+            .as_ref()
+            .map(|p| diff_snapshots(p, snapshot))
+            .unwrap_or_default();
+        let n = events.len();
+        for ev in events.iter().rev() {
+            self.feed.insert(0, FeedItem::Event(ev.clone()));
+        }
+        if self.feed.len() > MAX_FEED {
+            self.feed.truncate(MAX_FEED);
+        }
+        // tick 计数：空闲与自动切换间隔递增。
+        self.user_idle = self.user_idle.saturating_add(1);
+        self.auto_last = self.auto_last.saturating_add(1);
+        // 闪烁递减（过期清除）。
+        self.tick_flash();
+        // 事件 → queue1（原始跳转请求）。
+        for r in crate::tui::dashboard::jump::parse::raw_jumps_from_events(&events) {
+            self.pending.push_back(r);
+        }
+        // 合并器（延迟读空 → queue2）+ 执行器（空闲/间隔满足执行队首）。
+        self.merge_jumps();
+        let jumped = self.execute_jump();
+        let mut issues = snapshot.issues.clone();
+        issues.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        self.issues = issues;
+        self.plans = snapshot.plans.clone();
+        self.milestones = snapshot.milestones.clone();
+        self.milestone_directs = snapshot.milestone_directs.clone();
+        self.prev = Some(snapshot.clone());
+        self.clamp_selected();
+        self.clamp_page();
+        // 详情指向的实体已删除 → 回对应 tab。
+        self.prune_detail();
+        // 规则 7：空闲 60s 回首页（不经 queue）。
+        // 本 tick 刚执行 auto-jump 则跳过——否则同 tick 的 home_timeout
+        // （idle≥60s 且 pending/ready 空）会立即撤销刚完成的跳转（#336）。
+        if jumped.is_none() {
+            self.home_timeout();
+        }
+        RefreshResult {
+            new_events: n,
+            jumped,
+        }
+    }
+
+    /// 处理按键：退出 dashboard 返回 Quit（q 或 Ctrl+C）；视图内导航返回 None。TUI 纯只读，无写操作。
+    pub fn handle_key(&mut self, key: TuiKey) -> KeyAction {
+        // 任何按键 → 用户活跃，重置空闲计时（自动切换前置失效）。含搜索输入，天然满足"输入算用户操作"。
+        self.user_idle = 0;
+        // 搜索输入态优先：全拦截，避免 Backspace=q/Enter/Esc/导航冲突。
+        if self.search.as_ref().is_some_and(|s| s.active) {
+            return self.handle_search_key(key);
+        }
+        if key.code == KeyCode::Char('q') || (key.code == KeyCode::Char('c') && key.ctrl) {
+            return KeyAction::Quit;
+        }
+        match key.code {
+            KeyCode::Backspace if !key.shift => self.history_back(),
+            KeyCode::Backspace if key.shift => self.history_forward(),
+            _ => self.handle_nav(key.code),
+        }
+        KeyAction::None
+    }
+
+    /// 选中条目的 0-indexed 行号（selected 0 = 无选中，返回 None）。
+    pub(crate) fn selected_idx(&self) -> Option<usize> {
+        self.selected.checked_sub(1)
+    }
+
+    /// 渲染器写回 page_size（按列表面板可见高度），并夹取 page/selected 防越界。
+    pub fn set_page_size(&mut self, n: usize) {
+        self.page_size = n.max(1);
+        self.clamp_page();
+        self.clamp_selected();
+    }
+}
