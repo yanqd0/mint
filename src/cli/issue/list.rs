@@ -43,10 +43,10 @@ pub struct ListArgs {
     /// Do not paginate; show all results in one page (ignores --page/--page-size)
     #[arg(long)]
     pub no_page: bool,
-    /// Filter by created_at >= 时间（支持前缀 2026/2026-08/2026-08-10）
+    /// Filter by created_at >= TIME (prefix supported: 2026, 2026-08, 2026-08-10)
     #[arg(long)]
     pub created_after: Option<String>,
-    /// Filter by updated_at >= 时间（支持前缀）
+    /// Filter by updated_at >= TIME (prefix supported)
     #[arg(long)]
     pub updated_after: Option<String>,
     /// Output as JSON

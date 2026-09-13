@@ -12,13 +12,13 @@ pub struct ListContainersArgs {
     /// Filter by status (container: open/running/partial/dropped/done)
     #[arg(long, value_enum)]
     pub status: Option<crate::models::ContainerStatus>,
-    /// Filter by milestone (plan list): id 或空串 ''（筛未挂 milestone 的 plan）
+    /// Filter by milestone id (empty string '' = plans with no milestone)
     #[arg(long)]
     pub milestone: Option<String>,
-    /// Filter by created_at >= 时间（支持前缀 2026/2026-08/2026-08-10）
+    /// Filter by created_at >= TIME (prefix supported: 2026, 2026-08, 2026-08-10)
     #[arg(long)]
     pub created_after: Option<String>,
-    /// Filter by updated_at >= 时间（支持前缀）
+    /// Filter by updated_at >= TIME (prefix supported)
     #[arg(long)]
     pub updated_after: Option<String>,
     /// Filter by text (title/body/status/#id, case-insensitive substring)
