@@ -66,6 +66,13 @@ fn points_to_per_command_help() {
     assert!(render().contains("mint <command> --help"));
 }
 
+/// 顶层子命令简写（i/p/ms）不进参考页：参考页面向 LLM，全名语义完整且同为 1 token（#469）。
+#[test]
+fn no_subcommand_aliases_in_reference() {
+    let out = render();
+    assert!(!out.contains("alias"), "参考页不应出现子命令别名：{out}");
+}
+
 /// 全部叶子命令都出现。
 #[test]
 fn covers_every_leaf_command() {

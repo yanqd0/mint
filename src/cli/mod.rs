@@ -56,6 +56,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Issue operations (add/list/show/get/set/state/link)
+    #[command(visible_alias = "i")]
     Issue(IssueArgs),
     /// List issues (open/planned/dev/test by default) — shortcut for `issue list`
     List(ListArgs),
@@ -68,8 +69,10 @@ pub enum Commands {
     /// Project subcommands
     Project(ProjectArgs),
     /// Milestone container subcommands
+    #[command(visible_alias = "ms")]
     Milestone(MilestoneArgs),
     /// Plan container subcommands
+    #[command(visible_alias = "p")]
     Plan(PlanArgs),
     /// Live dashboard: auto-refreshing issue/plan activity feed (TTY) or snapshot (non-TTY)
     #[cfg(feature = "tui")]
