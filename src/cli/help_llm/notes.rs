@@ -11,7 +11,7 @@ use super::{line, wrap_line};
 pub(super) const CONVENTIONS: &[&str] = &[
     "CONVENTIONS",
     "  Output: TSV by default on list/show; --json on read commands; `get <ID> <FIELD>` prints a bare value (use for body).",
-    "  Paging: list commands default to 5 rows; --page-size N / --page N / --no-page; a footer reports the page.",
+    "  Paging: default 5 rows; --page-size N / --page N / --no-page; a \"# Page x/y ...\" footer on stdout, not stderr.",
     "  Batch: state transitions and container batch commands take one or more IDs (invalid ones are skipped and reported).",
     "  Errors: \"mint: error: ...\" on stderr; exit 0 = ok, 1 = runtime error, 2 = usage error.",
     "  Data: per-project DB at $XDG_DATA_HOME/mint/projects/<project>/<machine_id>.db; --db / MINT_DB_PATH selects one file.",
