@@ -3,7 +3,7 @@
 use rusqlite::Connection;
 
 use crate::cli::{
-    ContainerGetArgs, PlanCreateArgs, PlanSetArgs, PlanTransArgs, cmd_container_list,
+    ContainerGetArgs, PlanCreateArgs, PlanSetArgs, PlanTransArgs, body_edit, cmd_container_list,
     cmd_container_show, print_issue_link_json,
 };
 use crate::container::{self, ContainerKind};
@@ -44,19 +44,30 @@ pub fn cmd_plan_create(conn: &Connection, a: &PlanCreateArgs) -> Result<(), Erro
 /// 并将其下 planned issue 重置回 open——跨桶排期作废）。
 pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
     let title = s.title.as_deref().map(str::trim);
-    let body = s.body.as_deref();
     let milestone = s.milestone;
-    if title.is_none() && body.is_none() && milestone.is_none() {
+    if title.is_none() && !s.body_edit.is_present() && milestone.is_none() {
         return Err(Error::Other(
-            "set requires --title, --body, or --milestone".to_string(),
+            "set requires --title, --body, --body-append, --body-file, or --milestone".to_string(),
         ));
     }
     if title.is_some_and(|t| t.is_empty()) {
         return Err(Error::Other("title must not be empty".to_string()));
     }
+    // --body-append / --body-section 基于现有 body 计算（顺带校验 plan 存在）。
+    let current = if s.body_edit.body_append.is_some() || s.body_edit.body_section.is_some() {
+        Some(
+            container::get(conn, ContainerKind::Plan, s.id)?
+                .ok_or_else(|| Error::Other(format!("plan #{} not found", s.id)))?
+                .body
+                .unwrap_or_default(),
+        )
+    } else {
+        None
+    };
+    let body = body_edit::resolve(&s.body_edit, current.as_deref())?;
     // title/body 元数据更新（仅在提供时，避免纯移动被无谓刷新覆盖）。
     if title.is_some() || body.is_some() {
-        container::update_plan(conn, s.id, title, body)?;
+        container::update_plan(conn, s.id, title, body.as_deref())?;
     }
     // milestone 移动（级联派生两侧 + 重置其下 planned issue）。
     let mut reset = 0;
@@ -69,7 +80,7 @@ pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
         if let Some(t) = title {
             obj.insert("title".into(), serde_json::Value::from(t));
         }
-        if let Some(b) = body {
+        if let Some(b) = body.as_deref() {
             obj.insert("body".into(), serde_json::Value::from(b));
         }
         if let Some(m) = milestone {

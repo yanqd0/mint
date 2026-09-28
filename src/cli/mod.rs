@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 mod args;
+mod body_edit;
 mod container_cmd;
 pub mod delete;
 pub mod export;

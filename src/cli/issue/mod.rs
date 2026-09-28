@@ -41,7 +41,7 @@ pub enum IssueCmd {
     Show(ShowArgs),
     /// Get a single field's value (bare output; --json for structured)
     Get(GetArgs),
-    /// Set fields: --title / --body / --priority (replaces edit)
+    /// Set fields: --title / body (--body/--body-append/--body-file/--body-section) / --priority
     Set(SetArgs),
     /// State transitions (plan/start/commit/close/reset/drop/reopen)
     State(StateArgs),

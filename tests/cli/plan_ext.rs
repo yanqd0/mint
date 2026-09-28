@@ -64,3 +64,32 @@ fn st_plan_drop_empty_only_and_survives_move() {
     let err = run_fail(&db, &["plan", "drop", "999"]);
     assert!(err.contains("plan #999 not found"), "stderr: {err}");
 }
+
+/// plan set 的 body 编辑：--body-section 只替换目标段，--body-append 追加（#479）。
+#[test]
+fn st_plan_set_body_edit() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["plan", "create", "p", "--body", "## 目标\nold\n", "--json"],
+    );
+    let v = run_json(
+        &db,
+        &[
+            "plan",
+            "set",
+            "1",
+            "--body",
+            "new",
+            "--body-section",
+            "目标",
+            "--json",
+        ],
+    );
+    assert_eq!(v["body"], "## 目标\nnew"); // plan create 会 trim 尾换行
+    let v = run_json(
+        &db,
+        &["plan", "set", "1", "--body-append", "## 验收\nok", "--json"],
+    );
+    assert_eq!(v["body"], "## 目标\nnew\n## 验收\nok");
+}

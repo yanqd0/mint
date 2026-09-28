@@ -98,11 +98,8 @@ pub(crate) fn paged_json(
     })
 }
 
-/// 打印分页脚注（stdout，TSV 注释行，始终输出——含 `--no-page`/单页）。
-///
-/// 走 stdout 而非 stderr（#491）：外围插件与 agent tool 常只捕获 stdout，脚注落在
-/// stderr 会被静默丢弃，迫使消费方额外读 stderr。`#` 前缀与 `export --format tsv`
-/// 的段标题（`# issues`）一致，便于按注释行过滤。
+/// 打印分页脚注（stdout，TSV 注释行，始终输出）（#491）：走 stdout 而非 stderr，
+/// 因插件/agent tool 常只捕获 stdout；`#` 前缀与 `export --format tsv` 段标题一致。
 pub(crate) fn print_page_footer(page: u32, page_size: u32, total: usize) {
     println!(
         "# Page {page}/{} ({page_size} per page, {total} total)",
@@ -112,8 +109,7 @@ pub(crate) fn print_page_footer(page: u32, page_size: u32, total: usize) {
 
 // ── 列矩阵转换（数据 → 表头 + 行，供默认 TSV 与 --tui 共用）────
 
-/// Issue 列表 → (表头, 行矩阵)。
-/// 列序在既有 6 列后追加 `Plan`(#N)/`Updated`（#463）——前 6 列下标不变，兼容既有消费方。
+/// Issue 列表 → (表头, 行矩阵)；列序在既有 6 列后追加 `Plan`(#N)/`Updated`（#463）。
 pub(crate) fn issues(items: &[Issue]) -> (Vec<String>, Vec<Vec<String>>) {
     let headers: Vec<String> = [
         "ID", "P", "Kind", "Status", "Title", "Labels", "Plan", "Updated",
@@ -188,9 +184,14 @@ pub(crate) fn labels(items: &[(Label, i64)]) -> (Vec<String>, Vec<Vec<String>>) 
 
 // ── show 详情列矩阵（默认 TSV 输出，单行）────
 
-/// TSV 单元格转义：先净化终端控制字符（ESC/C1），再 tab/换行/回车 → 空格（保持 show TSV 单行）。
+/// TSV 单元格转义：净化控制字符后把 `\` `\t` `\n` `\r` 转成可见单行字面量（#478）——
+/// 旧实现静默转空格，`show` 正文回写会无声丢结构；取原文仍用 `get <ID> body`。
 fn tsv_cell(s: &str) -> String {
-    crate::output::sanitize_terminal(s).replace(['\t', '\n', '\r'], " ")
+    crate::output::sanitize_terminal(s)
+        .replace('\\', "\\\\")
+        .replace('\t', "\\t")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
 }
 
 /// Issue 详情（show）→ (表头, 单行矩阵)。body 末列（含 tab/换行转义）。

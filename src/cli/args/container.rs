@@ -4,6 +4,8 @@ use clap::Subcommand;
 
 use crate::models::ContainerStatus;
 
+use super::body::BodyEditArgs;
+
 #[derive(clap::Args)]
 pub struct ListContainersArgs {
     /// Show all statuses (including done)
@@ -120,9 +122,8 @@ pub struct PlanSetArgs {
     /// New title (omit to keep; empty rejected)
     #[arg(long)]
     pub title: Option<String>,
-    /// New body (omit to keep; empty string clears)
-    #[arg(long)]
-    pub body: Option<String>,
+    #[command(flatten)]
+    pub body_edit: BodyEditArgs,
     /// New milestone to move this plan to (recomputes both milestones' status)
     #[arg(long)]
     pub milestone: Option<i64>,
@@ -195,7 +196,7 @@ pub enum PlanCmd {
     Detach(PlanIssueArgs),
     /// Get a single field's value (bare output; --json for structured)
     Get(ContainerGetArgs),
-    /// Set fields: --title / --body / --milestone
+    /// Set fields: --title / body (--body/--body-append/--body-file/--body-section) / --milestone
     Set(PlanSetArgs),
     /// Batch-schedule all open issues of this plan (open -> planned)
     Plan(PlanTransArgs),

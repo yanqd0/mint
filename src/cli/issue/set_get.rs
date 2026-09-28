@@ -2,6 +2,7 @@
 
 use rusqlite::Connection;
 
+use crate::cli::{BodyEditArgs, body_edit};
 use crate::db;
 use crate::error::Error;
 use crate::label;
@@ -26,9 +27,8 @@ pub struct SetArgs {
     /// New title (omit to keep; empty rejected)
     #[arg(long)]
     pub title: Option<String>,
-    /// New body (omit to keep; empty string clears)
-    #[arg(long)]
-    pub body: Option<String>,
+    #[command(flatten)]
+    pub body_edit: BodyEditArgs,
     /// New priority: 0 (highest) to 3 (lowest)
     #[arg(long, value_parser = clap::value_parser!(i64).range(0..=3))]
     pub priority: Option<i64>,
@@ -68,16 +68,22 @@ pub fn cmd_get(conn: &Connection, g: &GetArgs) -> Result<(), Error> {
 /// 更新 issue 的 title/body/priority（COALESCE 保留未提供字段）。
 pub fn cmd_set(conn: &Connection, s: &SetArgs) -> Result<(), Error> {
     let title = s.title.as_deref().map(str::trim);
-    let body = s.body.as_deref();
     let priority = s.priority;
-    if title.is_none() && body.is_none() && priority.is_none() {
+    if title.is_none() && !s.body_edit.is_present() && priority.is_none() {
         return Err(Error::Other(
-            "set requires --title, --body, or --priority".to_string(),
+            "set requires --title, --body, --body-append, --body-file, or --priority".to_string(),
         ));
     }
     if title.is_some_and(|t| t.is_empty()) {
         return Err(Error::Other("title must not be empty".to_string()));
     }
+    // --body-append / --body-section 基于现有 body 计算。
+    let current = if s.body_edit.body_append.is_some() || s.body_edit.body_section.is_some() {
+        Some(fetch_body(conn, s.id)?)
+    } else {
+        None
+    };
+    let body = body_edit::resolve(&s.body_edit, current.as_deref())?;
     let affected = conn.execute(
         db::ISSUE_EDIT,
         rusqlite::params![s.id, title, body, priority],
@@ -105,6 +111,16 @@ pub fn cmd_set(conn: &Connection, s: &SetArgs) -> Result<(), Error> {
         println!("Updated issue #{}", s.id);
     }
     Ok(())
+}
+
+/// 读现有 body（`--body-append` / `--body-section` 的基值），顺带校验 issue 存在。
+fn fetch_body(conn: &Connection, id: i64) -> Result<String, Error> {
+    conn.query_row(db::ISSUE_SHOW, rusqlite::params![id], issue_from_row)
+        .map(|i| i.body.unwrap_or_default())
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => Error::Other(format!("issue #{id} not found")),
+            other => Error::from(other),
+        })
 }
 
 fn field_value(issue: &crate::models::Issue, field: &str) -> Result<String, Error> {

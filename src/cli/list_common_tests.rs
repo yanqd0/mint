@@ -114,7 +114,7 @@ fn issue_detail_columns_plan_links_and_body_escape() {
     );
     assert_eq!(rows[0][5], "#7"); // plan 只显 #N
     assert_eq!(rows[0][10], "1"); // links 数量
-    assert_eq!(rows[0][13], "line1 line2 tab"); // body 末列，换行/tab 转空格
+    assert_eq!(rows[0][13], "line1\\nline2\\ttab"); // body 末列：换行/tab 转可见转义（#478）
 }
 
 #[test]

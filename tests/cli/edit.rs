@@ -67,7 +67,7 @@ fn st_edit_requires_field() {
     let id = add_issue(&db, "t");
     let err = run_fail(&db, &["issue", "set", &id.to_string()]);
     assert!(
-        err.contains("set requires --title, --body, or --priority"),
+        err.contains("set requires --title, --body, --body-append, --body-file, or --priority"),
         "stderr: {err}"
     );
 }
@@ -146,4 +146,124 @@ fn st_issue_get_fields_and_unknown() {
     }
     let err = run_fail(&db, &["issue", "get", &id.to_string(), "bogus"]);
     assert!(err.contains("unknown field"), "{err}");
+}
+
+/// show 的 body 列把换行/tab 转成可见转义（#478），`get body` 仍是原文。
+#[test]
+fn st_show_body_escapes_and_get_keeps_raw() {
+    let (_dir, db) = empty_db();
+    let v = run_json(
+        &db,
+        &["issue", "add", "t", "--body", "## A\n- x\ttab", "--json"],
+    );
+    let id = v["id"].as_i64().unwrap();
+    let out = run_ok(&db, &["show", &id.to_string()]);
+    assert!(out.contains("## A\\n- x\\ttab"), "show body 应转义: {out}");
+    let raw = run_ok(&db, &["issue", "get", &id.to_string(), "body"]);
+    assert_eq!(raw.trim_end(), "## A\n- x\ttab");
+}
+
+/// set --body-append：追加为新段落，无需重发全文（#479）。
+#[test]
+fn st_edit_body_append() {
+    let (_dir, db) = empty_db();
+    let v = run_json(
+        &db,
+        &["issue", "add", "t", "--body", "## 目标\nx", "--json"],
+    );
+    let id = v["id"].as_i64().unwrap();
+    let v = run_json(
+        &db,
+        &[
+            "issue",
+            "set",
+            &id.to_string(),
+            "--body-append",
+            "## 要点\ny",
+            "--json",
+        ],
+    );
+    assert_eq!(v["body"], "## 目标\nx\n## 要点\ny");
+}
+
+/// set --body-section：只替换标题匹配的段落，其余原样保留（#479）。
+#[test]
+fn st_edit_body_section() {
+    let (_dir, db) = empty_db();
+    let body = "## 目标\nold\n## 要点\n- a\n";
+    let v = run_json(&db, &["issue", "add", "t", "--body", body, "--json"]);
+    let id = v["id"].as_i64().unwrap();
+    let v = run_json(
+        &db,
+        &[
+            "issue",
+            "set",
+            &id.to_string(),
+            "--body",
+            "new",
+            "--body-section",
+            "目标",
+            "--json",
+        ],
+    );
+    assert_eq!(v["body"], "## 目标\nnew\n## 要点\n- a\n");
+}
+
+/// set --body-file：从 UTF-8 文件整体替换（#479）。
+#[test]
+fn st_edit_body_file() {
+    let (dir, db) = empty_db();
+    let id = add_issue(&db, "t");
+    let path = dir.path().join("body.md");
+    std::fs::write(&path, "from file\nline2\n").unwrap();
+    let v = run_json(
+        &db,
+        &[
+            "issue",
+            "set",
+            &id.to_string(),
+            "--body-file",
+            path.to_str().unwrap(),
+            "--json",
+        ],
+    );
+    assert_eq!(v["body"], "from file\nline2\n");
+}
+
+/// set body 来源互斥 / --body-section 前置校验（#479）。
+#[test]
+fn st_edit_body_conflicts() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "t");
+    let err = run_fail(
+        &db,
+        &[
+            "issue",
+            "set",
+            &id.to_string(),
+            "--body",
+            "a",
+            "--body-append",
+            "b",
+        ],
+    );
+    assert!(err.contains("use only one of"), "{err}");
+    let err = run_fail(
+        &db,
+        &["issue", "set", &id.to_string(), "--body-section", "目标"],
+    );
+    assert!(err.contains("--body-section requires"), "{err}");
+    let err = run_fail(
+        &db,
+        &[
+            "issue",
+            "set",
+            &id.to_string(),
+            "--body",
+            "x",
+            "--body-section",
+            "缺",
+        ],
+    );
+    assert!(err.contains("section not found"), "{err}");
 }
