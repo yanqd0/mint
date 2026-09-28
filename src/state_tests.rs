@@ -129,12 +129,12 @@ fn wrong_target_rejected(#[case] current: Status, #[case] action: Action, #[case
     assert!(!can_transition(current, action, wrong, Kind::Problem));
 }
 
-/// close/retest 必须带 test_cmd；跳过测试填"没测"可通过；其它动作不强制。
+/// close/retest 必须带 test_cmd；跳过测试填 `not-tested` 可通过；其它动作不强制。
 #[rstest]
 #[case(Action::Close, None, false)]
 #[case(Action::Close, Some("  "), false)]
 #[case(Action::Close, Some("cargo test"), true)]
-#[case(Action::Close, Some("没测"), true)]
+#[case(Action::Close, Some("not-tested"), true)]
 #[case(Action::Retest, None, false)]
 #[case(Action::Retest, Some("  "), false)]
 #[case(Action::Retest, Some("cargo test xxx"), true)]

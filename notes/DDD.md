@@ -159,7 +159,7 @@ stateDiagram-v2
 
 **CLI 形态**：issue 状态动作全部在 `mint issue state` 命名空间下：`mint issue state plan <id>` / `start` / `commit <id> --sha <SHA>` / `retest <id> --test-cmd '...'` / `close <id> --test-cmd '...'` / `reset` / `drop <id> --reason '...'` / `reopen`。顶层命令为 `issue` / `list` / `show` / `search` / `label` / `project` / `milestone` / `plan` / `tui` / `export` / `import` / `sync` / `delete`（`list`/`show`/`search` 是 `issue` 同名子命令的快捷方式）。**无配置文件**：配置走 CLI 参数 + 环境变量（统一 `MINT_` 前缀，如 `MINT_DB_PATH`）。
 
-**无 dev→done 捷径**：跳过测试也要 `commit` 到 `test`，close 时 test_cmd 填 `not-tested`（用户侧英文值；中文语境下可写作"没测"）。此规则已写入 mint-dogfood skill 的 state-machine.md。
+**无 dev→done 捷径**：跳过测试也要 `commit` 到 `test`，close 时 test_cmd 统一填 `not-tested`（唯一约定，无中文别写）。此规则已写入 mint-dogfood skill 的 state-machine.md。
 
 ### capture（捕获）
 

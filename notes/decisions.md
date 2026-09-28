@@ -57,7 +57,7 @@
 
 **背景**：done 状态的"解决方案"如何承载。
 
-**决策**：不做 `resolution`/`resolved_at` 字段；`close` 必填 `test_cmd`（跳过测试填"没测"）；done 的解决方案看 commit message（0.2.0 git 关联后从 HEAD 读）。
+**决策**：不做 `resolution`/`resolved_at` 字段；`close` 必填 `test_cmd`（跳过测试填 `not-tested`——**约定更新**：该值统一为英文 `not-tested`，原文的中文别名已作废，见根 `AGENTS.md` 硬约束）；done 的解决方案看 commit message（0.2.0 git 关联后从 HEAD 读）。
 
 **理由**：commit message 是解决方案的权威来源，无需冗余字段；test_cmd 记录"如何复现/复测"，可执行性强于 resolution。无 dev→done 捷径（必须先 stage 到 test）保证流程完整。
 

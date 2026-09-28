@@ -93,7 +93,7 @@ use crate::label;
   - 状态机合法性（非法转换拒绝，如 `open→done` 直接 close）。
   - project 检测（`--project` → git 库名 → dirname → default；mock git 场景）。
   - label 注册去重（新 label 自动注册、重复不重复插、issue 关联）。
-  - close 的 test_cmd 必填约束（跳过测试填"没测"可通过）。
+  - close 的 test_cmd 必填约束（跳过测试填 `not-tested` 可通过）。
 - 每个模块的测试随实现同 commit 提交（TDD 或实现后补均可，测试必须通过）。
 
 ## 数据模型约束

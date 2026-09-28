@@ -131,7 +131,7 @@ fn label_attach_and_query() {
     assert!(labels.iter().all(|(_, c)| *c == 1));
 }
 
-/// test_cmd 必填：close 无 test_cmd 校验失败；'没测' 通过。
+/// test_cmd 必填：close 无 test_cmd 校验失败；'not-tested' 通过。
 #[test]
 fn requires_test_cmd() {
     assert!(!state::test_cmd_requirement_met(Action::Close, None));
@@ -139,7 +139,10 @@ fn requires_test_cmd() {
         Action::Close,
         Some("cargo test")
     ));
-    assert!(state::test_cmd_requirement_met(Action::Close, Some("没测")));
+    assert!(state::test_cmd_requirement_met(
+        Action::Close,
+        Some("not-tested")
+    ));
     // 非 close 不强制
     assert!(state::test_cmd_requirement_met(Action::Commit, None));
 }
