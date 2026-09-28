@@ -53,6 +53,20 @@ cargo test               # unit + integration tests
 
 Tests use in-memory or temporary SQLite databases — no absolute paths, no environment dependency.
 
+### Sandboxed hosts (restricted `/tmp`)
+
+Some agent sandboxes (e.g. DSH `workspace-write`) deny writes outside the workspace. SQLite then
+cannot create its temp/WAL files and ~13 tests fail with `CannotOpen` (`unable to open database file`).
+Point `TMPDIR` inside the workspace instead:
+
+```bash
+TMPDIR=$PWD/.tmp-test cargo test    # .tmp-test/ is git-ignored
+```
+
+The suite is otherwise environment-independent: the tests that probe "not a git repository" build a
+non-repo explicitly (a `.git` file whose `gitdir:` contains `..` is rejected by the #345 hardening)
+instead of assuming the temp dir sits outside a git worktree.
+
 ## Lint
 
 ```bash
