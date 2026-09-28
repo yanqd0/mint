@@ -197,6 +197,69 @@ fn st_add_fuzzy_duplicate() {
     assert_eq!(v["id"], id);
 }
 
+/// 去重：带序号标题不误合并，--force-new 可强制新建（#472）。
+#[test]
+fn st_add_ordinal_titles_not_merged() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "登录按钮点击无响应");
+    let v = run_json(&db, &["issue", "add", "登录按钮点击无响应2", "--json"]);
+    assert_eq!(
+        v["merged"],
+        serde_json::Value::Null,
+        "序号变体不应合并: {v}"
+    );
+    assert_ne!(v["id"].as_i64().unwrap(), id);
+    // --force-new：完全同名也新建。
+    let v = run_json(
+        &db,
+        &[
+            "issue",
+            "add",
+            "登录按钮点击无响应",
+            "--force-new",
+            "--json",
+        ],
+    );
+    assert_eq!(
+        v["merged"],
+        serde_json::Value::Null,
+        "force-new 应新建: {v}"
+    );
+    let list = run_json(&db, &["list", "--json"]);
+    assert_eq!(list["items"].as_array().unwrap().len(), 3);
+}
+
+/// 去重：短标题不做模糊匹配，仅精确命中（#472）。
+#[test]
+fn st_add_short_title_not_fuzzy_merged() {
+    let (_dir, db) = empty_db();
+    let id = add_issue(&db, "探针标题 1");
+    let v = run_json(&db, &["issue", "add", "探针标题 2", "--json"]);
+    assert_eq!(v["merged"], serde_json::Value::Null, "短标题不应合并: {v}");
+    assert_ne!(v["id"].as_i64().unwrap(), id);
+    // 精确同名仍合并。
+    let v = run_json(&db, &["issue", "add", "探针标题 1", "--json"]);
+    assert_eq!(v["merged"], true, "精确同名应合并: {v}");
+    assert_eq!(v["id"], id);
+}
+
+/// 去重：人类输出的合并结果带 --force-new 逃生提示（stderr，#472）。
+#[test]
+fn st_add_merge_prints_force_new_hint() {
+    let (_dir, db) = empty_db();
+    add_issue(&db, "fix login bug");
+    let out = mint(&db)
+        .args(["issue", "add", "fix login bug"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stdout.contains("Merged into issue"), "stdout: {stdout}");
+    assert!(stderr.contains("--force-new"), "stderr: {stderr}");
+}
+
 /// 去重：不同 project 同名不合并（多 db 下每项目独立库，天然隔离）。
 #[test]
 fn st_add_different_project_no_merge() {

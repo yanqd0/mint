@@ -10,6 +10,10 @@ use crate::models::{Kind, Status};
 /// 模糊匹配相似度阈值（Levenshtein 归一化）[0,1]：低于则不视为重复。
 pub const DEDUP_THRESHOLD: f64 = 0.8;
 
+/// 模糊匹配的最短标题长度（归一化后字符数）：短标题差 1 字符即高相似度，
+/// 只允许精确（归一化相等）合并，避免「探针标题」类短标题被误并（#472）。
+pub const DEDUP_MIN_LEN: usize = 8;
+
 /// 查重候选：同项目活跃 issue 的标识与标题（find_duplicate 的输入项）。
 /// `plan_id` 用于跨 plan 保护：已挂 plan 的候选不参与合并（不同 plan 允许同名）。
 #[derive(Debug, Clone)]
@@ -67,6 +71,10 @@ fn levenshtein(a: &str, b: &str) -> usize {
 
 /// 在候选中找重复标题：归一化精确匹配优先，否则相似度 ≥ 阈值取最高。
 ///
+/// 精确匹配无条件命中；模糊匹配另有两道闸（#472）：
+/// - 两侧标题长度均须 ≥ [`DEDUP_MIN_LEN`]（短标题差 1 字符不足以判定同一问题）；
+/// - 不可是「序号变体」（见 [`is_ordinal_variant`]）——带尾随序号的标题视为有意拆分。
+///
 /// 返回命中的候选引用；None 表示未命中（调用方应新建）。候选集须由调用方
 /// 限定为同项目活跃（非终态）issue——本函数不做状态/项目过滤。
 pub fn find_duplicate<'a>(title: &str, cands: &'a [Candidate]) -> Option<&'a Candidate> {
@@ -75,15 +83,76 @@ pub fn find_duplicate<'a>(title: &str, cands: &'a [Candidate]) -> Option<&'a Can
     if let Some(c) = cands.iter().find(|c| normalize(&c.title) == n) {
         return Some(c);
     }
+    // 短标题不参与模糊匹配：长度差 1 字符在短串上相似度过高，误判代价大于漏判。
+    if n.chars().count() < DEDUP_MIN_LEN {
+        return None;
+    }
     // 模糊匹配：相似度 ≥ 阈值，取最高者。
     cands
         .iter()
         .filter_map(|c| {
-            let sim = similarity(&n, &normalize(&c.title));
+            let m = normalize(&c.title);
+            if m.chars().count() < DEDUP_MIN_LEN || is_ordinal_variant(&n, &m) {
+                return None;
+            }
+            let sim = similarity(&n, &m);
             (sim >= DEDUP_THRESHOLD).then_some((sim, c))
         })
         .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal))
         .map(|(_, c)| c)
+}
+
+/// 剥离标题的尾随序号标记，返回基名。
+///
+/// 识别形态：`foo 2` / `foo#2` / `foo v2` / `foo (2)` / `foo（2）` / `foo 第2`；
+/// 剥空（标题本身就是序号，如 `2`）或本无标记时返回 None。
+fn strip_ordinal(s: &str) -> Option<&str> {
+    let trimmed = s.trim_end();
+    let start = trailing_ordinal_start(trimmed)?;
+    let head = trimmed[..start].trim_end();
+    (!head.is_empty()).then_some(head)
+}
+
+/// 尾随序号标记的起始字节位置；未识别返回 None。
+fn trailing_ordinal_start(s: &str) -> Option<usize> {
+    // 括号形态：`(2)` / `（2）`。
+    for (open, close) in [('(', ')'), ('（', '）')] {
+        if s.ends_with(close)
+            && let Some(i) = s.rfind(open)
+        {
+            let inner = &s[i + open.len_utf8()..s.len() - close.len_utf8()];
+            if !inner.is_empty() && inner.chars().all(|c| c.is_ascii_digit()) {
+                return Some(i);
+            }
+        }
+    }
+    // 纯数字尾随：定位最后一段连续数字。
+    let digits_start = s.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+    if digits_start == s.len() {
+        return None;
+    }
+    // 数字前的可选标记前缀（`#` / `v` / `第`）一并算入序号（含其前的空白）。
+    let prefix = s[..digits_start]
+        .char_indices()
+        .next_back()
+        .filter(|(_, c)| matches!(c, '#' | 'v' | 'V' | '第'))
+        .map(|(i, _)| i);
+    Some(prefix.unwrap_or(digits_start))
+}
+
+/// 两条（已归一化）标题是否为「同一基名 + 序号」的变体。
+///
+/// 例如 `登录无响应` vs `登录无响应2`、`探针标题 1` vs `探针标题 2`：
+/// 序号是有意的区分标记，不应被相似度判为重复。
+fn is_ordinal_variant(a: &str, b: &str) -> bool {
+    if a == b {
+        return false;
+    }
+    let (sa, sb) = (strip_ordinal(a), strip_ordinal(b));
+    if sa.is_none() && sb.is_none() {
+        return false;
+    }
+    sa.unwrap_or(a) == sb.unwrap_or(b)
 }
 
 #[cfg(test)]
@@ -170,5 +239,51 @@ mod tests {
     fn find_empty_inputs() {
         assert!(find_duplicate("anything", &[]).is_none());
         assert!(find_duplicate("", &[cand(1, "x")]).is_none());
+    }
+
+    /// strip_ordinal：识别各类尾随序号形态，无标记/纯序号返回 None（#472）。
+    #[rstest]
+    #[case("foo 2", Some("foo"))]
+    #[case("foo#2", Some("foo"))]
+    #[case("foo v2", Some("foo"))]
+    #[case("foo (2)", Some("foo"))]
+    #[case("foo（2）", Some("foo"))]
+    #[case("foo 第2", Some("foo"))]
+    #[case("登录按钮点击无响应2", Some("登录按钮点击无响应"))]
+    #[case("foo", None)]
+    #[case("2", None)]
+    #[case("", None)]
+    #[case("foo bar", None)]
+    fn strip_ordinal_basic(#[case] input: &str, #[case] expected: Option<&str>) {
+        assert_eq!(strip_ordinal(input), expected, "strip_ordinal({input})");
+    }
+
+    /// is_ordinal_variant：同基名+序号为变体；相同/无关标题不是。
+    #[rstest]
+    #[case("登录按钮点击无响应", "登录按钮点击无响应2", true)]
+    #[case("探针标题 1", "探针标题 6", true)]
+    #[case("fix login button 1", "fix login button 2", true)]
+    #[case("foo", "foo", false)]
+    #[case("foo", "bar", false)]
+    #[case("foo 1", "bar 2", false)]
+    fn ordinal_variant_cases(#[case] a: &str, #[case] b: &str, #[case] expected: bool) {
+        assert_eq!(is_ordinal_variant(a, b), expected, "({a}, {b})");
+    }
+
+    /// find_duplicate：带序号的长标题不合并（相似度本可命中，序号闸拦截，#472）。
+    #[test]
+    fn find_no_merge_ordinal_variant() {
+        let cands = vec![cand(1, "登录按钮点击无响应")];
+        assert!(find_duplicate("登录按钮点击无响应2", &cands).is_none());
+    }
+
+    /// find_duplicate：短标题（< DEDUP_MIN_LEN）不做模糊匹配，仅精确命中。
+    #[test]
+    fn find_short_title_requires_exact() {
+        let cands = vec![cand(1, "探针标题 1")];
+        assert!(find_duplicate("探针标题 2", &cands).is_none());
+        assert!(find_duplicate("探针标题 1", &cands).is_some());
+        let short = vec![cand(1, "abcdefg")];
+        assert!(find_duplicate("abcdefh", &short).is_none());
     }
 }

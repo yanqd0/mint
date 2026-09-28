@@ -26,6 +26,9 @@ pub struct AddArgs {
     /// Labels: 'name' or 'name:desc', comma-separated
     #[arg(long)]
     pub label: Vec<String>,
+    /// Create a new issue even if a similar title already exists (skip dedup)
+    #[arg(long)]
+    pub force_new: bool,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -49,17 +52,20 @@ pub fn cmd_add(
     // 每库单项目：确保当前项目行存在（多 db 下 issue 不写 project_id）。
     project::ensure(&tx, project_name, cwd)?;
 
-    let cands = load_dup_candidates(&tx)?;
-    if let Some(hit) = dedup::find_duplicate(&a.title, &cands).filter(|h| h.plan_id.is_none()) {
-        // 仅未挂 plan 的候选合并；已挂 plan（不同 plan 同名）跳过，防规划阶段跨 plan 误合并。
-        tx.execute(db::ISSUE_BUMP_HIT_COUNT, rusqlite::params![hit.id])?;
-        let specs = label::parse_specs(&a.label);
-        if !specs.is_empty() {
-            label::attach(&tx, hit.id, &specs)?;
+    // --force-new 跳过查重：语义上是「确认是不同 issue」，直接新建（#472）。
+    if !a.force_new {
+        let cands = load_dup_candidates(&tx)?;
+        if let Some(hit) = dedup::find_duplicate(&a.title, &cands).filter(|h| h.plan_id.is_none()) {
+            // 仅未挂 plan 的候选合并；已挂 plan（不同 plan 同名）跳过，防规划阶段跨 plan 误合并。
+            tx.execute(db::ISSUE_BUMP_HIT_COUNT, rusqlite::params![hit.id])?;
+            let specs = label::parse_specs(&a.label);
+            if !specs.is_empty() {
+                label::attach(&tx, hit.id, &specs)?;
+            }
+            tx.commit()?;
+            print_merge(a, project_name, hit)?;
+            return Ok(());
         }
-        tx.commit()?;
-        print_merge(a, project_name, hit)?;
-        return Ok(());
     }
 
     tx.execute(
@@ -136,6 +142,10 @@ fn print_merge(a: &AddArgs, pname: &str, hit: &dedup::Candidate) -> Result<(), E
             "Merged into issue #{} ({})",
             hit.id,
             crate::output::sanitize_terminal(&hit.title)
+        );
+        // 合并不可撤销：给人类输出一条逃生门提示（JSON/stdout 契约不变）。
+        eprintln!(
+            "mint: hint: merged by title similarity; use --force-new to create a separate issue"
         );
     }
     Ok(())
