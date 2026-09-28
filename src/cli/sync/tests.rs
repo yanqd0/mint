@@ -1,6 +1,6 @@
 //! sync 单测：配置缓存、分支命名、快照压缩与合并路径。
 
-use super::all::remote_only_projects;
+use super::all::{parse_lsd_projects, remote_only_projects};
 use super::git::{current_branch, git_branch_for};
 use super::rclone::{is_missing_source, is_rate_limited};
 use super::rsync::run_gzip;
@@ -126,6 +126,46 @@ pub(super) fn remote_only_projects_all_local_or_empty() {
     let local = vec!["mint".to_string()];
     assert!(remote_only_projects(&local, &[]).is_empty());
     assert!(remote_only_projects(&local, &["mint".to_string()]).is_empty());
+}
+
+/// rclone lsd 解析（#495）：目录名可含空格，按前 4 个元数据字段定位而非取末 token。
+#[test]
+pub(super) fn parse_lsd_projects_keeps_spaces_in_name() {
+    let stdout = "\
+          -1 2024-01-01 12:00:00        -1 mint
+          -1 2024-01-01 12:00:00        -1 my project
+          -1 2024-01-01 12:00:00        -1 two  spaces
+";
+    assert_eq!(
+        parse_lsd_projects(stdout).unwrap(),
+        vec![
+            "mint".to_string(),
+            "my project".to_string(),
+            "two  spaces".to_string()
+        ]
+    );
+}
+
+/// rclone lsd 解析：制表符分隔同样接受；空行跳过；空输出为空。
+#[test]
+pub(super) fn parse_lsd_projects_handles_tabs_and_blank_lines() {
+    let stdout = "-1\t2024-01-01\t12:00:00\t-1\tmy project\n\n";
+    assert_eq!(
+        parse_lsd_projects(stdout).unwrap(),
+        vec!["my project".to_string()]
+    );
+    assert!(parse_lsd_projects("").unwrap().is_empty());
+    assert!(parse_lsd_projects("\n  \n").unwrap().is_empty());
+}
+
+/// rclone lsd 解析：字段不足 4 的异常行报错（显式失败，不静默截断）。
+#[test]
+pub(super) fn parse_lsd_projects_rejects_short_line() {
+    let err = parse_lsd_projects("garbage line\n").unwrap_err();
+    assert!(
+        err.to_string().contains("unexpected rclone lsd line"),
+        "{err}"
+    );
 }
 
 /// load_sync_config：损坏 JSON / 非法 backend → None（回退默认）；合法 → 读取（#409 补测）。

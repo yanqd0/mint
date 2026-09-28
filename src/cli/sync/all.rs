@@ -100,13 +100,41 @@ pub(super) fn rclone_remote_projects(remote: &str) -> Result<Vec<String>, Error>
             stderr.trim()
         )));
     }
-    let text = String::from_utf8_lossy(&out.stdout);
-    Ok(text
-        .lines()
-        .filter_map(|l| l.split_whitespace().next_back()) // lsd 行末列 = 目录名
-        .filter(|n| !n.is_empty())
-        .map(str::to_string)
-        .collect())
+    parse_lsd_projects(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// 解析 `rclone lsd` 输出为项目目录名（#495）。
+/// lsd 默认每行 = 4 个元数据字段（size/date/time/count）+ 目录名；目录名**可含空格**，
+/// 故按「吃掉前 4 个空白分隔字段，其余即名字」解析，而非取末 token（旧实现截断含空格名）。
+/// 字段不足 4（非预期输出）→ 报错：显式失败，不静默产出被截断的垃圾项目名。
+pub(super) fn parse_lsd_projects(stdout: &str) -> Result<Vec<String>, Error> {
+    let mut out = Vec::new();
+    for line in stdout.lines() {
+        let rest = line.trim_start();
+        if rest.is_empty() {
+            continue;
+        }
+        let Some(name) = lsd_name(rest) else {
+            return Err(Error::Other(format!(
+                "unexpected rclone lsd line: {}",
+                line.trim()
+            )));
+        };
+        out.push(name.to_string());
+    }
+    Ok(out)
+}
+
+/// 吃掉 4 个空白分隔字段后的剩余部分（保留名字内部空格，去首尾空白）。
+/// 字段不足 4 或剩余为空 → None。
+fn lsd_name(line: &str) -> Option<&str> {
+    let mut rest = line;
+    for _ in 0..4 {
+        let idx = rest.find(char::is_whitespace)?;
+        rest = rest[idx..].trim_start();
+    }
+    let name = rest.trim_end();
+    (!name.is_empty()).then_some(name)
 }
 
 /// 遍历 projects/ 目录，打开每项目的本机 db（machine_id.db）。
