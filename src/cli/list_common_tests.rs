@@ -115,7 +115,13 @@ fn issue_detail_columns_plan_links_and_body_escape() {
     assert_eq!(rows[0][5], "#7"); // plan 只显 #N
     assert_eq!(rows[0][6], "#9"); // milestone（#489）
     assert_eq!(rows[0][11], "1"); // links 数量
-    assert_eq!(rows[0][14], "line1\\nline2\\ttab"); // body 末列：换行/tab 转可见转义（#478）
+    // body 末列返回原文；转义统一由 format_tsv 负责（#499），不在 detail 层做（防双重转义）。
+    assert_eq!(rows[0][14], "line1\nline2\ttab");
+    let tsv = crate::output::format_tsv(&headers, &rows);
+    assert!(
+        tsv.contains("line1\\nline2\\ttab"),
+        "format_tsv 应转义 tab/换行（#478/#499）: {tsv}"
+    );
 }
 
 #[test]

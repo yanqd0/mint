@@ -12,17 +12,25 @@ pub fn sanitize_terminal(s: &str) -> String {
         .collect()
 }
 
+/// TSV 单元格转义（#478/#499）：净化控制字符后把 `\` `\t` `\n` `\r` 转成可见单行字面量——
+/// 旧实现静默转空格，读回（如 `show` 正文回写）会无声丢结构；取原文用 `get <ID> body`。
+/// list/search/label list/export --format tsv 与 show 共用同一保真规则（#499）。
+pub fn tsv_cell(s: &str) -> String {
+    sanitize_terminal(s)
+        .replace('\\', "\\\\")
+        .replace('\t', "\\t")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+}
+
 /// 渲染 TSV 表格（表头首行 + tab 分隔数据行，list 与 show 默认输出）。
-/// 每 cell 净化终端控制字符 + 把 `\t\n\r` → 空格（保持单行，防 tab/换行拆列拆行）。
+/// 每 cell 经 [`tsv_cell`] 净化 + 转义（防 tab/换行拆列拆行，且可读回保真）；表头为固定英文，不加转义。
 pub fn format_tsv(headers: &[String], rows: &[Vec<String>]) -> String {
     let mut out = String::new();
     out.push_str(&headers.join("\t"));
     out.push('\n');
     for r in rows {
-        let cells: Vec<String> = r
-            .iter()
-            .map(|s| sanitize_terminal(s).replace(['\t', '\n', '\r'], " "))
-            .collect();
+        let cells: Vec<String> = r.iter().map(|s| tsv_cell(s)).collect();
         out.push_str(&cells.join("\t"));
         out.push('\n');
     }
@@ -68,5 +76,16 @@ mod tests {
         let headers = vec!["ID".to_string()];
         let rows = vec![vec!["1\u{1b}[31mred".to_string()]];
         assert_eq!(format_tsv(&headers, &rows), "ID\n1[31mred\n");
+    }
+
+    /// tsv_cell（#499）：`\` `\t` `\n` `\r` 转为可见字面量（可原样读回），其它字符（含中文）原样。
+    #[test]
+    fn tsv_cell_escapes_structural_chars() {
+        assert_eq!(tsv_cell("a\\b"), "a\\\\b");
+        assert_eq!(tsv_cell("a\tb\nc\rd"), "a\\tb\\nc\\rd");
+        assert_eq!(tsv_cell("中文 ok"), "中文 ok");
+        // format_tsv 走同一规则：list/export 与 show 保真一致。
+        let rows = vec![vec!["a\tb".to_string()]];
+        assert_eq!(format_tsv(&["H".to_string()], &rows), "H\na\\tb\n");
     }
 }

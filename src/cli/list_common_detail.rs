@@ -1,21 +1,11 @@
 //! show 详情列矩阵（默认 TSV 输出，单行）：issue / plan / milestone。
 //!
 //! 从 `list_common.rs` 拆出（>300 行规范）；公开路径由父模块 `pub(crate) use` 再导出。
+//! 单元格原文交给 `output::format_tsv` 统一转义（#499），此处不再自行转义（否则双重转义）。
 
 use crate::models::{Container, Issue, IssueSummary};
-use crate::output;
 
-/// TSV 单元格转义：净化控制字符后把 `\` `\t` `\n` `\r` 转成可见单行字面量（#478）——
-/// 旧实现静默转空格，`show` 正文回写会无声丢结构；取原文仍用 `get <ID> body`。
-fn tsv_cell(s: &str) -> String {
-    output::sanitize_terminal(s)
-        .replace('\\', "\\\\")
-        .replace('\t', "\\t")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-}
-
-/// Issue 详情（show）→ (表头, 单行矩阵)。body 末列（含 tab/换行转义）。
+/// Issue 详情（show）→ (表头, 单行矩阵)。body 末列（转义由 format_tsv 负责）。
 /// `milestone` 是有效 milestone（直属优先，否则所属 plan 的，#489）。
 pub(crate) fn issue_detail(i: &Issue, milestone: Option<i64>) -> (Vec<String>, Vec<Vec<String>>) {
     let headers: Vec<String> = [
@@ -55,20 +45,17 @@ pub(crate) fn issue_detail(i: &Issue, milestone: Option<i64>) -> (Vec<String>, V
         i.status.as_str().to_string(),
         i.kind.as_str().to_string(),
         i.priority.to_string(),
-        tsv_cell(&i.title),
+        i.title.clone(),
         plan,
         milestone,
-        tsv_cell(&labels),
-        i.test_cmd.as_deref().map(tsv_cell).unwrap_or_default(),
-        i.dropped_reason
-            .as_deref()
-            .map(tsv_cell)
-            .unwrap_or_default(),
+        labels,
+        i.test_cmd.clone().unwrap_or_default(),
+        i.dropped_reason.clone().unwrap_or_default(),
         i.last_commit_id.clone().unwrap_or_default(),
         links,
         i.created_at.clone(),
         i.updated_at.clone(),
-        i.body.as_deref().map(tsv_cell).unwrap_or_default(),
+        i.body.clone().unwrap_or_default(),
     ];
     (headers, vec![row])
 }
@@ -95,12 +82,12 @@ pub(crate) fn plan_detail(
     let row = vec![
         c.id.to_string(),
         c.status.as_str().to_string(),
-        tsv_cell(&c.title),
+        c.title.clone(),
         milestone,
         issues.len().to_string(),
         c.created_at.clone(),
         c.updated_at.clone(),
-        c.body.as_deref().map(tsv_cell).unwrap_or_default(),
+        c.body.clone().unwrap_or_default(),
     ];
     (headers, vec![row])
 }
@@ -121,12 +108,12 @@ pub(crate) fn milestone_detail(
         c.id.to_string(),
         c.status.as_str().to_string(),
         c.version.clone().unwrap_or_default(),
-        tsv_cell(&c.title),
+        c.title.clone(),
         plan_count.to_string(),
         issue_count.to_string(),
         c.created_at.clone(),
         c.updated_at.clone(),
-        c.body.as_deref().map(tsv_cell).unwrap_or_default(),
+        c.body.clone().unwrap_or_default(),
     ];
     (headers, vec![row])
 }

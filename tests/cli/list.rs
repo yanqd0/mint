@@ -263,6 +263,16 @@ fn st_default_output_tsv() {
     );
 }
 
+/// #499：list TSV 同样转义结构字符（此前仅 show 转义，list 把 tab/换行抹成空格）。
+#[test]
+fn st_list_tsv_escapes_structural_chars() {
+    let (_dir, db) = empty_db();
+    add_issue(&db, "tab\there");
+    let text = run_ok(&db, &["list"]);
+    assert!(text.contains("tab\\there"), "标题应转义 tab: {text}");
+    assert!(!text.contains("tab here"), "不应抹成空格: {text}");
+}
+
 /// search 默认输出 TSV（表头 + 数据）。
 #[test]
 fn st_search_default_tsv() {
