@@ -86,7 +86,7 @@ fn reassign_container(
     }
 }
 
-/// milestone 直接挂 issue（仅接受无 plan 的 issue）。幂等。
+/// milestone 直接挂 issue（仅接受无 plan 的 issue，且至多一个直挂 milestone）。幂等。
 pub fn link_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Result<(), Error> {
     if get(conn, ContainerKind::Milestone, milestone_id)?.is_none() {
         return Err(Error::Other(format!("milestone #{milestone_id} not found")));
@@ -105,6 +105,13 @@ pub fn link_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Resul
         Some(None) => {}
     }
     let (old_plans, old_milestones) = current_affiliations(conn, issue_id)?;
+    // 直挂至多一个 milestone（#496）：多条直挂让「有效 milestone」标量子查询取值不定，
+    // 使 `milestone show`/TUI 与 `issue get milestone`/`list --milestone` 结果矛盾。
+    if let Some(other) = old_milestones.iter().find(|m| **m != milestone_id) {
+        return Err(Error::Other(format!(
+            "issue #{issue_id} already belongs to milestone #{other}; detach it first"
+        )));
+    }
     reassign_container(conn, issue_id, &old_plans, &old_milestones, |conn| {
         conn.execute(db::MILESTONE_ATTACH, params![milestone_id, issue_id])?;
         Ok(())

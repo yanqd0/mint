@@ -86,7 +86,7 @@ issue/plan 之上的**聚合容器**。概念层级：`roadmap`（上位抽象�
 
 ### Milestone（里程碑）
 
-数据库化的**版本节点**：对应项目进展、软件版本、git tag。关键字段 `version`（如 `0.1.0`，支持任意用户版本形式，UNIQUE）。milestone 除自身的复杂描述（body）外，主要**关联 plan**（版本方向的拆解）；也可直接挂不属于任何 plan 的 issue。CLI：`mint milestone`。
+数据库化的**版本节点**：对应项目进展、软件版本、git tag。关键字段 `version`（如 `0.1.0`，支持任意用户版本形式，UNIQUE）。milestone 除自身的复杂描述（body）外，主要**关联 plan**（版本方向的拆解）；也可直接挂不属于任何 plan 的 issue（`milestone_direct_issues`，**至多一条直挂**——写侧 `milestone attach` 拒绝第二条（#496），读侧有效 milestone 子查询对历史重复取 `MIN(milestone_id)` 保证确定）。CLI：`mint milestone`。
 
 ### Plan（计划）
 
