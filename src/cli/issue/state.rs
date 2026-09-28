@@ -107,15 +107,30 @@ fn cmd_trans(conn: &Connection, t: &TransArgs, action: Action) -> Result<(), Err
 
 /// commit：dev→test，必填 --sha（写 last_commit_id）；task 不可达（CLI 层先解析 sha，
 /// 非 git 目录无 --sha 时 task 会先报 git 错误，再被 apply_transition 拦下）。
+/// 显式 `--sha` 在 git 仓库内做存在性校验（不存在 → 报错；非 HEAD 祖先 → 警告，#477）。
 fn cmd_commit(conn: &Connection, cwd: &Path, c: &CommitArgs) -> Result<(), Error> {
-    let sha: String = match &c.sha {
-        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
-        _ => git::head_sha(cwd).ok_or_else(|| {
+    let explicit = c.sha.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let sha: String = match explicit {
+        Some(s) => s.to_string(),
+        None => git::head_sha(cwd).ok_or_else(|| {
             Error::Other(
                 "not a git repository (use --sha to record a commit explicitly)".to_string(),
             )
         })?,
     };
+    if let Some(s) = explicit {
+        match git::verify_commit(cwd, s) {
+            git::CommitCheck::Unknown => {
+                return Err(Error::Other(format!(
+                    "commit {s} not found in this repository"
+                )));
+            }
+            git::CommitCheck::NotAncestor => {
+                eprintln!("mint: warning: {s} is not an ancestor of HEAD");
+            }
+            git::CommitCheck::Ancestor | git::CommitCheck::Skipped => {}
+        }
+    }
     let test_cmd = c.test_cmd.as_deref().filter(|s| !s.trim().is_empty());
     transition(
         conn,

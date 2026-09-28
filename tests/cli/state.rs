@@ -5,6 +5,7 @@ use super::*;
 fn st_state_retest_keeps_sha_and_sets_test_cmd() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "retest me");
+    let sha = head_sha7();
     // 推进到 test
     run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
     run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
@@ -16,7 +17,7 @@ fn st_state_retest_keeps_sha_and_sets_test_cmd() {
             "commit",
             &id.to_string(),
             "--sha",
-            "abc123",
+            sha.as_str(),
             "--test-cmd",
             "cargo test",
             "--json",
@@ -37,7 +38,7 @@ fn st_state_retest_keeps_sha_and_sets_test_cmd() {
     );
     let v = run_json(&db, &["show", &id.to_string(), "--json"]);
     assert_eq!(v["status"], "dev");
-    assert_eq!(v["last_commit_id"], "abc123");
+    assert_eq!(v["last_commit_id"], sha.as_str());
     assert_eq!(v["test_cmd"], "cargo test tui::");
 }
 
@@ -65,6 +66,7 @@ fn st_state_retest_illegal_from_open() {
 fn st_state_retest_requires_test_cmd() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "no test cmd");
+    let sha = head_sha7();
     run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
     run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
     run_json(
@@ -75,7 +77,7 @@ fn st_state_retest_requires_test_cmd() {
             "commit",
             &id.to_string(),
             "--sha",
-            "abc",
+            sha.as_str(),
             "--test-cmd",
             "cargo test",
             "--json",
@@ -144,6 +146,7 @@ fn st_state_batch_commit_mixed_task_skips() {
     run_json(&db, &["issue", "state", "start", &ip.to_string(), "--json"]);
     // task：planned→start→test（跳过 dev，commit 不可达）
     let it = add_task(&db, "t");
+    let sha = head_sha7();
     run_json(&db, &["issue", "state", "plan", &it.to_string(), "--json"]);
     run_json(&db, &["issue", "state", "start", &it.to_string(), "--json"]);
     // 批量 commit：task 应跳过（错误含 invalid transition 前缀，命中批量跳过谓词），problem 正常 → 不中止
@@ -155,7 +158,7 @@ fn st_state_batch_commit_mixed_task_skips() {
             &ip.to_string(),
             &it.to_string(),
             "--sha",
-            "abc123",
+            sha.as_str(),
         ])
         .assert()
         .success()
@@ -210,6 +213,7 @@ fn st_illegal_close_without_test_cmd_reports_invalid_transition() {
 fn st_close_requires_test_cmd() {
     let (_dir, db) = empty_db();
     let id = add_issue(&db, "notest");
+    let sha = head_sha7();
     run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
     run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
     run_json(
@@ -220,7 +224,7 @@ fn st_close_requires_test_cmd() {
             "commit",
             &id.to_string(),
             "--sha",
-            "abc",
+            sha.as_str(),
             "--test-cmd",
             "t",
             "--json",

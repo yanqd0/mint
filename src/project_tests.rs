@@ -13,6 +13,11 @@ use tempfile::TempDir;
 #[case::dirname_fallback(None)]
 fn detect_name_chain(#[case] explicit: Option<&str>) {
     let dir = TempDir::new().unwrap();
+    // dirname 兜底用例要求目录不在 git 仓库内：写 #345 加固的 `.git`（gitdir 含 `..`）
+    // 显式构造非仓库，避免 temp 落在工作区仓库时被向上探测（#461）。
+    if explicit.is_none() {
+        std::fs::write(dir.path().join(".git"), "gitdir: ../../nope\n").unwrap();
+    }
     let name = detect_name(dir.path(), explicit);
     match explicit {
         Some(e) => assert_eq!(name, e),

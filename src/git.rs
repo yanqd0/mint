@@ -1,7 +1,9 @@
 //! git 元数据只读解析（纯文件读，非关键路径可失败）。
 //!
-//! 不再调用 git 子进程：读 `.git/` 目录内的 HEAD / refs / packed-refs / config
+//! 常规路径**不调 git 子进程**：读 `.git/` 目录内的 HEAD / refs / packed-refs / config
 //! 文件，满足 `state commit` 取 SHA 与 project 名检测两处需求。
+//! 唯一例外是 [`verify_commit`]（#477）——`state commit --sha` 的写路径需要判定对象
+//! 可达性，靠读文件不可靠，故调用 git 子进程；非热路径，且 git 缺失时降级跳过校验。
 
 use std::path::{Path, PathBuf};
 
@@ -65,6 +67,61 @@ fn is_sha(s: &str) -> bool {
     s.len() == 40 && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
+/// `state commit --sha` 的仓库校验结论（#477）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommitCheck {
+    /// 该 commit 存在，且是 HEAD 的祖先。
+    Ancestor,
+    /// 该 commit 存在，但不是 HEAD 的祖先（别的分支/未合并）。
+    NotAncestor,
+    /// 该 commit 在当前仓库不存在（拼错或伪造）。
+    Unknown,
+    /// 无法校验：非 git 仓库，或 git 不可用。
+    Skipped,
+}
+
+/// 校验 commit SHA 在当前仓库的存在性与与 HEAD 的关系（#477）。
+///
+/// 这是对 git.rs「只读文件解析、不调 git 子进程」的**显式例外**：仅 `state commit`
+/// 写路径调用（非热路径），且对象可达性（packed objects、分支拓扑）无法靠读 `.git/`
+/// 文件可靠判定。`find_git_dir` 判定非仓库、或 git 子进程无法执行时返回
+/// [`CommitCheck::Skipped`]（不阻断记录）。
+pub fn verify_commit(cwd: &Path, sha: &str) -> CommitCheck {
+    if find_git_dir(cwd).is_none() {
+        return CommitCheck::Skipped;
+    }
+    match run_git(
+        cwd,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{sha}^{{commit}}"),
+        ],
+    ) {
+        None => CommitCheck::Skipped,
+        Some(false) => CommitCheck::Unknown,
+        Some(true) => match run_git(cwd, &["merge-base", "--is-ancestor", sha, "HEAD"]) {
+            Some(false) => CommitCheck::NotAncestor,
+            // 存在即视为可记录；祖先关系无法判定（git 缺失/异常）时不做更强结论。
+            Some(true) | None => CommitCheck::Ancestor,
+        },
+    }
+}
+
+/// 执行 git 子进程：`Some(true)`=退出 0，`Some(false)`=非 0，`None`=无法执行（git 缺失等）。
+fn run_git(cwd: &Path, args: &[&str]) -> Option<bool> {
+    let status = std::process::Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .args(args)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .ok()?;
+    Some(status.success())
+}
+
 /// 在 `.git/packed-refs` 中查 ref 对应的 SHA。
 ///
 /// 格式：`<sha> <ref>` 每行一个；`#` 注释行、`^` peel 行跳过。
@@ -96,6 +153,9 @@ mod tests {
     #[test]
     fn head_sha_none_in_non_git_dir() {
         let dir = tempfile::TempDir::new().unwrap();
+        // 沙箱宿主下 temp 可能落在 git 仓库内：用 #345 加固的 `.git`（gitdir 含 `..`）
+        // 显式构造非仓库，避免向上探测到工作区仓库（#461）。
+        std::fs::write(dir.path().join(".git"), "gitdir: ../../nope\n").unwrap();
         assert!(head_sha(dir.path()).is_none());
         assert!(find_git_dir(dir.path()).is_none());
     }

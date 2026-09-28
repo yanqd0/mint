@@ -73,8 +73,26 @@ pub(crate) fn add_task(db: &str, title: &str) -> i64 {
     v["id"].as_i64().expect("add 应返回 id")
 }
 
+/// 当前仓库 HEAD 的短 SHA（`state commit --sha` 的真实 SHA 校验用，#477）。
+///
+/// 测试进程 cwd = crate 根；`--sha` 校验要求 commit 在 cwd 仓库真实存在，
+/// 故不再使用 `abc123` 之类占位值。非 git 检出下直接失败并给出原因。
+pub(crate) fn head_sha7() -> String {
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "--short=7", "HEAD"])
+        .output()
+        .expect("git rev-parse 需要可用");
+    let sha = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    assert!(
+        out.status.success() && !sha.is_empty(),
+        "crate 根须是 git 仓库（--sha 校验要求真实 SHA）"
+    );
+    sha
+}
+
 /// 全链路推进到 done。
 pub(crate) fn advance_to_done(db: &str, id: i64) {
+    let sha = head_sha7();
     run_json(db, &["issue", "state", "plan", &id.to_string(), "--json"]);
     run_json(db, &["issue", "state", "start", &id.to_string(), "--json"]);
     run_json(
@@ -85,7 +103,7 @@ pub(crate) fn advance_to_done(db: &str, id: i64) {
             "commit",
             &id.to_string(),
             "--sha",
-            "abc123",
+            sha.as_str(),
             "--test-cmd",
             "cargo test",
             "--json",

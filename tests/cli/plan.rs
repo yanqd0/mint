@@ -35,6 +35,7 @@ fn st_plan_batch_close_all_test() {
     run_json(&db, &["plan", "attach", "1", &i1.to_string(), "--json"]);
     run_json(&db, &["plan", "attach", "1", &i2.to_string(), "--json"]);
     // 推进到 test
+    let sha = head_sha7();
     for id in [i1, i2] {
         run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
         run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
@@ -46,7 +47,7 @@ fn st_plan_batch_close_all_test() {
                 "commit",
                 &id.to_string(),
                 "--sha",
-                "abc",
+                sha.as_str(),
                 "--json",
             ],
         );
@@ -88,6 +89,7 @@ fn st_plan_create_link_derived() {
     assert_eq!(v["status"], "running");
 
     // issue 到 done → plan done
+    let sha = head_sha7();
     run_json(
         &db,
         &[
@@ -96,7 +98,7 @@ fn st_plan_create_link_derived() {
             "commit",
             &iid.to_string(),
             "--sha",
-            "abc",
+            sha.as_str(),
             "--json",
         ],
     );
