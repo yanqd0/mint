@@ -16,6 +16,7 @@ mint = **M**inimal **I**ssue & **N**eeds **T**racker。一个全局、单机、S
 - **dogfooding**：用 mint 管理 mint 自己的开发 issue。
 - **小步快跑、小提交**：每个逻辑变更独立 commit。
 - **push 类远程修改仅用户手动执行**：本地 commit/tag 可做，远程发布动作交给用户；不自动发起 PR。
+- **沙箱边界**：数据库、临时库与 `TMPDIR` 必须落在工作区内。受限沙箱（如 DSH `workspace-write`）下跑测试/建临时库用 `TMPDIR=$PWD/.tmp-test`（已 gitignore）；在 `/tmp` 建库会因 SQLite temp/WAL 被拒而报 `unable to open database file`。
 - **用户侧输出全英文**（i18n 前）：CLI help/错误/输出无中文；代码注释与 `notes/` 文档用中文（标识符英文）。**mint 数据**（issue/plan/milestone 的 title/body、label）用中文（项目记忆，与 `notes/` 一致）；机器可读字段用英文——`test_cmd` 填英文命令，跳过测试统一 `not-tested`。
 - **6 态状态机**：`open/planned/dev/test/done/dropped`；`close` 必填 `test_cmd`（跳过测试填 `not-tested`），无 dev→done 捷径——见 `notes/DDD.md`。
 - **版本同步**：Cargo.toml `version` 是权威版本号。正式版发布时同步更新 **4 个版本文件**：`claude-plugin/{mint-faa,mint-faa-cn}/.claude-plugin/plugin.json` + 两处 `marketplace.json`（仓库根 `.claude-plugin/` 与 `claude-plugin/.claude-plugin/`）；**预发布版（`-alpha`/`-beta`/`-rc`）不碰**。`scripts/precheck.sh` 按此校验。
@@ -52,4 +53,5 @@ mint = **M**inimal **I**ssue & **N**eeds **T**racker。一个全局、单机、S
 ## Dogfooding（mint 自用）
 
 - 本项目用 mint 管理自身开发 issue；**流程与命令由宿主 skill 或插件提供**，不在项目级 context 重复——见 `.agents/skills/mint/SKILL.md`。
+- **canonical 验证命令**（`plan close --test-cmd` 直接复用）：`TMPDIR=$PWD/.tmp-test cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check`（`sqruff lint src/db` 在装了 sqruff 时一并跑）。
 - 数据安全（硬约束）：**不得直接编辑 `mint.db`**；**不得对真实 `mint` 项目或 `~/.local/share/mint` 做测试**——只走 `mint-test` 项目或隔离数据目录（`XDG_DATA_HOME` / `MINT_DB_PATH`）。
