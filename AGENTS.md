@@ -16,9 +16,9 @@ mint = **M**inimal **I**ssue & **N**eeds **T**racker。一个全局、单机、S
 - **dogfooding**：用 mint 管理 mint 自己的开发 issue。
 - **小步快跑、小提交**：每个逻辑变更独立 commit。
 - **push 类远程修改仅用户手动执行**：本地 commit/tag 可做，远程发布动作交给用户；不自动发起 PR。
-- **用户侧输出全英文**（i18n 前）：CLI help/错误/输出无中文；代码注释与 `notes/` 文档用中文（标识符英文）。
-- **6 态状态机**：`open/planned/dev/test/done/dropped`；`close` 必填 `test_cmd`（跳过测试填"没测"），无 dev→done 捷径——见 `notes/DDD.md`。
-- **版本同步**：Cargo.toml `version` 是权威版本号。正式版发布时同步更新 `claude-plugin/*/plugin.json` 与 marketplace.json 的 version；预发布版（`-alpha`/`-beta`）不碰 plugin 版本。
+- **用户侧输出全英文**（i18n 前）：CLI help/错误/输出无中文；代码注释与 `notes/` 文档用中文（标识符英文）。**mint 数据**（issue/plan/milestone 的 title/body、label）用中文（项目记忆，与 `notes/` 一致）；机器可读字段用英文——`test_cmd` 填英文命令，跳过测试统一 `not-tested`。
+- **6 态状态机**：`open/planned/dev/test/done/dropped`；`close` 必填 `test_cmd`（跳过测试填 `not-tested`），无 dev→done 捷径——见 `notes/DDD.md`。
+- **版本同步**：Cargo.toml `version` 是权威版本号。正式版发布时同步更新 **4 个版本文件**：`claude-plugin/{mint-faa,mint-faa-cn}/.claude-plugin/plugin.json` + 两处 `marketplace.json`（仓库根 `.claude-plugin/` 与 `claude-plugin/.claude-plugin/`）；**预发布版（`-alpha`/`-beta`/`-rc`）不碰**。`scripts/precheck.sh` 按此校验。
 - **CHANGELOG 全英文**：`CHANGELOG.md` 的版本段与条目一律用英文撰写（与用户侧输出一致）；新增/整理版本条目时自动按英文写。
 
 ## 文档导航
@@ -28,6 +28,9 @@ mint = **M**inimal **I**ssue & **N**eeds **T**racker。一个全局、单机、S
 - `src/db/AGENTS.md`：SQL 组织约定 / 简易规范 / sqruff / 迁移哲学。
 - `notes/AGENTS.md`：notes/ 写作约定。
 - `claude-plugin/AGENTS.md`：Claude Code plugin 开发规范（skill / hook / 双语同步）。
+- `docs/BACKUP.md`：备份 / 恢复 / 迁移（多 db 布局 + sync 快照）。
+- `docs/RELEASING.md`：发布流程与 CI。
+- `CONTRIBUTING.md`：构建 / 测试（含沙箱宿主 TMPDIR 约定）/ 本地 agent 接线。
 - `~/Documents/claude/mint.md`（仓库外）：早期设计决策记录（架构取舍、命名由来）。
 
 > notes/ 内容变化时更新 MEMORY.md 索引；不要在此重复 notes/ 的逐条列举。

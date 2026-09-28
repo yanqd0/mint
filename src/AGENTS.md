@@ -7,7 +7,7 @@
 - **edition 2024**。
 - **CLI 解析**：`clap`（`features=["derive"]`）。
 - **数据库**：`rusqlite`（`bundled` 特性，内嵌 SQLite 免系统依赖）。
-- **数据访问**：**不用 ORM**——手写 SQL + `models.rs` 手动映射（4 张简单表，见 decisions.md D2）。
+- **数据访问**：**不用 ORM**——手写 SQL + `models.rs` 手动映射（表结构简单，见 decisions.md D2；表清单见下方「数据模型约束」）。
 - **序列化**：`serde` + `serde_json`（`--json` 输出）。
 - **错误处理分层**：
   - 库层（`src/` 各模块）：`thiserror::Error` 派生枚举，`#[from]` 自动转换，顶层 `Error` 枚举含 `Other(String)`。
@@ -98,11 +98,11 @@ use crate::label;
 
 ## 数据模型约束
 
-- 8 表：`projects` / `issues` / `labels` / `issue_labels` / `milestones` / `plans` / `milestone_direct_issues` / `issue_links`（migration 有序数组驱动 `PRAGMA user_version`，当前 v1，见 `notes/DDD.md`）。
+- 9 表：`projects` / `issues` / `labels` / `issue_labels` / `machines` / `milestones` / `plans` / `milestone_direct_issues` / `issue_links`（另有 FTS5 虚表 `issues_fts`）。迁移由 `src/db/mod.rs` 的 `MIGRATIONS` 有序数组 + `CURRENT_VERSION` 驱动（**当前 v5；以该常量为准**，本文不写死版本号）。`machines`：`machine_id` 主键 + hostname/user（本机标识，多机同步用），见 `notes/DDD.md`。
 - `issues`：`kind` 限 `problem|requirement|task`（DB 无 CHECK，由应用层 FromSql/ValueEnum 强校验）；`status` 限 `open|planned|dev|test|done|dropped`；`last_commit_id` 记最后关联 commit；`plan_id` 外键 → plans（一对多）。
 - 容器（`milestones`/`plans`）：`status` 限 `open|running|partial|dropped|done`（5 态派生，写后同步，CLI 只读）；milestones 有 `version`(UNIQUE) + `body`；plans 有 `body` + `milestone_id`。
 - `milestone_direct_issues`：复合主键 `(milestone_id,issue_id)`；issue 二选一（属 plan 后不能直接挂 milestone）。
-- `issue_links`：`type` 限 `related|solves|duplicates`；复合主键 `(from_id,type,to_id)`；禁自环；单向存 + 反向派生。
+- `issue_links`：`type` 限 5 值 `related|solves|duplicates|blocked_by|blocks`（`001_init.sql` 的 CHECK）；`blocked_by` 写入时归一化为 `blocks`（方向互换：A blocked_by B → 存 `(B, blocks, A)`），查询反向派生；复合主键 `(from_id,type,to_id)`；禁自环；单向存。
 - 状态转换写 `updated_at`；`state commit` 必填 `--sha`（写 last_commit_id）；`close` 必填 `test_cmd`；`drop` 写 `dropped_reason`；**不做 `resolution`/`resolved_at`**。
 - FTS5（0.3.0 实现）用 external content + 触发器同步 `issues_fts`；0.1.0 不建 FTS。
 

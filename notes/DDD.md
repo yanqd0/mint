@@ -104,9 +104,10 @@ issue/plan 之上的**聚合容器**。概念层级：`roadmap`（上位抽象�
 
 表达 **issue 间关系**（如"#10 被 #12 顺带解决"），是 `refs`（跨项目/记忆互引，`memory#N`）的 **issue 内部关系版本**。
 
-- 表：`issue_links(from_id, type, to_id)` 复合主键 + `CHECK (from_id != to_id)` + `type` 限 `related|solves|duplicates`。
-- 3 类型语义：`related`（相关，对称）；`solves`（#A 解决 #B，反向 `solved-by`）；`duplicates`（#A 重复 #B，反向 `duplicated-by`）。
-- **单向存储 + 反向查询自动派生**：`solves↔solved-by`、`duplicates↔duplicated-by`、`related` 对称。
+- 表：`issue_links(from_id, type, to_id)` 复合主键 + `CHECK (from_id != to_id)` + `type` 限 5 值 `related|solves|duplicates|blocked_by|blocks`（DDL CHECK）。
+- 3 语义族：`related`（相关，对称）；`solves`（#A 解决 #B，反向 `solved-by`）、`duplicates`（#A 重复 #B，反向 `duplicated-by`）；`blocked_by`（#A 被 #B 阻塞，反向 `blocks`）。
+- **归一化**：`blocked_by` 写入时方向互换存为 `blocks`（A blocked_by B → 存 `(B, blocks, A)`），避免同一关系两种存法；查询按反向派生回 `blocked_by`。
+- **单向存储 + 反向查询自动派生**：`solves↔solved-by`、`duplicates↔duplicated-by`、`blocked_by↔blocks`，`related` 对称。
 
 **冲突规则**：
 
@@ -114,6 +115,7 @@ issue/plan 之上的**聚合容器**。概念层级：`roadmap`（上位抽象�
 |------|------|
 | 同向同类型重复 | 幂等成功（INSERT OR IGNORE no-op） |
 | 反向同类型（B solves A vs A solves B） | **互斥报错**（互相声称对方被自己解决/重复，矛盾） |
+| 反向 blocks（A blocks B vs B blocks A） | **互斥报错**（互相阻塞，矛盾） |
 | 反向 related | 幂等成功（对称，方向归一化 min,max） |
 | 自环 from==to | 禁止 |
 | 跨类型并存 | 允许（A related B + A solves B 可共存） |
