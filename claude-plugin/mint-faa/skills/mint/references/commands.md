@@ -34,6 +34,8 @@ mint plan list --milestone ''                # plans not attached to any milesto
 mint plan list --milestone 5 --status running # filter by milestone + status (filters combine into complex conditions)
 ```
 
+> **Reverse container lookup**: `mint list` has no `--milestone`; to see the issues under a milestone/plan use `mint milestone show <id> --json` / `mint plan show <id> --json`; `issue get` has no `milestone` field (an issue only stores `plan_id` directly).
+
 ## show
 
 ```bash

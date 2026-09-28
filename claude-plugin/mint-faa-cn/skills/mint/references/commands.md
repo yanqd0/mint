@@ -34,6 +34,8 @@ mint plan list --milestone ''                # 筛未挂 milestone 的 plan（�
 mint plan list --milestone 5 --status running # 按 milestone + 状态筛选（筛选可混合拼复杂条件）
 ```
 
+> **容器归属反向查询**：`mint list` 无 `--milestone`；查某 milestone/plan 下有哪些 issue 用 `mint milestone show <id> --json` / `mint plan show <id> --json`；`issue get` 无 `milestone` 字段（issue 只直接存 `plan_id`）。
+
 ## show
 
 ```bash

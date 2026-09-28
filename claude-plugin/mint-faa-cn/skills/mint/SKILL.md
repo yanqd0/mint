@@ -60,7 +60,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
    - **绝不允许无 plan 直接写代码**：宿主 plan 机制必须有对应的 mint plan
 1. **宿主 plan 机制审批通过后，第一件事不是写代码**：
    - 将宿主 plan 对应的 work 挂入 mint plan（step 0 已保证 plan 存在）
-   - 为每个独立 phase 建 issue（kind=requirement，label `dev-clean`），`mint plan attach` 挂入
+   - 为每个独立 phase 建 issue（**doc/chore 类用 `task`**：task 无 dev/commit 阶段，planned→test→done；其余用 `kind=requirement`，label `dev-clean`），`mint plan attach` 挂入。**phase 已对应既有 issue（清扫/归并类 plan）时直接 attach，不重复建**
    - **挂入即排期锁定**：对该 plan 下全部 open issue `mint plan plan <plan_id>`（或逐个 `mint issue state plan <id>`；宿主退出 plan 模式、进入执行/auto 模式时统一 planned，plan 的 issue 不留 open）
 2. **每完成一个逻辑变更（对应一次或多次 commit）**：
    - `mint issue state plan <id>`（排入计划；同 plan 批量排期见 step 1「挂入即排期锁定」）

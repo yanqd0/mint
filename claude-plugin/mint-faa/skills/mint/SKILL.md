@@ -59,7 +59,7 @@ Before any flow, determine the current host agent and `Read` **only** the matchi
    - **NEVER write code without a mint plan**: the host plan mechanism must have a corresponding mint plan
 1. **After host plan mechanism approval, the first action is NOT writing code**:
    - Attach the work to a mint plan (step 0 guarantees the plan exists)
-   - Create issues for each independent phase (kind=requirement, label `dev-clean`), attach to mint plan via `mint plan attach`
+   - Create issues for each independent phase (**use `task` for doc/chore work**: a task has no dev/commit stage, it goes planned→test→done; otherwise `kind=requirement`, label `dev-clean`), then attach via `mint plan attach`. **When a phase already maps to an existing issue (sweep/merge plans), attach it directly — do not create a duplicate**
    - **Schedule on attach**: `mint plan plan <plan_id>` for all open issues of that plan (or `mint issue state plan <id>` one by one; when the host leaves plan mode and enters execution/auto mode, all issues are uniformly `planned` — no open issues left under a plan)
 2. **For each logical change (one or more commits)**:
    - `mint issue state plan <id>` (schedule; for a whole plan see step 1 "schedule on attach")
