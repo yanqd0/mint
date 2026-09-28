@@ -15,7 +15,8 @@ mint issue add "标题" \
   --label bug,firefox
 ```
 
-add 已内置去重（同项目标题模糊匹配），重复自动合并（`hit_count+1`）。
+add 已内置去重（同项目标题模糊匹配），重复自动合并（`hit_count+1`）；
+确认是不同 issue 时用 `--force-new` 跳过去重（合并后 stderr 会给该提示）。
 
 ## list
 
@@ -23,7 +24,7 @@ add 已内置去重（同项目标题模糊匹配），重复自动合并（`hit
 mint list                                    # 活跃 issue
 mint list --all-states                      # 含 done/dropped
 mint list --status open --priority 0         # 按优先级筛选
-mint list --label 0.4.0 --project mint       # 按 label + 项目筛选
+mint list --label CLI --project mint         # 按 label + 项目筛选
 mint list --kind requirement --plan 7        # 按 kind / plan 筛选
 mint list --created-after 2026-08            # 按创建时间筛选（支持前缀 2026/2026-08/2026-08-10）
 mint list --updated-after 2026-08-10         # 按更新时间筛选
@@ -37,7 +38,7 @@ mint plan list --milestone 5 --status running # 按 milestone + 状态筛选（�
 
 ```bash
 mint show 42            # 默认 TSV：ID/Status/Kind/Priority/Title/Plan/Labels/TestCmd/…/Body
-mint show 42 --tui      # TUI 详情页（复用 mint tui 对应页面）
+mint tui                # 全屏 TUI（issue 详情页在其内查看；show 无 --tui）
 ```
 
 ## get（取单个字段，body 走此路最准）
@@ -137,8 +138,8 @@ mint delete milestone 4
 ## JSON 输出字段
 
 list/show 输出字段：
-`id title body kind status priority project_id project
-test_cmd dropped_reason last_commit_id plan_id hit_count labels links created_at updated_at`
+`id title body kind status priority project test_cmd dropped_reason last_commit_id
+plan_id hit_count labels links machine_id uid created_at updated_at`
 
 link rel 值：`related / solves / solved-by / duplicates / duplicated-by /
 blocked_by / blocks`

@@ -16,6 +16,7 @@ mint issue add "title" \
 ```
 
 add has built-in dedup (same-project fuzzy title match); duplicates auto-merge (`hit_count+1`).
+Use `--force-new` to skip dedup when you know it is a different issue (the merge path hints this on stderr).
 
 ## list
 
@@ -23,7 +24,7 @@ add has built-in dedup (same-project fuzzy title match); duplicates auto-merge (
 mint list                                    # active issues
 mint list --all-states                      # include done/dropped
 mint list --status open --priority 0         # filter by priority
-mint list --label 0.4.0 --project mint       # filter by label + project
+mint list --label CLI --project mint         # filter by label + project
 mint list --kind requirement --plan 7        # filter by kind / plan
 mint list --created-after 2026-08            # filter by created time (prefix: 2026/2026-08/2026-08-10)
 mint list --updated-after 2026-08-10         # filter by updated time
@@ -37,7 +38,7 @@ mint plan list --milestone 5 --status running # filter by milestone + status (fi
 
 ```bash
 mint show 42            # default TSV: ID/Status/Kind/Priority/Title/Plan/Labels/TestCmd/…/Body
-mint show 42 --tui      # TUI detail page (reuses the mint tui page)
+mint tui                # full-screen TUI (issue detail lives there; show has no --tui)
 ```
 
 ## get (single field; use get body for the body)
@@ -136,8 +137,8 @@ mint delete milestone 4
 ## JSON Output Fields
 
 list/show output fields:
-`id title body kind status priority project_id project
-test_cmd dropped_reason last_commit_id plan_id hit_count labels links created_at updated_at`
+`id title body kind status priority project test_cmd dropped_reason last_commit_id
+plan_id hit_count labels links machine_id uid created_at updated_at`
 
 link rel values: `related / solves / solved-by / duplicates / duplicated-by /
 blocked_by / blocks`

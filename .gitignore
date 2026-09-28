@@ -36,3 +36,6 @@ tags
 CLAUDE.md
 
 __pycache__/
+
+### mint test scratch (sandboxed hosts) ###
+.tmp-test/
