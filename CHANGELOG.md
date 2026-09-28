@@ -1,5 +1,39 @@
 # Change Log
 
+## 0.8.0
+
+### Features
+
+- LLM-oriented CLI reference: `mint --help-llm` prints a single page with the clap-derived syntax of all leaf subcommands, code-derived notes, and output conventions; it is English-only, works outside a git repository, and has no project/DB side effects.
+- Body fidelity and in-place editing.
+  - `show` TSV cells now escape `\t`/`\n`/`\r` instead of silently flattening them; `get <ID> body` stays the raw-value path.
+  - `issue set` / `plan set` gain mutually exclusive `--body-append`, `--body-file`, and `--body-section` (paragraph-level replacement) via a shared `body_edit` module.
+- Container affiliation queries: `issue show` TSV adds a `Milestone` column (`milestone_id` in `--json`), plus `issue get <ID> milestone` and `issue list --milestone <ID>`. The effective milestone is the direct attachment when present, otherwise the owning plan's milestone, via shared SQL.
+- TSV output contract: `list`/`search` append `Plan` and `Updated` columns (the first six indices are unchanged; `export --format tsv` follows suit), and the page footer is written to stdout so wrappers that capture stdout see it.
+- `-V` now reports the build SHA (injected by `build.rs`), distinguishing builds of the same version.
+- Command aliases: `issue`/`plan`/`milestone` accept `i`/`p`/`ms`; aliases appear only in `mint --help` and are intentionally kept out of `--help-llm`.
+- Issue dedup hardening: minimum-length and ordinal-variant gates prevent false merges of intentionally separate items, with a `--force-new` escape hatch.
+- Container lifecycle: new `plan drop` for empty plans, and `plan list` resolves its version column from the owning milestone.
+- Multi-machine sync: `pull --all` bootstraps remote-only projects, and plans carry a `uid` merged by LWW so a `plan drop` propagates across machines.
+
+### Bug Fixes
+
+- Fixed manual drops of empty plans/milestones being revived by status derivation, using an explicit `manual_dropped` marker.
+- Fixed directly attached milestones: at most one per issue, with deterministic effective-milestone reads.
+- Fixed inconsistent TSV escaping between `list` and `export` by unifying on `format_tsv`.
+- Fixed `sync pull` failing when the remote has no data; it now warns and treats the pull as complete.
+- Fixed rclone `lsd` parsing to keep only the first four fields, preserving project names that contain spaces.
+- Fixed the TUI issues panel `VERSION` column to use the directly attached milestone, falling back to the plan.
+
+### Others
+
+- Refactor: every `src/` and `tests/` file over 300 lines was split into modules (container, `cli/args`, `cli/sync`, `db/sync_import`, dashboard model, externalized test modules) as pure moves with unchanged public paths; `scripts/precheck.sh` and CI now enforce the 300-line limit.
+- Documentation and instructions: a single project instruction source (`AGENTS.md`, nested files renamed), a neutral `.agents/` resource root with `.claude` symlinks, a project git hook, DSH host-adapter skill docs (CN/EN kept in sync), and README/CONTRIBUTING/BACKUP updates.
+- Decisions recorded: D43 test isolation (never test against real mint data), D44 multi-host local setup, D45 TOON output declined, D46 `--help-llm` shape and format.
+- Conventions: skipped tests use `not-tested`, and the canonical verification command is `./scripts/precheck.sh && TMPDIR=$PWD/.tmp-test cargo test`.
+- CLI help text is fully English; remaining Chinese wording was translated.
+- Repo hygiene: committed `.tmp-test` artifacts were purged and precheck guards against recurrence.
+
 ## 0.7.0
 
 ### Features
