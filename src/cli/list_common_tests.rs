@@ -56,16 +56,20 @@ fn mk_label(id: i64, name: &str, desc: Option<&str>) -> Label {
 fn issues_columns_and_labels_join() {
     let mut i = mk_issue(3, "hello", Status::Done);
     i.priority = 0;
+    i.plan_id = Some(7);
     i.labels = vec!["dev".into(), "urgent".into()];
     let (headers, rows) = issues(&[i]);
-    assert_eq!(headers.join(","), "ID,P,Kind,Status,Title,Labels");
-    assert_eq!(rows[0].join(","), "3,0,problem,done,hello,dev,urgent");
+    assert_eq!(
+        headers.join(","),
+        "ID,P,Kind,Status,Title,Labels,Plan,Updated"
+    );
+    assert_eq!(rows[0].join(","), "3,0,problem,done,hello,dev,urgent,#7,t");
 }
 
 #[test]
 fn issues_empty() {
     let (headers, rows) = issues(&[]);
-    assert_eq!(headers.len(), 6);
+    assert_eq!(headers.len(), 8);
     assert!(rows.is_empty());
 }
 

@@ -119,7 +119,7 @@ fn st_milestone_list_no_page() {
     assert_eq!(v["pages"], 1);
 }
 
-/// --no-page 人体输出 footer 显示全量单页。
+/// --no-page 人体输出 footer 显示全量单页（stdout TSV 注释行，含 --no-page）。
 #[test]
 fn st_list_no_page_footer() {
     let (_dir, db) = empty_db();
@@ -130,7 +130,7 @@ fn st_list_no_page_footer() {
     }
     let out = mint(&db).args(["list", "--no-page"]).assert().success();
     let stdout = String::from_utf8_lossy(&out.get_output().stdout);
-    assert_eq!(stdout.lines().filter(|l| !l.trim().is_empty()).count(), 8); // header + 7 行
+    assert_eq!(stdout.lines().filter(|l| !l.trim().is_empty()).count(), 9); // header + 7 行 + footer
 }
 
 /// 显式 --status done 不叠加活跃过滤（参数化模板的微妙分支）。
@@ -249,7 +249,7 @@ fn st_default_output_tsv() {
     let text = String::from_utf8_lossy(&out).to_string();
     let lines: Vec<&str> = text.lines().collect();
     assert_eq!(
-        lines[0], "ID\tP\tKind\tStatus\tTitle\tLabels",
+        lines[0], "ID\tP\tKind\tStatus\tTitle\tLabels\tPlan\tUpdated",
         "表头: {text}"
     );
     assert!(
@@ -257,6 +257,10 @@ fn st_default_output_tsv() {
         "缺数据行: {text}"
     );
     assert!(lines[1].contains('\t'), "数据行应 tab 分隔: {lines:?}");
+    assert!(
+        lines.iter().any(|l| l.starts_with("# Page ")),
+        "分页脚注应在 stdout: {text}"
+    );
 }
 
 /// search 默认输出 TSV（表头 + 数据）。
@@ -274,7 +278,7 @@ fn st_search_default_tsv() {
     let text = String::from_utf8_lossy(&out).to_string();
     let lines: Vec<&str> = text.lines().collect();
     assert_eq!(
-        lines[0], "ID\tP\tKind\tStatus\tTitle\tLabels",
+        lines[0], "ID\tP\tKind\tStatus\tTitle\tLabels\tPlan\tUpdated",
         "表头: {text}"
     );
     assert!(text.contains("searchable token"), "缺数据: {text}");

@@ -98,10 +98,14 @@ pub(crate) fn paged_json(
     })
 }
 
-/// 打印分页脚注（stderr，人体输出）。
+/// 打印分页脚注（stdout，TSV 注释行，始终输出——含 `--no-page`/单页）。
+///
+/// 走 stdout 而非 stderr（#491）：外围插件与 agent tool 常只捕获 stdout，脚注落在
+/// stderr 会被静默丢弃，迫使消费方额外读 stderr。`#` 前缀与 `export --format tsv`
+/// 的段标题（`# issues`）一致，便于按注释行过滤。
 pub(crate) fn print_page_footer(page: u32, page_size: u32, total: usize) {
-    eprintln!(
-        "--- Page {page}/{} ({page_size} per page, {total} total) ---",
+    println!(
+        "# Page {page}/{} ({page_size} per page, {total} total)",
         page_count(total, page_size)
     );
 }
@@ -109,11 +113,14 @@ pub(crate) fn print_page_footer(page: u32, page_size: u32, total: usize) {
 // ── 列矩阵转换（数据 → 表头 + 行，供默认 TSV 与 --tui 共用）────
 
 /// Issue 列表 → (表头, 行矩阵)。
+/// 列序在既有 6 列后追加 `Plan`(#N)/`Updated`（#463）——前 6 列下标不变，兼容既有消费方。
 pub(crate) fn issues(items: &[Issue]) -> (Vec<String>, Vec<Vec<String>>) {
-    let headers: Vec<String> = ["ID", "P", "Kind", "Status", "Title", "Labels"]
-        .into_iter()
-        .map(String::from)
-        .collect();
+    let headers: Vec<String> = [
+        "ID", "P", "Kind", "Status", "Title", "Labels", "Plan", "Updated",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
     let rows = items
         .iter()
         .map(|i| {
@@ -122,6 +129,7 @@ pub(crate) fn issues(items: &[Issue]) -> (Vec<String>, Vec<Vec<String>>) {
             } else {
                 i.labels.join(",")
             };
+            let plan = i.plan_id.map(|p| format!("#{p}")).unwrap_or_default();
             vec![
                 i.id.to_string(),
                 i.priority.to_string(),
@@ -129,6 +137,8 @@ pub(crate) fn issues(items: &[Issue]) -> (Vec<String>, Vec<Vec<String>>) {
                 i.status.as_str().to_string(),
                 i.title.clone(),
                 labels,
+                plan,
+                i.updated_at.clone(),
             ]
         })
         .collect();
