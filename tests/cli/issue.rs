@@ -260,6 +260,41 @@ fn st_add_merge_prints_force_new_hint() {
     assert!(stderr.contains("--force-new"), "stderr: {stderr}");
 }
 
+/// add：独立 issue 回显当前 running milestone 归属提示（stderr，#483）。
+#[test]
+fn st_add_hints_running_milestone() {
+    let (_dir, db) = empty_db();
+    // 无 milestone：不提示。
+    let out = mint(&db)
+        .args(["issue", "add", "no milestone yet"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    assert!(
+        !String::from_utf8_lossy(&out.stderr).contains("running milestone"),
+        "无 running milestone 不应提示"
+    );
+    // 建一个 running milestone 后再 add → 提示挂载命令。
+    mint(&db)
+        .args(["milestone", "create", "CLI 增强", "--version", "0.8.0"])
+        .assert()
+        .success();
+    mint(&db)
+        .args(["milestone", "set", "1", "--status", "running"])
+        .assert()
+        .success();
+    let out = mint(&db)
+        .args(["issue", "add", "with milestone"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("running milestone #1"), "stderr: {stderr}");
+    assert!(stderr.contains("milestone attach 1 2"), "stderr: {stderr}");
+}
+
 /// 去重：不同 project 同名不合并（多 db 下每项目独立库，天然隔离）。
 #[test]
 fn st_add_different_project_no_merge() {

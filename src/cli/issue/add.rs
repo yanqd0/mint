@@ -105,6 +105,23 @@ pub fn cmd_add(
             crate::output::sanitize_terminal(project_name),
         );
     }
+    print_running_milestone_hint(conn, id)?;
+    Ok(())
+}
+
+/// 归属提示（#483）：独立 issue 不会自动挂 milestone，回显当前 running 目标与挂载命令。
+/// 仅新建后调用（合并不提示）；走 stderr，不影响 stdout/JSON 契约。
+fn print_running_milestone_hint(conn: &Connection, issue_id: i64) -> Result<(), Error> {
+    let mut stmt = conn.prepare(db::MILESTONE_RUNNING)?;
+    let mut rows = stmt.query([])?;
+    if let Some(r) = rows.next()? {
+        let mid: i64 = r.get(0)?;
+        let version: String = r.get(1)?;
+        eprintln!(
+            "mint: hint: running milestone #{mid} ({}); attach with `mint milestone attach {mid} {issue_id}`",
+            crate::output::sanitize_terminal(&version),
+        );
+    }
     Ok(())
 }
 

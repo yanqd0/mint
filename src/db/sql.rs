@@ -58,6 +58,7 @@ pub const LABEL_DELETE: &str = include_str!("queries/label_delete.sql");
 
 pub const MILESTONE_INSERT: &str = include_str!("queries/milestone_insert.sql");
 pub const MILESTONE_LIST: &str = include_str!("queries/milestone_list.sql");
+pub const MILESTONE_RUNNING: &str = include_str!("queries/milestone_running.sql");
 pub const MILESTONE_SELECT: &str = include_str!("queries/milestone_select.sql");
 pub const MILESTONE_ATTACH: &str = include_str!("queries/milestone_attach.sql");
 pub const MILESTONE_DETACH: &str = include_str!("queries/milestone_detach.sql");
