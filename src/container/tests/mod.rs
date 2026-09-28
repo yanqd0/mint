@@ -3,6 +3,7 @@
 use super::*;
 
 mod affiliation;
+mod affiliation_direct;
 mod delete;
 mod derive;
 mod move_basic;

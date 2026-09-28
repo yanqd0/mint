@@ -155,4 +155,5 @@ mod sync_backends;
 mod sync_backends_rclone;
 mod sync_ext;
 mod sync_merge;
+mod tsv;
 mod tui;
