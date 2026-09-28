@@ -13,11 +13,12 @@ dsh-mint 插件把 mint 接入 DSH。agent 侧宿主能力与其它宿主对应�
 | `tools/pre-execute`（waterfall → allow/deny/ask） | PreToolUse / ExitPlanMode | plan 绑定拦截 |
 | `tools/result`（emit，lossless JSON） | PostToolUseFailure | 失败信号提示登记 |
 | `ctx.shell`（`ShellExecutor.run` / `resolve`） | Bash | 跑 mint CLI `--json` |
-| `ctx.tools.register(defineTool(...))` | tools 注册 | mint_query 工具 |
+| `ctx.tools.register(defineTool(...))` | tools 注册 | 原生 `mint` 工具（issue/plan/milestone 三层管理；宿主进程内执行，不受文件沙箱限制） |
 | `systemPrompt.context` / `.section` | systemPrompt | 注入上下文段落 |
 
 ## 2. mint 命令执行
 
+- **原生工具优先（先看这条）**：若会话已提供原生 `mint` 工具（dsh-mint 注册），**一律用它**——不经 bash、不受文件沙箱限制、无需任何授权。下述 bash 路径（含 §5 提权 gate）仅在**无原生工具**、必须经 bash 调 mint 时适用。
 - 底层走 mint CLI `--json`，经 `ctx.shell.run({ command, ... })` 执行；`resolve()` 只对基建失败 reject（非零退出/超时 resolve 成 `ShellRunResult`）。
 - 优先解析 mint-faa 依赖（node_modules），不依赖全局 PATH（见 dsh-mint `docs/MOUNTING.md`）。
 - 会话级缓存避免每步重复执行；注入失败静默降级，不阻断会话。
@@ -37,6 +38,8 @@ dsh-mint 插件把 mint 接入 DSH。agent 侧宿主能力与其它宿主对应�
 - 参与者 label 用 `agent:dsh` 前缀。
 
 ## 5. mint 命令的沙箱放行（B-v2 审批 gate）
+
+> **仅当无原生 `mint` 工具、必须经 bash 调 mint 时适用**（有原生工具则完全用不到本节）。
 
 dsh-mint 宿主面挂了一个审批放行 gate：mint 的 db 在 workspace 外，裸跑 mint 会被
 文件沙箱拒绝；**每会话首条 mint 命令经用户批准一次后，同会话后续 mint bash 命令

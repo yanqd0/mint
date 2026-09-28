@@ -13,11 +13,12 @@ dsh-mint integrates mint into DSH. Agent-side host capabilities correspond to th
 | `tools/pre-execute` (waterfall → allow/deny/ask) | PreToolUse / ExitPlanMode | plan-binding gate |
 | `tools/result` (emit, lossless JSON) | PostToolUseFailure | failure-signal hint to register an issue |
 | `ctx.shell` (`ShellExecutor.run` / `resolve`) | Bash | run mint CLI `--json` |
-| `ctx.tools.register(defineTool(...))` | tool registration | mint_query tool |
+| `ctx.tools.register(defineTool(...))` | tool registration | native `mint` tool (issue/plan/milestone management; runs inside the host process, outside the file sandbox) |
 | `systemPrompt.context` / `.section` | systemPrompt | inject prompt sections |
 
 ## 2. Running mint commands
 
+- **Native tool first (read this first)**: if the session provides a native `mint` tool (registered by dsh-mint), **always use it** — it bypasses bash, is not subject to the file sandbox, and needs no approval. The bash path below (including the §5 escalation gate) applies only when there is **no native tool** and mint must be invoked through bash.
 - Under the hood mint runs via the CLI with `--json` through `ctx.shell.run({ command, ... })`; `resolve()` rejects only on infrastructure failure (nonzero exits and timeouts resolve into a `ShellRunResult`).
 - Prefer resolving the mint-faa dependency (node_modules); do not rely on the global PATH (see dsh-mint `docs/MOUNTING.md`).
 - Session-level caching avoids repeated per-step runs; injection failures degrade silently and never block the session.
@@ -36,6 +37,8 @@ dsh-mint integrates mint into DSH. Agent-side host capabilities correspond to th
 - Participant label uses the `agent:dsh` prefix.
 
 ## 5. Sandbox pass-through for mint commands (B-v2 approval gate)
+
+> **Applies only when there is no native `mint` tool and mint must be invoked through bash** (with a native tool this section is irrelevant).
 
 dsh-mint's host face mounts an approval pass-through gate: mint's db lives outside the workspace, so a bare mint run is denied by the file sandbox; **after the user approves the first mint command once per session, later mint bash commands in the same session neither prompt nor produce denial round-trips**.
 

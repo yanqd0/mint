@@ -47,7 +47,8 @@ mint = **M**inimal **I**ssue & **N**eeds **T**racker。一个全局、单机、S
 本仓库要能被多种编程 agent 继续开发，约定如下：
 
 - **指令源唯一**：`AGENTS.md`（含各层嵌套）。`CLAUDE.md` 不入库（已列入 `.gitignore`），Claude Code 用户在本机建软链接即可，命令见 `CONTRIBUTING.md`。
-- **中性资源在 `.agents/`**：`.agents/skills/` 是跨宿主技能源（DSH rank 200、PI 从 cwd 向上发现、Codex 用 `.agents/skills`）；`.agents/agents/` 存 agent 定义。`.claude/` 是 Claude Code 专属接线（hooks/settings），其中 `agents`、`skills` 为指向 `.agents/` 的软链接。
+- **中性资源入口在 `.agents/`**：`.agents/skills/` 是跨宿主技能发现路径（DSH rank 200、PI 从 cwd 向上发现、Codex 用 `.agents/skills`）；`.agents/agents/` 存 agent 定义。`.claude/` 是 Claude Code 专属接线（hooks/settings），其中 `agents`、`skills` 为指向 `.agents/` 的软链接。
+- **资源拓扑（改文件前先看这条）**：`.agents/skills/mint` 是**入库软链接**（`git ls-files -s` 模式 120000）→ `claude-plugin/mint-faa-cn/skills/mint`，即 **CN plugin 是 skill 的物理源**；`claude-plugin/mint-faa/skills/mint/` 是**手工翻译副本**（独立文件）。因此：改 CN 即改 `.agents/skills/mint/**`（同一实体，不要按"两份副本"处理，`cp` 会报 same file）；CN 改完必须同步翻译 EN，禁止 `cp` EN→CN。`.agents/agents/tester.md` 与 `.claude/agents` 同理。
 - **项目级 hook**：提交前的格式化走 `.githooks/pre-commit`（全宿主通用，新 clone 后跑一次 `scripts/install-hooks.sh` 启用）；Claude Code 另有 `.claude/settings.json` 的 Stop hook 作为补充。
 
 ## Dogfooding（mint 自用）
