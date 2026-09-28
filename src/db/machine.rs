@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use crate::db::{MACHINE_BACKFILL_UID, MACHINE_UPSERT};
+use crate::db::{MACHINE_BACKFILL_UID, MACHINE_UPSERT, PLAN_BACKFILL_UID};
 use crate::error::Error;
 
 /// 本机 machine_id：MINT_MACHINE_ID env 优先，否则 hostname+user 的 FNV-1a 哈希（mach-<hex>）。
@@ -127,5 +127,7 @@ pub(super) fn register_machine(conn: &rusqlite::Connection) -> Result<(), Error>
     )?;
     // 回填存量 issue 的 uid（machine_id 已知后；跨机幂等键）
     conn.execute(MACHINE_BACKFILL_UID, [])?;
+    // 回填存量 plan 的 uid（#498）
+    conn.execute(PLAN_BACKFILL_UID, [machine_id()])?;
     Ok(())
 }

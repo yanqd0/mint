@@ -76,6 +76,10 @@ pub fn create(
         }
         ContainerKind::Plan => {
             conn.execute(kind.insert_sql(), params![title, body, milestone_id])?;
+            let id = conn.last_insert_rowid();
+            // 补 uid：machine_id:plan:<local_id>（跨机合并稳定键，#498）。
+            conn.execute(db::PLAN_SET_UID, params![crate::db::machine_id(), id])?;
+            return Ok(id);
         }
     }
     Ok(conn.last_insert_rowid())

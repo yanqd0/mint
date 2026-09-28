@@ -92,6 +92,8 @@ issue/plan 之上的**聚合容器**。概念层级：`roadmap`（上位抽象�
 
 编程 agent 的**执行计划**：记录标题 + 完整 markdown 信息（body），主要**关联多个 issue**（issues.plan_id）。程序化承载 mint-dogfood skill 的"多 issue plan 统一测试"模式——plan 记录拆解、issue 分批推进、全绿后统一 `close`。
 
+**跨机稳定键与 LWW 合并**（#498，2026-09-28）：`plans` 新增 `uid`（`machine_id:plan:<local_id>`，UNIQUE；存量行由 `register_machine` 回填）。`sync merge` 对 plan 由原先「`(title, milestone_id)` 命中即 skip」改为：uid 命中优先，旧快照回退业务键；命中后按 `updated_at` LWW 覆盖全列——A 机显式 `plan drop` 由此传播到其它机器（此前 `0 updated`）。快照缺 `uid` 列（旧版导出）时保留本地 uid，不回退为 NULL。
+
 **跨 milestone 移动语义**（#223，2026-08-15）：`plan set --milestone` 把 plan 移到**另一** milestone 时，其下 `planned` issue 自动重置为 `open`——排期上下文随版本桶变更作废，由新归属重新排期；`dev/test/done/dropped` 不动（进行中/已完成与版本桶归属无关）。同 milestone 移动 no-op。此机制保证 deferred plan（挂未来 milestone）不再因残余 `planned` issue 派生 `running`（误导为执行中）。
 
 **手动 dropped 不被派生覆盖**（#446，2026-09-05）：`plan drop` 只作用于**空 plan**（有 issue 拒绝），其 `dropped` 是手动终态；`sync_plan` 遇到"空 plan + 当前 dropped"时跳过状态重算——空集合派生为 `open`，否则任何同步入口（`plan set --milestone`、attach/detach、issue 删除等）都会把显式废弃的 plan 复活。**非空 plan 的 `dropped` 是派生结果**（其下 issue 全 dropped），仍随后续状态变化重算——故守卫以"空"为界，不能像 milestone 那样按终态整体短路（milestone 的 done/dropped 由 `set --status` 手动产生，不与派生冲突）。

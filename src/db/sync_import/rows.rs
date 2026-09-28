@@ -123,6 +123,31 @@ pub(super) fn insert_row(
     Ok(())
 }
 
+/// 用本地同 id 行的值填补快照行中的 NULL 列——旧版快照导出缺列（如 plans.uid）时，
+/// 重放出的行该列为 NULL，直接 UPDATE 会抹掉本地已有值；仅对 `cols` 中真实存在的
+/// 列名生效（缺列跳过，规避 `col_idx` 缺列回退 0 的坑）。
+pub(super) fn fill_null_from_local(
+    conn: &Connection,
+    table: &str,
+    cols: &[String],
+    row: &mut [Value],
+    id: i64,
+    names: &[&str],
+) -> Result<(), Error> {
+    for name in names {
+        let Some(idx) = cols.iter().position(|c| c == name) else {
+            continue;
+        };
+        if !matches!(row[idx], Value::Null) {
+            continue;
+        }
+        let sql = format!("SELECT {name} FROM {table} WHERE id = ?1");
+        let local: Value = conn.query_row(&sql, [id], |r| r.get(0))?;
+        row[idx] = local;
+    }
+    Ok(())
+}
+
 /// 参数化 UPDATE（除 id 外全部列，WHERE id = ?N）。
 pub(super) fn update_row(
     conn: &Connection,

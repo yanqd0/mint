@@ -1,8 +1,9 @@
 //! 同步快照导入（git+SQL 路线，plan #84 #367）。
 //!
 //! `import_sql`：把确定性 SQL 快照**幂等合并**进本机库——业务键幂等（projects/labels/
-//! milestones 按 UNIQUE 键、plans 按 title+milestone_id）、issues 按 uid LWW（updated_at
-//! 取新）、id 冲突重映射（uid 是稳定跨机键，本地 id 可重排）并修正全部引用。
+//! milestones 按 UNIQUE 键）、plans 按 uid（旧快照回退 title+milestone_id）+ updated_at LWW
+//!（#498）、issues 按 uid LWW（updated_at 取新）、id 冲突重映射（uid 是稳定跨机键，本地 id
+//! 可重排）并修正全部引用。
 //!
 //! 子模块：`sanitize`（快照 SQL 清洗与拆分）、`merge`（业务键合并）、`merge_issues`（uid LWW）、
 //! `rows`（行级 id 重映射与落库）。SQL 常量集中在 `crate::db::sql`。

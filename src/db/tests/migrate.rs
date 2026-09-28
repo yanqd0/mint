@@ -12,7 +12,7 @@ fn migrate_creates_tables_and_sets_version() {
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 5);
+    assert_eq!(version, CURRENT_VERSION);
 
     let tables: Vec<String> = conn
         .prepare(
@@ -53,11 +53,25 @@ fn migrate_creates_tables_and_sets_version() {
     // 002 加列：issues.machine_id/uid
     assert!(cols.iter().any(|c| c == "machine_id"), "missing machine_id");
     assert!(cols.iter().any(|c| c == "uid"), "missing uid");
+
+    // 006/007 加列：plans.uid（跨机稳定键）+ plans.manual_dropped（手动终态标记）
+    let pcols: Vec<String> = conn
+        .prepare("PRAGMA table_info(plans)")
+        .unwrap()
+        .query_map([], |r| r.get(1))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert!(pcols.iter().any(|c| c == "uid"), "plans missing uid");
+    assert!(
+        pcols.iter().any(|c| c == "manual_dropped"),
+        "plans missing manual_dropped"
+    );
 }
 
 /// 既有 v1 库升级：migrate 从 user_version=1 自动跑 002/003（machines/列/color/FTS 扩展），不崩溃（#1 回归）。
 #[test]
-fn migrate_upgrades_v1_to_v5() {
+fn migrate_upgrades_v1_to_current() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     // 仅建 v1 schema（001）
     conn.execute_batch(MIGRATION_001).unwrap();
@@ -66,7 +80,7 @@ fn migrate_upgrades_v1_to_v5() {
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 5, "v1 库应升级到 v5");
+    assert_eq!(version, CURRENT_VERSION, "v1 库应升级到当前版本");
 
     let tables: Vec<String> = conn
         .prepare(
@@ -157,11 +171,15 @@ fn runtime_indexes_created() {
         plan_idx.iter().any(|n| n == "idx_plans_milestone_id"),
         "plans 缺索引 idx_plans_milestone_id: {plan_idx:?}"
     );
+    assert!(
+        plan_idx.iter().any(|n| n == "idx_plans_uid"),
+        "plans 缺索引 idx_plans_uid: {plan_idx:?}"
+    );
 }
 
 /// 既有 v2 库升级：migrate 从 user_version=2 自动跑 003（FTS 扩展），存量数据回填。
 #[test]
-fn migrate_upgrades_v2_to_v5() {
+fn migrate_upgrades_v2_to_current() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     // 建 v2 schema（001 + 002）
     conn.execute_batch(MIGRATION_001).unwrap();
@@ -192,7 +210,7 @@ fn migrate_upgrades_v2_to_v5() {
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 5, "v2 库应升级到 v5");
+    assert_eq!(version, CURRENT_VERSION, "v2 库应升级到当前版本");
     // 存量 labels 可搜（回填子查询聚合）。
     let hit: i64 = conn
         .query_row(

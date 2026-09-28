@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, params_from_iter};
 
 use crate::error::Error;
@@ -9,7 +10,8 @@ use crate::error::Error;
 use super::MergeReport;
 use super::merge_issues::merge_issues;
 use super::rows::{
-    col_idx, columns, id_taken, insert_row, map_value, next_id, read_rows, row_id, set_id,
+    col_idx, columns, fill_null_from_local, id_taken, insert_row, map_value, next_id, read_rows,
+    row_id, set_id, update_row,
 };
 
 pub(super) fn merge_all(conn: &Connection, tmp: &Connection) -> Result<MergeReport, Error> {
@@ -156,7 +158,9 @@ pub(super) fn merge_keyed(
     Ok(())
 }
 
-/// plans：幂等键 (title, milestone_id)（milestone_id 经 milestones 映射）；无 UNIQUE，用 EXISTS 判定。
+/// plans：稳定键 uid + updated_at LWW（#498）；旧快照无 uid 时回退业务键 (title, milestone_id)。
+/// milestone_id 经 milestones 映射；无 UNIQUE，用 EXISTS 判定。原实现命中即 skip，导致
+/// A 机显式 `plan drop` 的状态无法传播到 C 机（0 updated）；改为命中后按 updated_at 取新。
 pub(super) fn merge_plans(
     conn: &Connection,
     tmp: &Connection,
@@ -165,40 +169,71 @@ pub(super) fn merge_plans(
     report: &mut MergeReport,
 ) -> Result<(), Error> {
     let cols = columns(tmp, "plans")?;
+    let uid_idx = cols.iter().position(|c| c == "uid");
     for mut row in read_rows(tmp, "plans", &cols)? {
         let orig_id = row_id(&row, &cols);
         let title = row[col_idx(&cols, "title")].clone();
         map_value(&mut row[col_idx(&cols, "milestone_id")], milestones_map);
         let mid = &row[col_idx(&cols, "milestone_id")];
-        let exists = conn
-            .query_row(
-                "SELECT 1 FROM plans WHERE title = ?1 AND milestone_id IS ?2",
-                params_from_iter([&title, mid]),
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some();
-        let target_id = if exists {
-            report.skipped += 1;
-            conn.query_row(
-                "SELECT id FROM plans WHERE title = ?1 AND milestone_id IS ?2",
-                params_from_iter([&title, mid]),
-                |r| r.get(0),
-            )?
-        } else {
-            let new_id = if let Some(orig) = orig_id {
-                if id_taken(conn, "plans", orig)? {
-                    next_id(conn, "plans")?
+        // 1) uid 命中（稳定键）；2) 回退业务键 (title, milestone_id)（旧快照/未回填 uid）。
+        let by_uid: Option<i64> = match uid_idx.map(|i| &row[i]) {
+            Some(Value::Text(u)) => conn
+                .query_row("SELECT id FROM plans WHERE uid = ?1", [u], |r| r.get(0))
+                .optional()?,
+            _ => None,
+        };
+        let existing = match by_uid {
+            Some(id) => Some(id),
+            None => conn
+                .query_row(
+                    "SELECT id FROM plans WHERE title = ?1 AND milestone_id IS ?2",
+                    params_from_iter([&title, mid]),
+                    |r| r.get(0),
+                )
+                .optional()?,
+        };
+        let target_id = match existing {
+            Some(id) => {
+                let cur: String =
+                    conn.query_row("SELECT updated_at FROM plans WHERE id = ?1", [id], |r| {
+                        r.get(0)
+                    })?;
+                let new_upd = match &row[col_idx(&cols, "updated_at")] {
+                    Value::Text(s) => s.clone(),
+                    _ => String::new(),
+                };
+                if new_upd > cur {
+                    // 快照缺列（旧版导出）→ NULL：保留本地 uid 与手动 drop 标记，不抹掉。
+                    fill_null_from_local(
+                        conn,
+                        "plans",
+                        &cols,
+                        &mut row,
+                        id,
+                        &["uid", "manual_dropped"],
+                    )?;
+                    update_row(conn, "plans", &cols, &row, id)?;
+                    report.updated += 1;
                 } else {
-                    orig
+                    report.skipped += 1;
                 }
-            } else {
-                next_id(conn, "plans")?
-            };
-            set_id(&mut row, &cols, new_id);
-            insert_row(conn, "plans", &cols, &row)?;
-            report.inserted += 1;
-            new_id
+                id
+            }
+            None => {
+                let new_id = if let Some(orig) = orig_id {
+                    if id_taken(conn, "plans", orig)? {
+                        next_id(conn, "plans")?
+                    } else {
+                        orig
+                    }
+                } else {
+                    next_id(conn, "plans")?
+                };
+                set_id(&mut row, &cols, new_id);
+                insert_row(conn, "plans", &cols, &row)?;
+                report.inserted += 1;
+                new_id
+            }
         };
         if let Some(orig) = orig_id {
             id_map.insert(orig, target_id);

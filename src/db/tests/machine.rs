@@ -67,6 +67,9 @@ fn register_machine_upserts_row() {
     let _g = MACHINE_TEST_LOCK.lock().unwrap();
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     migrate(&conn).unwrap();
+    // 存量 plan（无 uid）应在注册时被回填 machine_id:plan:<id>（#498）。
+    conn.execute("INSERT INTO plans (title) VALUES ('p')", [])
+        .unwrap();
     register_machine(&conn).unwrap();
     let (mid, host, user): (String, String, String) = conn
         .query_row("SELECT machine_id, hostname, user FROM machines", [], |r| {
@@ -76,10 +79,22 @@ fn register_machine_upserts_row() {
     assert_eq!(mid, machine_id());
     assert!(!host.is_empty(), "hostname 应如实记录");
     assert!(!user.is_empty(), "user 应如实记录");
-    // 幂等：再次注册不新增行
+    let plan_uid: String = conn
+        .query_row("SELECT uid FROM plans WHERE id = 1", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(
+        plan_uid,
+        format!("{}:plan:1", machine_id()),
+        "存量 plan 回填 uid（#498）"
+    );
+    // 幂等：再次注册不新增行，且已回填的 uid 不被改写
     register_machine(&conn).unwrap();
     let n: i64 = conn
         .query_row("SELECT COUNT(*) FROM machines", [], |r| r.get(0))
         .unwrap();
     assert_eq!(n, 1, "machines 应只有本机一行");
+    let plan_uid2: String = conn
+        .query_row("SELECT uid FROM plans WHERE id = 1", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(plan_uid2, plan_uid, "重复注册不改写已回填 uid");
 }
