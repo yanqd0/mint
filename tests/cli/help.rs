@@ -86,3 +86,18 @@ fn st_help_lists_help_llm() {
     let stdout = String::from_utf8_lossy(&out.get_output().stdout).to_string();
     assert!(stdout.contains("--help-llm"), "{stdout}");
 }
+
+/// `-V` 输出语义版本 + 非空构建标识（构建 SHA，#475）。
+#[test]
+fn st_version_includes_build_sha() {
+    let (_dir, db) = empty_db();
+    let out = mint(&db).arg("-V").assert().success();
+    let stdout = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(stdout.contains(env!("CARGO_PKG_VERSION")), "{stdout}");
+    let build = stdout
+        .split_once('(')
+        .and_then(|(_, rest)| rest.split_once(')'))
+        .map(|(inner, _)| inner.trim().to_string())
+        .unwrap_or_default();
+    assert!(!build.is_empty(), "括号内应为构建标识: {stdout}");
+}

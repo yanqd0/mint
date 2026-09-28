@@ -33,9 +33,14 @@ pub use label::{LabelArgs, LabelCmd};
 use issue::IssueArgs;
 use issue::list::{ListArgs, SearchArgs, ShowArgs};
 
+/// 版本串：语义版本 + 构建 git 短 SHA（#475，由 build.rs 注入 `MINT_BUILD_SHA`）。
+/// 用于区分同一版本号下的不同构建（debug/release/陈旧二进制）。
+pub const MINT_VERSION: &str =
+    concat!(env!("CARGO_PKG_VERSION"), " (", env!("MINT_BUILD_SHA"), ")");
+
 /// 全局 SQLite issue 系统：mint-faa（命令 `mint`）。
 #[derive(Parser)]
-#[command(name = "mint", version, about = "Minimal Issue & Needs Tracker")]
+#[command(name = "mint", version = MINT_VERSION, about = "Minimal Issue & Needs Tracker")]
 pub struct Cli {
     /// Override DB path (default: multi-db $XDG_DATA_HOME/mint/projects/<project>/<machine_id>.db; set to use a single-file db)
     #[arg(long, env = "MINT_DB_PATH")]

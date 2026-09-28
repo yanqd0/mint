@@ -10,7 +10,7 @@ readme = "README.md"
 rust-version = "1.88"
 keywords = ["issue-tracker", "sqlite", "cli", "tui", "ai-agents"]
 categories = ["command-line-utilities", "development-tools"]
-include = ["Cargo.toml", "Cargo.lock", "LICENSE", "README.md", "src/**"]
+include = ["Cargo.toml", "Cargo.lock", "LICENSE", "README.md", "build.rs", "src/**"]
 
 [[bin]]
 name = "mint"
