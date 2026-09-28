@@ -32,14 +32,15 @@ mint list --search "登录"                    # 文本过滤（title/body/statu
 mint issue list --search running            # 容器/issue 均可 --search；与 TUI / 搜索同语义
 mint plan list --milestone ''                # 筛未挂 milestone 的 plan（空串）
 mint plan list --milestone 5 --status running # 按 milestone + 状态筛选（筛选可混合拼复杂条件）
+mint list --milestone 5                      # 按有效 milestone 筛 issue（直属优先，否则所属 plan 的）
 ```
 
-> **容器归属反向查询**：`mint list` 无 `--milestone`；查某 milestone/plan 下有哪些 issue 用 `mint milestone show <id> --json` / `mint plan show <id> --json`；`issue get` 无 `milestone` 字段（issue 只直接存 `plan_id`）。
+> **容器归属反向查询**：`mint list --milestone <id>` 按有效 milestone（直属优先，否则所属 plan 的）筛 issue；单条字段用 `mint issue get <id> milestone`；`mint milestone show <id> --json` / `mint plan show <id> --json` 列容器下的 issue。
 
 ## show
 
 ```bash
-mint show 42            # 默认 TSV：ID/Status/Kind/Priority/Title/Plan/Labels/TestCmd/…/Body
+mint show 42            # 默认 TSV：ID/Status/Kind/Priority/Title/Plan/Milestone/Labels/TestCmd/…/Body
 mint tui                # 全屏 TUI（issue 详情页在其内查看；show 无 --tui）
 ```
 

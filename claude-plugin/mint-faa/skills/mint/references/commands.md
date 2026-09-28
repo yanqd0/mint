@@ -32,14 +32,15 @@ mint list --search "login"                   # text filter (title/body/status/id
 mint issue list --search running            # containers/issues both support --search; same semantics as TUI / search
 mint plan list --milestone ''                # plans not attached to any milestone (empty string)
 mint plan list --milestone 5 --status running # filter by milestone + status (filters combine into complex conditions)
+mint list --milestone 5                      # filter issues by effective milestone (direct, else via plan)
 ```
 
-> **Reverse container lookup**: `mint list` has no `--milestone`; to see the issues under a milestone/plan use `mint milestone show <id> --json` / `mint plan show <id> --json`; `issue get` has no `milestone` field (an issue only stores `plan_id` directly).
+> **Reverse container lookup**: `mint list --milestone <id>` filters issues by effective milestone (direct, else via plan); a single field is available via `mint issue get <id> milestone`; `mint milestone show <id> --json` / `mint plan show <id> --json` list the issues under a container.
 
 ## show
 
 ```bash
-mint show 42            # default TSV: ID/Status/Kind/Priority/Title/Plan/Labels/TestCmd/…/Body
+mint show 42            # default TSV: ID/Status/Kind/Priority/Title/Plan/Milestone/Labels/TestCmd/…/Body
 mint tui                # full-screen TUI (issue detail lives there; show has no --tui)
 ```
 
