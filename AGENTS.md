@@ -54,5 +54,5 @@ mint = **M**inimal **I**ssue & **N**eeds **T**racker。一个全局、单机、S
 ## Dogfooding（mint 自用）
 
 - 本项目用 mint 管理自身开发 issue；**流程与命令由宿主 skill 或插件提供**，不在项目级 context 重复——见 `.agents/skills/mint/SKILL.md`。
-- **canonical 验证命令**（`plan close --test-cmd` 直接复用）：`TMPDIR=$PWD/.tmp-test cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check`（`sqruff lint src/db` 在装了 sqruff 时一并跑）。
+- **canonical 验证命令**（`plan close --test-cmd` 直接复用）：`./scripts/precheck.sh && TMPDIR=$PWD/.tmp-test cargo test`（precheck 覆盖 fmt/clippy/sqruff/版本一致性/文件行数；只跑 cargo test 会漏掉 300 行门禁）。
 - 数据安全（硬约束）：**不得直接编辑 `mint.db`**；**不得对真实 `mint` 项目或 `~/.local/share/mint` 做测试**——只走 `mint-test` 项目或隔离数据目录（`XDG_DATA_HOME` / `MINT_DB_PATH`）。

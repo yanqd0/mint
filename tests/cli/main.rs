@@ -130,6 +130,7 @@ mod edit;
 mod export;
 mod help;
 mod issue;
+mod issue_add;
 mod label;
 mod link;
 mod list;
