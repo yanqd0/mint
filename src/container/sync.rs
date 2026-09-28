@@ -1,7 +1,7 @@
 //! 容器派生状态写回：issue 状态变更后的级联同步（issue → plan → milestone），
 //! 以及容器状态的手动终态设置。
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::db;
 use crate::error::Error;
@@ -37,13 +37,11 @@ pub fn sync_container_status(conn: &Connection, issue_id: i64) -> Result<(), Err
 /// 重算某 plan 状态并写回；随后同步其所属 milestone。
 pub(super) fn sync_plan(conn: &Connection, plan_id: i64) -> Result<(), Error> {
     let statuses = issue_statuses_from(conn, db::PLAN_ISSUE_STATUSES, plan_id)?;
-    // #446：空 plan 的手动 dropped（`plan drop` 仅允许空 plan）不被派生覆盖——空集合派生为
-    // open，否则任何同步入口（如 `plan set --milestone`）都会把显式废弃的 plan 复活。
-    // 非空 plan 的 dropped 是派生结果（其下 issue 全 dropped），仍随后续状态变化重算。
-    let manual_drop = statuses.is_empty()
-        && get(conn, ContainerKind::Plan, plan_id)?.map(|c| c.status)
-            == Some(ContainerStatus::Dropped);
-    if !manual_drop {
+    // #497：手动 `plan drop` 由 `manual_dropped` 显式标记（不再用「空集合 + dropped」推断）。
+    // 空集合派生为 `open`，若不加保护，任何同步入口（attach/detach、`plan set --milestone`、
+    // issue 删除等）都会把显式废弃的 plan 复活；派生的 dropped（其下 issue 全 dropped）无标记，
+    // 照常随后续状态变化重算——故不能像 milestone 那样按终态整体短路。
+    if !is_manual_dropped(conn, plan_id)? {
         let st = derive_status(&statuses);
         conn.execute(db::PLAN_UPDATE_STATUS, params![st, plan_id])?;
     }
@@ -57,6 +55,14 @@ pub(super) fn sync_plan(conn: &Connection, plan_id: i64) -> Result<(), Error> {
         sync_milestone(conn, rid)?;
     }
     Ok(())
+}
+
+/// plan 是否被显式 `plan drop` 标记为手动终态（`manual_dropped = 1`，#497）。
+pub(super) fn is_manual_dropped(conn: &Connection, plan_id: i64) -> Result<bool, Error> {
+    let flag: Option<Option<i64>> = conn
+        .query_row(db::PLAN_MANUAL_DROPPED, params![plan_id], |r| r.get(0))
+        .optional()?;
+    Ok(flag.flatten() == Some(1))
 }
 
 /// 重算某 milestone 状态（plan 状态 + 直接挂 issue 状态合并）并写回。
@@ -85,13 +91,16 @@ pub(super) fn sync_milestone(conn: &Connection, milestone_id: i64) -> Result<(),
     Ok(())
 }
 
-/// 手动设置 plan 状态（丢弃空 plan → dropped）。
+/// 手动设置 plan 状态（丢弃空 plan → dropped，并落 `manual_dropped` 标记；#497）。
 pub fn set_plan_status(
     conn: &Connection,
     plan_id: i64,
     status: ContainerStatus,
 ) -> Result<(), Error> {
-    let affected = conn.execute(db::PLAN_UPDATE_STATUS, params![status, plan_id])?;
+    let affected = match status {
+        ContainerStatus::Dropped => conn.execute(db::PLAN_SET_MANUAL_DROP, params![plan_id])?,
+        _ => conn.execute(db::PLAN_UPDATE_STATUS, params![status, plan_id])?,
+    };
     if affected == 0 {
         return Err(Error::Other(format!("plan #{plan_id} not found")));
     }

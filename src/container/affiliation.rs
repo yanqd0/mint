@@ -6,7 +6,7 @@ use crate::db;
 use crate::error::Error;
 use crate::models::IssueSummary;
 
-use super::sync::{sync_container_status, sync_milestone, sync_plan};
+use super::sync::{is_manual_dropped, sync_container_status, sync_milestone, sync_plan};
 use super::{ContainerKind, get};
 
 /// 查询容器下的 issue 摘要。
@@ -124,10 +124,15 @@ pub fn unlink_direct(conn: &Connection, milestone_id: i64, issue_id: i64) -> Res
     })
 }
 
-/// 把 issue 挂到 plan 下（plan_id 外键）。plan 不存在报错。
+/// 把 issue 挂到 plan 下（plan_id 外键）。plan 不存在报错；手动 dropped 的 plan 拒绝挂载（#497）。
 pub fn set_issue_plan(conn: &Connection, issue_id: i64, plan_id: i64) -> Result<(), Error> {
     if get(conn, ContainerKind::Plan, plan_id)?.is_none() {
         return Err(Error::Other(format!("plan #{plan_id} not found")));
+    }
+    if is_manual_dropped(conn, plan_id)? {
+        return Err(Error::Other(format!(
+            "plan #{plan_id} is dropped; cannot attach issues"
+        )));
     }
     ensure_issue_exists(conn, issue_id)?;
     let (old_plans, old_milestones) = current_affiliations(conn, issue_id)?;

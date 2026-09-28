@@ -98,7 +98,7 @@ use crate::label;
 
 ## 数据模型约束
 
-- 9 表：`projects` / `issues` / `labels` / `issue_labels` / `machines` / `milestones` / `plans` / `milestone_direct_issues` / `issue_links`（另有 FTS5 虚表 `issues_fts`）。迁移由 `src/db/mod.rs` 的 `MIGRATIONS` 有序数组 + `CURRENT_VERSION` 驱动（**当前 v6；以该常量为准**，本文不写死版本号）。`machines`：`machine_id` 主键 + hostname/user（本机标识，多机同步用），见 `notes/DDD.md`。
+- 9 表：`projects` / `issues` / `labels` / `issue_labels` / `machines` / `milestones` / `plans` / `milestone_direct_issues` / `issue_links`（另有 FTS5 虚表 `issues_fts`）。迁移由 `src/db/mod.rs` 的 `MIGRATIONS` 有序数组 + `CURRENT_VERSION` 驱动（**当前 v7；以该常量为准**，本文不写死版本号）。`machines`：`machine_id` 主键 + hostname/user（本机标识，多机同步用），见 `notes/DDD.md`。
 - `issues`：`kind` 限 `problem|requirement|task`（DB 无 CHECK，由应用层 FromSql/ValueEnum 强校验）；`status` 限 `open|planned|dev|test|done|dropped`；`last_commit_id` 记最后关联 commit；`plan_id` 外键 → plans（一对多）。
 - 容器（`milestones`/`plans`）：`status` 限 `open|running|partial|dropped|done`（5 态派生，写后同步，CLI 只读）；milestones 有 `version`(UNIQUE) + `body`；plans 有 `body` + `milestone_id`。
 - `milestone_direct_issues`：复合主键 `(milestone_id,issue_id)`；issue 二选一（属 plan 后不能直接挂 milestone）。

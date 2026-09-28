@@ -211,3 +211,49 @@ fn derived_dropped_plan_rederives_on_reopen() {
         "issue 重开 → plan 重算（派生 dropped 不锁死）"
     );
 }
+
+/// #497：手动 drop 的空 plan 是终态——再 attach issue 报错（旧实现会复活为 open）。
+#[test]
+fn manual_dropped_plan_rejects_attach() {
+    let (conn, iid) = setup();
+    let pid = create(&conn, ContainerKind::Plan, "p", None, None, None).unwrap();
+    set_plan_status(&conn, pid, ContainerStatus::Dropped).unwrap();
+    let err = set_issue_plan(&conn, iid, pid).unwrap_err();
+    assert!(err.to_string().contains("is dropped"), "{err}");
+    assert_eq!(
+        get(&conn, ContainerKind::Plan, pid)
+            .unwrap()
+            .unwrap()
+            .status,
+        ContainerStatus::Dropped,
+        "拒绝 attach 后仍为 dropped"
+    );
+}
+
+/// #497 反向保护：派生 dropped 的 plan（无 manual_dropped 标记）在 issue 被删空后
+/// 重算回 open——旧实现按「空集合 + dropped」推断手动 drop，会把它永久钉死。
+#[test]
+fn derived_dropped_plan_reopens_when_emptied() {
+    let (conn, iid) = setup();
+    let pid = create(&conn, ContainerKind::Plan, "p", None, None, None).unwrap();
+    set_issue_plan(&conn, iid, pid).unwrap();
+    set_status(&conn, iid, "dropped");
+    sync_container_status(&conn, iid).unwrap();
+    assert_eq!(
+        get(&conn, ContainerKind::Plan, pid)
+            .unwrap()
+            .unwrap()
+            .status,
+        ContainerStatus::Dropped,
+        "全 dropped → 派生 dropped"
+    );
+    delete_issue(&conn, iid).unwrap();
+    assert_eq!(
+        get(&conn, ContainerKind::Plan, pid)
+            .unwrap()
+            .unwrap()
+            .status,
+        ContainerStatus::Open,
+        "删空后应重算回 open（派生 dropped 不钉死）"
+    );
+}

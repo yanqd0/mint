@@ -2,7 +2,7 @@
 
 use super::*;
 use rusqlite::Connection;
-/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=6（001-006）。
+/// 粗粒度 migration ST：空库首次 CLI 运行触发迁移，建表成功、user_version=7（001-007）。
 #[test]
 fn st_empty_db_initialized_current() {
     let (_dir, db) = empty_db();
@@ -11,7 +11,7 @@ fn st_empty_db_initialized_current() {
     let version: i32 = conn
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 6);
+    assert_eq!(version, 7);
 }
 
 /// 一次性迁移：旧单一 db 自动拆分到多项目 db + .bak 备份，只做一次。
