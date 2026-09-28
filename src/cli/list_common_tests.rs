@@ -107,14 +107,15 @@ fn issue_detail_columns_plan_links_and_body_escape() {
         rel: "related".into(),
         created_at: "t".into(),
     }];
-    let (headers, rows) = issue_detail(&i);
+    let (headers, rows) = issue_detail(&i, Some(9));
     assert_eq!(
         headers.join(","),
-        "ID,Status,Kind,Priority,Title,Plan,Labels,TestCmd,Dropped,Commit,Links,Created,Updated,Body"
+        "ID,Status,Kind,Priority,Title,Plan,Milestone,Labels,TestCmd,Dropped,Commit,Links,Created,Updated,Body"
     );
     assert_eq!(rows[0][5], "#7"); // plan 只显 #N
-    assert_eq!(rows[0][10], "1"); // links 数量
-    assert_eq!(rows[0][13], "line1\\nline2\\ttab"); // body 末列：换行/tab 转可见转义（#478）
+    assert_eq!(rows[0][6], "#9"); // milestone（#489）
+    assert_eq!(rows[0][11], "1"); // links 数量
+    assert_eq!(rows[0][14], "line1\\nline2\\ttab"); // body 末列：换行/tab 转可见转义（#478）
 }
 
 #[test]

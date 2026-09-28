@@ -137,6 +137,7 @@ mod list;
 mod list_search;
 mod migrate;
 mod milestone;
+mod milestone_attribution;
 mod plan;
 mod plan_ext;
 mod plan_list;

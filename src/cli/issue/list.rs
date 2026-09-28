@@ -1,5 +1,7 @@
 //! Issue 列表/搜索/详情（list/search/show）。
 
+use std::collections::HashMap;
+
 use rusqlite::Connection;
 
 use crate::cli::issue::search_filter;
@@ -28,6 +30,9 @@ pub struct ListArgs {
     /// Filter by plan id
     #[arg(long)]
     pub plan: Option<i64>,
+    /// Filter by milestone id (effective: direct milestone, else the issue's plan's)
+    #[arg(long)]
+    pub milestone: Option<i64>,
     /// Filter by label name
     #[arg(long)]
     pub label: Option<String>,
@@ -135,6 +140,11 @@ pub fn cmd_list(conn: &Connection, _project: &str, l: &ListArgs) -> Result<(), E
     if let Some(q) = l.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         issues.retain(|i| search_filter::issue_matches(i, q));
     }
+    // --milestone 过滤（#489）：按有效 milestone（直属优先，否则所属 plan 的）。
+    if let Some(mid) = l.milestone {
+        let map = effective_milestones(conn)?;
+        issues.retain(|i| map.get(&i.id).copied().flatten() == Some(mid));
+    }
     let (issues, total, page) = paginate(
         issues,
         l.page,
@@ -201,6 +211,24 @@ pub(crate) fn issue_to_json(i: &Issue) -> serde_json::Value {
     })
 }
 
+/// 有效 milestone：直属挂载优先，否则所属 plan 的（#489，无归属为 None）。
+pub(crate) fn effective_milestone(conn: &Connection, id: i64) -> Result<Option<i64>, Error> {
+    Ok(
+        conn.query_row(db::ISSUE_EFFECTIVE_MILESTONE, rusqlite::params![id], |r| {
+            r.get(0)
+        })?,
+    )
+}
+
+/// issue_id → 有效 milestone 映射（`list --milestone` 过滤用）。
+fn effective_milestones(conn: &Connection) -> Result<HashMap<i64, Option<i64>>, Error> {
+    let mut stmt = conn.prepare(db::ISSUE_EFFECTIVE_MILESTONES)?;
+    let rows = stmt.query_map([], |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?))
+    })?;
+    Ok(rows.collect::<Result<HashMap<_, _>, _>>()?)
+}
+
 pub fn cmd_show(conn: &Connection, _project: &str, s: &ShowArgs) -> Result<(), Error> {
     let id = s.id;
     let issue = conn
@@ -213,11 +241,14 @@ pub fn cmd_show(conn: &Connection, _project: &str, s: &ShowArgs) -> Result<(), E
     let mut issue = issue;
     issue.labels = label::names_for_issue(conn, id)?;
     issue.links = link::links_for(conn, id)?;
+    let milestone = effective_milestone(conn, id)?;
 
     if s.json {
-        println!("{}", serde_json::to_string(&issue)?);
+        let mut v = serde_json::to_value(&issue)?;
+        v["milestone_id"] = serde_json::json!(milestone);
+        println!("{}", serde_json::to_string(&v)?);
     } else {
-        let (headers, rows) = crate::cli::list_common::issue_detail(&issue);
+        let (headers, rows) = crate::cli::list_common::issue_detail(&issue, milestone);
         print!("{}", output::format_tsv(&headers, &rows));
     }
     Ok(())

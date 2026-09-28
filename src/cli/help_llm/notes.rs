@@ -13,6 +13,7 @@ pub(super) const CONVENTIONS: &[&str] = &[
     "  Output: TSV by default on list/show; --json on read commands; `get <ID> <FIELD>` prints a bare value (use for body).",
     "  Body: show renders body as one escaped TSV line (\\t/\\n/\\r); `get <ID> body` returns raw text.",
     "  Body edit: --body-append adds a block; --body-file replaces from a file; --body-section replaces one section.",
+    "  Milestone: show/get <ID> milestone/list --milestone use the effective milestone (direct, else via plan).",
     "  Paging: default 5 rows; --page-size N / --page N / --no-page; a \"# Page x/y ...\" footer on stdout, not stderr.",
     "  Batch: state transitions and container batch commands take one or more IDs (invalid ones are skipped and reported).",
     "  Errors: \"mint: error: ...\" on stderr; exit 0 = ok, 1 = runtime error, 2 = usage error.",

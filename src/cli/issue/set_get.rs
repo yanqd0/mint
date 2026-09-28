@@ -7,13 +7,13 @@ use crate::db;
 use crate::error::Error;
 use crate::label;
 
-use super::list::issue_from_row;
+use super::list::{effective_milestone, issue_from_row};
 
 #[derive(clap::Args)]
 pub struct GetArgs {
     pub id: i64,
     /// Field name: id, title, body, kind, status, priority, project,
-    /// test_cmd, dropped_reason, last_commit_id, plan_id, hit_count,
+    /// test_cmd, dropped_reason, last_commit_id, plan_id, milestone, hit_count,
     /// labels, created_at, updated_at
     pub field: String,
     /// Output as JSON
@@ -51,7 +51,8 @@ pub fn cmd_get(conn: &Connection, g: &GetArgs) -> Result<(), Error> {
     let mut issue = issue;
     issue.labels = label::names_for_issue(conn, g.id)?;
 
-    let value = field_value(&issue, &g.field)?;
+    let milestone = effective_milestone(conn, g.id)?;
+    let value = field_value(&issue, milestone, &g.field)?;
     if g.json {
         println!(
             "{}",
@@ -123,7 +124,11 @@ fn fetch_body(conn: &Connection, id: i64) -> Result<String, Error> {
         })
 }
 
-fn field_value(issue: &crate::models::Issue, field: &str) -> Result<String, Error> {
+fn field_value(
+    issue: &crate::models::Issue,
+    milestone: Option<i64>,
+    field: &str,
+) -> Result<String, Error> {
     match field {
         "id" => Ok(issue.id.to_string()),
         "title" => Ok(issue.title.clone()),
@@ -136,6 +141,7 @@ fn field_value(issue: &crate::models::Issue, field: &str) -> Result<String, Erro
         "dropped_reason" => Ok(issue.dropped_reason.clone().unwrap_or_default()),
         "last_commit_id" => Ok(issue.last_commit_id.clone().unwrap_or_default()),
         "plan_id" => Ok(issue.plan_id.map(|v| v.to_string()).unwrap_or_default()),
+        "milestone" => Ok(milestone.map(|v| v.to_string()).unwrap_or_default()),
         "hit_count" => Ok(issue.hit_count.to_string()),
         "labels" => Ok(issue.labels.join(",")),
         "created_at" => Ok(issue.created_at.clone()),
