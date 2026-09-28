@@ -92,6 +92,15 @@ else
   printf '%s\n' "$OVER" | sed 's/^/     /'
 fi
 
+# ── 6. 生成物不入库：.tmp-test/（测试 TMPDIR）应被 .gitignore 覆盖（#500）──
+TRACKED_TMP="$(git ls-files .tmp-test 2>/dev/null)"
+if [ -z "$TRACKED_TMP" ]; then
+  ok "生成物未入库（.tmp-test/ 已忽略）"
+else
+  err ".tmp-test/ 不应入库（测试生成物；清理：git rm -r --cached .tmp-test）"
+  printf '%s\n' "$TRACKED_TMP" | head -5 | sed 's/^/     /'
+fi
+
 say ""
 if [ "$FAIL" = "0" ]; then
   say "🎉 precheck 全部通过（${VERSION}）"
