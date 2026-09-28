@@ -78,23 +78,74 @@ fn heading(line: &str) -> Option<(usize, &str)> {
     Some((level, text.trim()))
 }
 
+/// 围栏代码块感知的标题位置（#494）：返回 (行号, 层级)，**跳过围栏内**的行——
+/// 否则围栏内的 `#` 行会被当成分节边界，连围栏一起被删。
+/// 围栏规则：行首缩进 ≤3 空格 + ≥3 个 ``` 或 ~~~；闭合需同字符且长度 ≥ 开启；
+/// 未闭合围栏按 CommonMark 延伸至文末（其后不再识别标题）。
+fn heading_positions(lines: &[&str]) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut fence: Option<(char, usize)> = None;
+    for (i, l) in lines.iter().enumerate() {
+        if let Some((fc, flen)) = fence {
+            if is_fence_close(l, fc, flen) {
+                fence = None;
+            }
+            continue;
+        }
+        if let Some(open) = fence_open(l) {
+            fence = Some(open);
+            continue;
+        }
+        if let Some((lv, _)) = heading(l) {
+            out.push((i, lv));
+        }
+    }
+    out
+}
+
+/// 围栏开启判定：返回 (围栏字符, 长度)；缩进 >3 空格或不足 3 连字符 → None。
+fn fence_open(line: &str) -> Option<(char, usize)> {
+    let indent = line.len() - line.trim_start_matches(' ').len();
+    if indent > 3 {
+        return None;
+    }
+    let rest = &line[indent..];
+    let ch = rest.chars().next()?;
+    if ch != '`' && ch != '~' {
+        return None;
+    }
+    let len = rest.chars().take_while(|c| *c == ch).count();
+    (len >= 3).then_some((ch, len))
+}
+
+/// 围栏闭合判定：同字符 + 长度 ≥ 开启长度 + 其后仅空白。
+fn is_fence_close(line: &str, ch: char, open_len: usize) -> bool {
+    let indent = line.len() - line.trim_start_matches(' ').len();
+    if indent > 3 {
+        return false;
+    }
+    let rest = &line[indent..];
+    let len = rest.chars().take_while(|c| *c == ch).count();
+    len >= open_len && rest[len..].trim().is_empty()
+}
+
 /// 替换标题文字等于 `heading_text` 的段落内容（保留原标题行）。
-/// 段落范围：标题行之后，直到下一个「层级 ≤ 本层级」的标题行或文末。
+/// 段落范围：标题行之后，直到下一个「层级 ≤ 本层级」的标题行或文末；围栏内的行不参与分节。
 /// 找不到该标题 → 报错（不做隐式新增；新增段落用 `--body-append`）。
 fn replace_section(body: &str, heading_text: &str, content: &str) -> Result<String, Error> {
     let lines: Vec<&str> = body.split('\n').collect();
     let target = heading_text.trim();
-    let Some((start, level)) = lines.iter().enumerate().find_map(|(i, l)| {
-        heading(l)
-            .filter(|(_, t)| *t == target)
-            .map(|(lv, _)| (i, lv))
-    }) else {
+    let positions = heading_positions(&lines);
+    let Some(&(start, level)) = positions
+        .iter()
+        .find(|&&(i, _)| heading(lines[i]).is_some_and(|(_, t)| t == target))
+    else {
         return Err(Error::Other(format!("section not found: {target}")));
     };
-    let end = lines[start + 1..]
+    let end = positions
         .iter()
-        .position(|l| heading(l).is_some_and(|(lv, _)| lv <= level))
-        .map_or(lines.len(), |off| start + 1 + off);
+        .find(|&&(i, lv)| i > start && lv <= level)
+        .map_or(lines.len(), |&(i, _)| i);
     let mut out: Vec<&str> = lines[..=start].to_vec();
     if !content.is_empty() {
         out.extend(content.split('\n'));
@@ -174,6 +225,35 @@ mod tests {
             replace_section(body, "A", "z").unwrap(),
             "## A\nz\n## B\ny\n"
         );
+    }
+
+    /// #494：围栏代码块内的 `#` 行不作分节边界，围栏与内容原样保留。
+    #[test]
+    fn replace_section_skips_headings_in_fenced_code() {
+        let body = "## A\nx\n```sh\n# not a heading\necho hi\n```\n## B\ny\n";
+        assert_eq!(
+            replace_section(body, "A", "z").unwrap(),
+            "## A\nz\n## B\ny\n"
+        );
+    }
+
+    /// #494：波浪线围栏与缩进 ≤3 空格的围栏同样识别；围栏内的目标标题不作为命中。
+    #[test]
+    fn replace_section_handles_tilde_and_indented_fences() {
+        let body = "## A\nx\n  ~~~\n# c\n  ~~~\n## B\ny\n";
+        assert_eq!(
+            replace_section(body, "A", "z").unwrap(),
+            "## A\nz\n## B\ny\n"
+        );
+        let err = replace_section("## A\n```\n# 目标\n```\n", "目标", "z").unwrap_err();
+        assert!(err.to_string().contains("section not found"), "{err}");
+    }
+
+    /// #494：未闭合围栏按 CommonMark 延伸至文末——其后不再识别标题（含 ## B）。
+    #[test]
+    fn replace_section_unclosed_fence_runs_to_eof() {
+        let body = "## A\nx\n```\n# c\n## B\ny\n";
+        assert_eq!(replace_section(body, "A", "z").unwrap(), "## A\nz");
     }
 
     /// --body-section：空内容即清空该段；找不到标题报错。
