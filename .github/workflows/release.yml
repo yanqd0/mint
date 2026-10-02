@@ -289,6 +289,9 @@ jobs:
       PLAN: ${{ needs.plan.outputs.val }}
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Fetch npm packages
         uses: actions/download-artifact@v8
         with:
@@ -303,7 +306,14 @@ jobs:
           npm install -g npm@11   # OIDC 发布需 npm >= 11.5.1（Node 22 自带 npm 10 不足）
           for release in $(echo "$PLAN" | jq --compact-output '.releases[] | select([.artifacts[] | endswith("-npm-package.tar.gz")] | any)'); do
             pkg=$(echo "$release" | jq '.artifacts[] | select(endswith("-npm-package.tar.gz"))' --raw-output)
-            npm publish --access public --provenance "./npm/${pkg}"
+            work=$(mktemp -d)
+            tar -xzf "./npm/${pkg}" -C "$work"
+            # #504：cargo-dist 生成的安装器并发首次安装会互相破坏，发布前重写为「锁 + 暂存 + 原子 rename」
+            node scripts/npm/patch-installer.mjs "$work/package"
+            # 用 tar 重打包（而非 npm pack）：保持 dist 产物内容逐字节不变，只改 binary-install.js
+            tgz="$work/mint-faa-npm-package.tgz"
+            tar -czf "$tgz" -C "$work" package
+            npm publish --access public --provenance "$tgz"
           done
 
   publish-npm-github:
@@ -320,6 +330,9 @@ jobs:
       PLAN: ${{ needs.plan.outputs.val }}
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Fetch npm packages
         uses: actions/download-artifact@v8
         with:
@@ -340,6 +353,8 @@ jobs:
             work=$(mktemp -d)
             tar -xzf "$pkgpath" -C "$work"
             pkgdir="$work/package"
+            # #504：与 npmjs 同一补丁（锁 + 暂存 + 原子 rename）
+            node scripts/npm/patch-installer.mjs "$pkgdir"
             # 改 scoped 包名（@yanqd0/mint-faa）后重新 pack 发布到 GitHub Packages
             node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('$pkgdir/package.json'));p.name='@yanqd0/mint-faa';fs.writeFileSync('$pkgdir/package.json',JSON.stringify(p,null,2))"
             (cd "$pkgdir" && npm pack --silent)
