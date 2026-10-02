@@ -7,6 +7,7 @@
 #   - 预发布版（-alpha.N / -beta.N）：不碰 plugin 版本，跳过版本一致性检查。
 #   - CHANGELOG：正式版必须有 `## <version>` 当前段；预发布版跳过。
 #   - lint：sqruff（SQL）+ clippy + fmt 全绿。
+#   - npm 安装器（#504）：node 可用时跑 scripts/npm/*.test.mjs（补丁锚点 + 并发行为）。
 #   - 文件行数：src/ tests/ 下无超过 300 行的 .rs（src/AGENTS.md 规范）。
 #
 # 用法：scripts/precheck.sh
@@ -83,7 +84,18 @@ else
   err "cargo clippy 失败"
 fi
 
-# ── 5. 文件行数（src/AGENTS.md 规范：无超过 300 行的 .rs）─────────
+# ── 5. npm 安装器补丁/并发测试（#504；无 node 时降级为提示）──────
+if command -v node >/dev/null 2>&1; then
+  if TMPDIR="$PWD/.tmp-test" node --test scripts/npm/*.test.mjs >/dev/null 2>&1; then
+    ok "npm 安装器测试通过（scripts/npm/*.test.mjs）"
+  else
+    err "npm 安装器测试失败（运行：TMPDIR=\$PWD/.tmp-test node --test scripts/npm/*.test.mjs）"
+  fi
+else
+  warn "node 未安装，跳过 npm 安装器测试"
+fi
+
+# ── 6. 文件行数（src/AGENTS.md 规范：无超过 300 行的 .rs）─────────
 OVER="$(find src tests -name '*.rs' -print0 | xargs -0 wc -l | awk '$1 > 300 && $2 != "total" { print $1 " " $2 }' | sort -rn)"
 if [ -z "$OVER" ]; then
   ok "文件行数规范（全部 .rs ≤300 行）"
@@ -92,7 +104,7 @@ else
   printf '%s\n' "$OVER" | sed 's/^/     /'
 fi
 
-# ── 6. 生成物不入库：.tmp-test/（测试 TMPDIR）应被 .gitignore 覆盖（#500）──
+# ── 7. 生成物不入库：.tmp-test/（测试 TMPDIR）应被 .gitignore 覆盖（#500）──
 TRACKED_TMP="$(git ls-files .tmp-test 2>/dev/null)"
 if [ -z "$TRACKED_TMP" ]; then
   ok "生成物未入库（.tmp-test/ 已忽略）"

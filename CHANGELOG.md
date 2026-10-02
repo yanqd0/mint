@@ -1,5 +1,16 @@
 # Change Log
 
+## 0.8.1
+
+### Bug Fixes
+
+- The npm launcher (`mint-faa`) no longer corrupts a cold first install when several `mint` invocations start at once: installs of a package directory are serialized by a lock, unpacked into a private staging directory, and committed with an atomic rename, so a concurrent caller can neither delete an in-flight install nor observe a half-written binary (#504).
+
+### Others
+
+- The npm package is now patched at release time (`scripts/npm/patch-installer.mjs`), with anchor checks that fail the release loudly when a cargo-dist upgrade changes the generated launcher instead of publishing an unpatched installer; the behaviour is covered by `node --test scripts/npm/*.test.mjs` in CI and by `scripts/precheck.sh` when Node is available (D47).
+- `docs/RELEASING.md` documents the npm installer patch and the verified pre-release registry behaviour (pre-releases are skipped by all three registries).
+
 ## 0.8.0
 
 ### Features
