@@ -91,3 +91,65 @@ fn st_list_milestone_filter() {
     assert_eq!(ids(&["list", "--milestone", "1", "--json"]), vec![a]);
     assert_eq!(ids(&["list", "--milestone", "2", "--json"]), vec![b]);
 }
+
+/// #503：list/search --json 带有效 milestone + 直挂标记，默认 TSV 末列 `Milestone`。
+#[test]
+fn st_list_output_carries_effective_milestone() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["milestone", "create", "ms1", "--version", "1.0.0", "--json"],
+    );
+    let direct = add_issue(&db, "direct");
+    run_json(
+        &db,
+        &["milestone", "attach", "1", &direct.to_string(), "--json"],
+    );
+    run_json(&db, &["plan", "create", "p", "--milestone", "1", "--json"]);
+    let inherited = add_issue(&db, "inherited");
+    run_json(
+        &db,
+        &["plan", "attach", "1", &inherited.to_string(), "--json"],
+    );
+    let plain = add_issue(&db, "plain");
+
+    let items = run_json(&db, &["list", "--no-page", "--json"]);
+    let item = |id: i64| -> serde_json::Value {
+        items["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["id"].as_i64() == Some(id))
+            .cloned()
+            .expect("缺 issue item")
+    };
+    assert_eq!(item(direct)["milestone_id"], 1);
+    assert_eq!(item(direct)["milestone_direct"], true);
+    assert_eq!(item(inherited)["milestone_id"], 1);
+    assert_eq!(item(inherited)["milestone_direct"], false);
+    assert_eq!(item(plain)["milestone_id"], serde_json::Value::Null);
+    assert_eq!(item(plain)["milestone_direct"], false);
+
+    // search --json 与 list 同一 item schema。
+    let hit = run_json(&db, &["search", "direct", "--no-page", "--json"]);
+    assert_eq!(hit["items"][0]["milestone_id"], 1);
+    assert_eq!(hit["items"][0]["milestone_direct"], true);
+
+    // 默认 TSV：末列 `Milestone`（直挂与经 plan 同为 `#1`，无归属为空）。
+    let text = run_ok(&db, &["list", "--no-page"]);
+    let cols: Vec<&str> = text.lines().next().unwrap().split('\t').collect();
+    assert_eq!(cols.last().copied(), Some("Milestone"), "表头: {text}");
+    let midx = cols.len() - 1;
+    let cell = |title: &str| -> String {
+        text.lines()
+            .find(|l| l.contains(title))
+            .unwrap()
+            .split('\t')
+            .nth(midx)
+            .unwrap()
+            .to_string()
+    };
+    assert_eq!(cell("direct"), "#1");
+    assert_eq!(cell("inherited"), "#1");
+    assert_eq!(cell("plain"), "");
+}

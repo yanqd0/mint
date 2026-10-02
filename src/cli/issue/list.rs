@@ -1,6 +1,6 @@
 //! Issue 列表/搜索/详情（list/search/show）。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite::Connection;
 
@@ -141,9 +141,10 @@ pub fn cmd_list(conn: &Connection, _project: &str, l: &ListArgs) -> Result<(), E
         issues.retain(|i| search_filter::issue_matches(i, q));
     }
     // --milestone 过滤（#489）：按有效 milestone（直属优先，否则所属 plan 的）。
+    // 该映射同时供 JSON/TSV 输出字段（#503），故先算一次、三处共用。
+    let effective = effective_milestones(conn)?;
     if let Some(mid) = l.milestone {
-        let map = effective_milestones(conn)?;
-        issues.retain(|i| map.get(&i.id).copied().flatten() == Some(mid));
+        issues.retain(|i| effective.get(&i.id).copied().flatten() == Some(mid));
     }
     let (issues, total, page) = paginate(
         issues,
@@ -153,10 +154,20 @@ pub fn cmd_list(conn: &Connection, _project: &str, l: &ListArgs) -> Result<(), E
     let page_size = effective_page_size(l.no_page, l.page_size, total);
 
     if l.json {
-        let items: Vec<serde_json::Value> = issues.iter().map(issue_to_json).collect();
+        let direct = direct_issue_ids(conn)?;
+        let items: Vec<serde_json::Value> = issues
+            .iter()
+            .map(|i| {
+                issue_to_json(
+                    i,
+                    effective.get(&i.id).copied().flatten(),
+                    direct.contains(&i.id),
+                )
+            })
+            .collect();
         println!("{}", paged_json(&items, page, page_size, total));
     } else {
-        let (headers, rows) = crate::cli::list_common::issues(&issues);
+        let (headers, rows) = crate::cli::list_common::issues(&issues, &effective);
         print!("{}", crate::output::format_tsv(&headers, &rows));
         print_page_footer(page, page_size, total);
     }
@@ -200,12 +211,14 @@ pub fn fill_labels(conn: &Connection, issues: &mut [Issue]) -> Result<(), Error>
 }
 
 /// JSON 序列化 issue（list 视图：永远不包含 body）。
-pub(crate) fn issue_to_json(i: &Issue) -> serde_json::Value {
+/// `milestone` 为有效 milestone（直属优先，否则所属 plan 的），`direct` 标记其是否来自直挂（#503）。
+pub(crate) fn issue_to_json(i: &Issue, milestone: Option<i64>, direct: bool) -> serde_json::Value {
     serde_json::json!({
         "id": i.id, "title": i.title, "kind": i.kind, "status": i.status,
         "priority": i.priority, "project": i.project,
         "test_cmd": i.test_cmd, "dropped_reason": i.dropped_reason,
         "last_commit_id": i.last_commit_id, "plan_id": i.plan_id,
+        "milestone_id": milestone, "milestone_direct": direct,
         "hit_count": i.hit_count, "labels": i.labels, "links": i.links,
         "created_at": i.created_at, "updated_at": i.updated_at,
     })
@@ -220,13 +233,22 @@ pub(crate) fn effective_milestone(conn: &Connection, id: i64) -> Result<Option<i
     )
 }
 
-/// issue_id → 有效 milestone 映射（`list --milestone` 过滤用）。
-fn effective_milestones(conn: &Connection) -> Result<HashMap<i64, Option<i64>>, Error> {
+/// issue_id → 有效 milestone 映射（`list --milestone` 过滤 + JSON/TSV 输出用，#489/#503）。
+pub(crate) fn effective_milestones(conn: &Connection) -> Result<HashMap<i64, Option<i64>>, Error> {
     let mut stmt = conn.prepare(db::ISSUE_EFFECTIVE_MILESTONES)?;
     let rows = stmt.query_map([], |r| {
         Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?))
     })?;
     Ok(rows.collect::<Result<HashMap<_, _>, _>>()?)
+}
+
+/// 直挂 milestone 的 issue id 集合（`list`/`search --json` 的 `milestone_direct` 标记用，#503）。
+/// 历史重复直挂天然去重（集合只关心「有无直挂」，取值由有效 milestone 的 `MIN` 口径决定）。
+pub(crate) fn direct_issue_ids(conn: &Connection) -> Result<HashSet<i64>, Error> {
+    let mut stmt = conn.prepare(db::MILESTONE_DIRECTS_ALL)?;
+    // 列序 (milestone_id, issue_id)：取第 2 列。
+    let rows = stmt.query_map([], |r| r.get::<_, i64>(1))?;
+    Ok(rows.collect::<Result<HashSet<_>, _>>()?)
 }
 
 pub fn cmd_show(conn: &Connection, _project: &str, s: &ShowArgs) -> Result<(), Error> {

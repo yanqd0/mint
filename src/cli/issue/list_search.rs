@@ -6,7 +6,9 @@ use crate::db;
 use crate::error::Error;
 use crate::models::{Issue, Kind, Status};
 
-use super::list::{SearchArgs, fill_labels, issue_from_row, issue_to_json};
+use super::list::{
+    SearchArgs, direct_issue_ids, effective_milestones, fill_labels, issue_from_row, issue_to_json,
+};
 use crate::cli::issue::search_filter;
 use crate::cli::list_common::{effective_page_size, paged_json, paginate, print_page_footer};
 
@@ -87,6 +89,8 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
     if let Some(pid) = plan {
         issues.retain(|i| i.plan_id == Some(pid));
     }
+    // 有效 milestone 映射（#503）：JSON 与 TSV 输出字段同源（搜索无 --milestone 过滤）。
+    let effective = effective_milestones(conn)?;
     let (issues, total, page) = paginate(
         issues,
         s.page,
@@ -95,10 +99,20 @@ pub fn cmd_search(conn: &Connection, project: &str, s: &SearchArgs) -> Result<()
     let page_size = effective_page_size(s.no_page, s.page_size, total);
 
     if s.json {
-        let items: Vec<serde_json::Value> = issues.iter().map(issue_to_json).collect();
+        let direct = direct_issue_ids(conn)?;
+        let items: Vec<serde_json::Value> = issues
+            .iter()
+            .map(|i| {
+                issue_to_json(
+                    i,
+                    effective.get(&i.id).copied().flatten(),
+                    direct.contains(&i.id),
+                )
+            })
+            .collect();
         println!("{}", paged_json(&items, page, page_size, total));
     } else {
-        let (headers, rows) = crate::cli::list_common::issues(&issues);
+        let (headers, rows) = crate::cli::list_common::issues(&issues, &effective);
         print!("{}", crate::output::format_tsv(&headers, &rows));
         print_page_footer(page, page_size, total);
     }

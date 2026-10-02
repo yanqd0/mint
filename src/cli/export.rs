@@ -44,10 +44,19 @@ pub fn cmd_export(conn: &Connection, a: &ExportArgs) -> Result<(), Error> {
         .prepare(crate::db::MILESTONE_DIRECTS_ALL)?
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
         .collect::<Result<_, _>>()?;
+    // 有效 milestone 映射（#503）：TSV issues 段末列 `Milestone` 用（JSON 段由 Issue 自身字段表达）。
+    let effective_milestones = cli::issue::list::effective_milestones(conn)?;
 
     match a.format {
         ExportFormat::Json => print_json(&issues, &plans, &milestones, &labels, &milestone_directs),
-        ExportFormat::Tsv => print_tsv(&issues, &plans, &milestones, &labels, &milestone_directs),
+        ExportFormat::Tsv => print_tsv(
+            &issues,
+            &plans,
+            &milestones,
+            &labels,
+            &milestone_directs,
+            &effective_milestones,
+        ),
         ExportFormat::Sql => unreachable!("Sql 已短路"),
     }?;
     Ok(())
@@ -108,9 +117,10 @@ fn print_tsv(
     milestones: &[(Container, i64)],
     labels: &[(Label, i64)],
     milestone_directs: &[(i64, i64)],
+    effective_milestones: &std::collections::HashMap<i64, Option<i64>>,
 ) -> Result<(), Error> {
     println!("# issues");
-    let (headers, rows) = crate::cli::list_common::issues(issues);
+    let (headers, rows) = crate::cli::list_common::issues(issues, effective_milestones);
     print!("{}", output::format_tsv(&headers, &rows));
 
     println!("\n# plans");

@@ -249,7 +249,7 @@ fn st_default_output_tsv() {
     let text = String::from_utf8_lossy(&out).to_string();
     let lines: Vec<&str> = text.lines().collect();
     assert_eq!(
-        lines[0], "ID\tP\tKind\tStatus\tTitle\tLabels\tPlan\tUpdated",
+        lines[0], "ID\tP\tKind\tStatus\tTitle\tLabels\tPlan\tUpdated\tMilestone",
         "表头: {text}"
     );
     assert!(

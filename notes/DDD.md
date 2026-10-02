@@ -88,6 +88,8 @@ issue/plan 之上的**聚合容器**。概念层级：`roadmap`（上位抽象�
 
 数据库化的**版本节点**：对应项目进展、软件版本、git tag。关键字段 `version`（如 `0.1.0`，支持任意用户版本形式，UNIQUE）。milestone 除自身的复杂描述（body）外，主要**关联 plan**（版本方向的拆解）；也可直接挂不属于任何 plan 的 issue（`milestone_direct_issues`，**至多一条直挂**——写侧 `milestone attach` 拒绝第二条（#496），读侧有效 milestone 子查询对历史重复取 `MIN(milestone_id)` 保证确定）。CLI：`mint milestone`。
 
+**机器可读归属**（#503）：`list`/`search --json` 的 issue item 带 `milestone_id`（有效 milestone）与 `milestone_direct`（是否直挂）；默认 TSV 末列 `Milestone`（`#N`，只追加、既有列索引不变）。消费方无需逐 milestone 反查；plan version 不下发（`plan_id` + milestone 字典已足够表达 `#14 (0.2.0)`）。
+
 ### Plan（计划）
 
 编程 agent 的**执行计划**：记录标题 + 完整 markdown 信息（body），主要**关联多个 issue**（issues.plan_id）。程序化承载 mint-dogfood skill 的"多 issue plan 统一测试"模式——plan 记录拆解、issue 分批推进、全绿后统一 `close`。

@@ -58,19 +58,33 @@ fn issues_columns_and_labels_join() {
     i.priority = 0;
     i.plan_id = Some(7);
     i.labels = vec!["dev".into(), "urgent".into()];
-    let (headers, rows) = issues(&[i]);
+    let (headers, rows) = issues(&[i], &std::collections::HashMap::new());
     assert_eq!(
         headers.join(","),
-        "ID,P,Kind,Status,Title,Labels,Plan,Updated"
+        "ID,P,Kind,Status,Title,Labels,Plan,Updated,Milestone"
     );
-    assert_eq!(rows[0].join(","), "3,0,problem,done,hello,dev,urgent,#7,t");
+    assert_eq!(rows[0].join(","), "3,0,problem,done,hello,dev,urgent,#7,t,");
 }
 
 #[test]
 fn issues_empty() {
-    let (headers, rows) = issues(&[]);
-    assert_eq!(headers.len(), 8);
+    let (headers, rows) = issues(&[], &std::collections::HashMap::new());
+    assert_eq!(headers.len(), 9);
     assert!(rows.is_empty());
+}
+
+/// 末列 `Milestone`（#503）：有效 milestone 映射有值 → `#N`；None / 缺项 → 空。
+#[test]
+fn issues_milestone_column_from_effective_map() {
+    let mut ms = std::collections::HashMap::new();
+    ms.insert(4, Some(13));
+    ms.insert(5, None);
+    let (_, rows) = issues(&[mk_issue(4, "direct", Status::Open)], &ms);
+    assert_eq!(rows[0][8], "#13");
+    let (_, rows) = issues(&[mk_issue(5, "plan-without-milestone", Status::Open)], &ms);
+    assert_eq!(rows[0][8], "");
+    let (_, rows) = issues(&[mk_issue(6, "unknown", Status::Open)], &ms);
+    assert_eq!(rows[0][8], "");
 }
 
 #[test]

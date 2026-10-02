@@ -92,6 +92,11 @@ fn st_export_tsv_sections() {
     assert!(text.contains("# plans"), "缺 plans 段: {text}");
     assert!(text.contains("# milestones"), "缺 milestones 段: {text}");
     assert!(text.contains("# labels"), "缺 labels 段: {text}");
+    // #503：issues 段表头末列 `Milestone`。
+    assert!(
+        text.contains("Updated\tMilestone"),
+        "issues 段缺 Milestone 列: {text}"
+    );
     assert!(text.contains("x"), "缺 issue 数据: {text}");
     assert!(text.contains("p"), "缺 plan 数据: {text}");
 }

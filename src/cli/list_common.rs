@@ -109,10 +109,22 @@ pub(crate) fn print_page_footer(page: u32, page_size: u32, total: usize) {
 
 // ── 列矩阵转换（数据 → 表头 + 行，供默认 TSV 与 --tui 共用）────
 
-/// Issue 列表 → (表头, 行矩阵)；列序在既有 6 列后追加 `Plan`(#N)/`Updated`（#463）。
-pub(crate) fn issues(items: &[Issue]) -> (Vec<String>, Vec<Vec<String>>) {
+/// Issue 列表 → (表头, 行矩阵)；列序在既有 6 列后追加 `Plan`(#N)/`Updated`（#463），
+/// 再追加 `Milestone`(#N，有效 milestone，空=无，#503)——只追加、既有列索引不变。
+pub(crate) fn issues(
+    items: &[Issue],
+    milestones: &std::collections::HashMap<i64, Option<i64>>,
+) -> (Vec<String>, Vec<Vec<String>>) {
     let headers: Vec<String> = [
-        "ID", "P", "Kind", "Status", "Title", "Labels", "Plan", "Updated",
+        "ID",
+        "P",
+        "Kind",
+        "Status",
+        "Title",
+        "Labels",
+        "Plan",
+        "Updated",
+        "Milestone",
     ]
     .into_iter()
     .map(String::from)
@@ -126,6 +138,12 @@ pub(crate) fn issues(items: &[Issue]) -> (Vec<String>, Vec<Vec<String>>) {
                 i.labels.join(",")
             };
             let plan = i.plan_id.map(|p| format!("#{p}")).unwrap_or_default();
+            let milestone = milestones
+                .get(&i.id)
+                .copied()
+                .flatten()
+                .map(|m| format!("#{m}"))
+                .unwrap_or_default();
             vec![
                 i.id.to_string(),
                 i.priority.to_string(),
@@ -135,6 +153,7 @@ pub(crate) fn issues(items: &[Issue]) -> (Vec<String>, Vec<Vec<String>>) {
                 labels,
                 plan,
                 i.updated_at.clone(),
+                milestone,
             ]
         })
         .collect();
