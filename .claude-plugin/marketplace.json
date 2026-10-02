@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "mint issue tracker plugins for Claude Code — mint-faa (English) and mint-faa-cn (中文). Install one of the two.",
-    "version": "0.8.0"
+    "version": "0.8.1"
   },
   "plugins": [
     {
