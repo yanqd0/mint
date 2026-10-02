@@ -578,3 +578,23 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 **理由**：① 实测显示压缩来自"不逐参数抄 help"而非换格式，TSV 的额外收益不足以抵消可照抄性损失（与 D45 同构：不为个位数百分比引入第二种呈现形状，数据行 TSV 由 #463 承担）；② 精选提示成本极低而收益集中，说明该精简"重述"而非"功能"；③ 生成式渲染保证零漂移，UT 的覆盖/分类/全英文/行宽/体积/状态机一致断言把"完备"变成可测契约（交付 8.6 KB ≈ 2.3k tokens）。
 
 **固化**：`src/cli/help_llm/`（mod/syntax/notes 生成器 + 精选表）、`src/cli/help_llm/tests.rs`（12 UT）、`tests/cli/help.rs`（5 ST）、本条目即评估存档；README「Usage」一行。
+
+---
+
+## D47：npm 安装器并发首次安装——发布期锚点补丁（2026-10-02，#504）
+
+**背景**：#504（源 dsh-mint #45）：`mint-faa` npm 包的 launcher `Package.install()` 先 `rmSync(<pkg>/node_modules/.bin_real)` 再下载解包，无锁、无暂存目录。pnpm 10 默认拦 build scripts（`approve-builds`）使惰性首次下载成为常态，宿主一次会话并行发 3 个 mint 子进程即会互相删除安装产物。dsh-mint 只能在宿主侧串行化绕行（#45），问题外溢到所有调用方。
+
+**核心约束**：该文件**不入库**——cargo-dist 0.32.0 在 release CI 用 `dist build --artifacts=global` 渲染进 `*-npm-package.tar.gz`；其 npm 安装器配置面只有 `npm-scope`/`npm-package`/`npm-shrinkwrap`，**没有模板覆盖开关**（官方 config 文档核对）。
+
+**决策**：
+
+- **发布期对生成物打锚点补丁**（`scripts/npm/patch-installer.mjs`）：`release.yml` 的 `publish-npm` / `publish-npm-github` 解包后重写 `binary-install.js` 再发布。四处精确锚点（fs 解构、`class Package`、`install()` 头、`install()` 尾）；锚点缺失或重复 ⇒ 非零退出并列出清单，release 立即失败——宁可红，不静默发未打补丁的包。
+- **补丁语义 = 独占锁 + 暂存 + 原子 rename**：`mkdir` 竞态锁（250ms 退避、20min 陈旧锁抢占、15min 等待超时；等待 >2s 打一行 stderr，补上惰性路径无进度日志的短板）；`install()` 拿锁后 double-check `exists()`；解包目标是 `mkdtempSync` 暂存目录（临时改写 `this.installDirectory` 以复用 cargo-dist 原有下载/解包/代理逻辑，不复制上游代码），成功后 `rmSync(final)` + `renameSync(staging→final)` 提交，失败/异常恢复字段并清理暂存。读取方永不看到半成品，失败安装不破坏旧目录。
+- **npmjs 侧用 tar 重打包而非 `npm pack`**：保持 dist 产物内容逐字节不变（实测 `npm pack` 会丢弃 `.gitignore`），只改那一个文件；GitHub Packages 步骤沿用既有 `npm pack`（它本就重写 `package.json`）。发布包与 Release 资产因此不再逐字节相同——`.sha256` 仍描述 dist 资产本身。
+- **否决**：① 只提上游 cargo-dist 等修复（节奏不可控，不能作为交付；保留为长期方向，报告由用户手动提交）；② 自维护 npm launcher / 关闭 dist npm installer（要重做平台识别、下载、代理、解包，面更大）；③ 维持 dsh-mint 串行化（需求是安装器自身安全）。
+- **测试即契约**：`patch.test.mjs`（锚点/幂等/语法/CLI）+ `race.test.mjs`（本地 tar + loopback HTTP，4 进程并发 ×3 轮；另有一条判定性用例：下载在途时既有安装目录不得被删——未打补丁的原始文件在该用例下实测必然失败）。CI 新增 `npm-installer` job；`precheck.sh` 有 `node` 即跑（无则 warn）。
+
+**理由**：缺陷只存在于发布产物、修复算法成熟；锚点补丁让上游文件仍是事实源（只在必要处动刀），cargo-dist 升级时以「release 失败 + 锚点清单」暴露而非静默退化。发布期改包 + 重打包在本仓库已有先例（`publish-npm-github` 的 scoped 改名 + 重打包）。
+
+**固化**：`scripts/npm/`（`patch-installer.mjs`、`patch.test.mjs`、`race.test.mjs`、`fixtures/binary-install.mint-faa-0.8.0.js`、`README.md`）、`release.yml` 两个 publish job、`ci.yml` `npm-installer` job、`scripts/precheck.sh` §5、`docs/RELEASING.md`「npm installer patch (#504)」。修复随 **0.8.1**（稳定版）进 npm；预发布不发 npm（dist `publish-prereleases` 默认 false）。
