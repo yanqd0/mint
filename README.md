@@ -61,7 +61,7 @@ npm install -g mint-faa       # npm — downloads the platform binary from GitHu
 - **PyPI**: prebuilt `maturin` wheels — install anywhere Python runs, no compiler needed.
 - **npm**: a `cargo-dist` installer that fetches the correct prebuilt binary for your platform (Linux/macOS/Windows) from GitHub Releases. Linux binaries are **musl-static** (single file, no glibc dependency).
 
-> Pre-release versions (`0.5.0-alpha.1` style) are only published to npm / GitHub Releases; crates.io and PyPI get **stable** releases only.
+> Pre-release versions (`0.5.0-alpha.1` style) go to **GitHub Releases only**; crates.io, PyPI and npm get **stable** releases only.
 
 Or build from source: `cargo install --path .`
 
