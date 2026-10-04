@@ -128,6 +128,17 @@ issue/plan 之上的**聚合容器**。概念层级：`roadmap`（上位抽象�
 
 **CLI 形态**：`mint link create <FROM> <TYPE> <TO>` / `mint link remove <FROM> <TYPE> <TO>` / `mint link list <ID>`；`mint show <id>` 内嵌 links（list 不内嵌，避免 N+1）。
 
+### Container Link（容器关联）
+
+表达**容器之间**（plan↔plan / milestone↔milestone）的阻塞依赖，是 Issue Link 在容器层的精简版（#480）——只服务「执行顺序」这一诉求。
+
+- 表：`container_links(kind, from_id, type, to_id)` 复合主键 `(kind, from_id, type, to_id)` + `CHECK (from_id != to_id)` + `kind` 限 `plan|milestone` + `type` 限 `blocks`（DDL CHECK）；索引 `idx_container_links_to (kind, to_id)`。
+- **单 `kind` 列 = 只表达同类型链接**（跨类型不表达）；**无外键**（一张表无法引用两张父表），端点存在性在应用层校验（`container::get`）。
+- 语义与 Issue Link 同构：`blocked_by` 写入时归一化为 `blocks`（方向互换）；同向已存在幂等 no-op；反向同类型互斥报错；禁自环；单向存 + 反向查询派生 `rel`（出向 `blocks` / 入向 `blocked_by`）。
+- 删除容器时同事务清其链接（`plan_delete.sql` / `milestone_delete.sql`）；`sync` 导出/合并按 `kind` 选 id 映射表（plan/milestone 各自 id 空间）。
+- **CLI**：`mint plan link create/remove/list`、`mint milestone link create/remove/list`（kind 由父命令隐含；clap 取值为 kebab-case `blocks|blocked-by`，JSON `type` 为 `blocked_by`）。
+- **拓扑序**：`plan list --order topo` / `milestone list --order topo` 按 blocks 边排序（阻塞者在前，就绪集以 `(sort_order, id DESC)` 决胜）；成环（≥3 节点，两两反向会被互斥规则挡住）时确定性回退并打一行 `mint: warning: blocks cycle ...`，退出码仍 0。
+
 ### 状态机（6 态）
 
 `test` 状态语义 = **testing**（测试中/等待测试），非"测试完成"。

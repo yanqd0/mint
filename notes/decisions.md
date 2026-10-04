@@ -618,3 +618,24 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 **固化**：`src/db/migrations/008_plans_sort_order.sql`、`src/db/queries/plan_set_order.sql` + `plan_list.sql`/`plan_select.sql`/`milestone_list.sql`/`milestone_select.sql` 列调整、`src/container/lifecycle.rs::set_plan_order`、`src/cli/container_order.rs`（+ 单测）、`src/cli/args/container.rs`（`ContainerOrder`/`--rank`/`--no-rank`）、`src/tui/dashboard/model_view.rs`、`src/db/sync_import/merge.rs`、`tests/cli/plan_ext.rs::st_plan_rank_order`。
 
+---
+
+## D49：容器级阻塞依赖 container_links（2026-10-04，#480 / plan #109）
+
+**背景**：#480：容器之间的执行顺序（谁先做）无处表达，只能写进 milestone body 的散文。既有 `issue_links` 只覆盖 issue 级；容器间唯一的关系是 `plans.milestone_id`（N:1 归属，无方向语义、无多对多）。多机同步（D33-D36）要求任何新表都必须进快照导出/合并，否则静默不跨机。
+
+**决策**：
+
+- **单表 `container_links(kind, from_id, type, to_id)`**（迁移 `009_container_links.sql`）：`kind` 限 `plan|milestone`（**只表达同类型链接**，跨类型不表达）、`type` 限 `blocks`、复合主键 `(kind, from_id, type, to_id)`、`CHECK (from_id != to_id)`、索引 `(kind, to_id)`。**不建外键**（一张表无法引用两张父表），端点存在性在应用层用 `container::get` 校验（同号 plan/milestone 靠 kind 区分）。
+- **语义镜像 Issue Link**：`blocked_by` 写入时归一化为 `blocks`（方向互换）；同向幂等；反向同类型（互相阻塞）互斥报错；单向存 + 反向查询派生 rel。**不做** `related`/`solves`/`duplicates`（容器层无此诉求，避免留死值）。
+- **CLI 由父命令隐含 kind**：`mint plan link create/remove/list` + `mint milestone link create/remove/list`（对齐 `issue link` 形态；不引入顶层 `link --kind`）。clap 取值 kebab-case（`blocks|blocked-by`），JSON `type` 保持 `blocked_by`（与 `LinkType` 一致）。
+- **拓扑序在 CLI 层算**（不改 SQL 默认顺序）：`--order topo` 取全部边（一次查询）后 Kahn 排序，**只保留两端都在过滤结果内的边**；就绪集以 `--order rank` 的决胜键（`sort_order` 优先、`id DESC`）保证确定性。**成环不报错**：剩余节点按决策序追加并打一行 `mint: warning: blocks cycle ...`，退出码 0（读命令不应因脏数据失败）。注：两两反向会被互斥规则挡住，故环实际需 ≥3 容器。
+- **删除容器同事务清链接**：`container_links` 无外键，`plan_delete.sql` / `milestone_delete.sql` 各加一条 `DELETE ... WHERE kind = ? AND (from_id = ?1 OR to_id = ?1)`（仍只用 `?1`，符合 `delete_txn` 的逐语句绑定前提）。
+- **同步三处齐改**：`DATA_TABLES`（否则导入白名单拒绝）、`SCHEMA_TABLES`（快照自包含）、`export_sql_for_project`（按 kind 用同一 `plans_where`/`milestones_where` 过滤两端，否则 legacy 拆分丢链接）；合并新增 `merge_container_links`（按行内 kind 选 plan/milestone 映射表，未知 kind 计 skipped），不复用双 map 签名的 `merge_assoc`。旧快照天然安全：临时库先用 `CURRENT_VERSION` 建 schema。
+- **不做**：容器级 `related`；跨 kind 阻塞；`plan list` 默认拓扑序（与 D48 同一条 `--order` opt-in 策略）。
+
+**理由**：容器是「规划对象」而非「工作项」，依赖语义只需阻塞一维；单 kind 列让「同类型链接」成为 schema 事实而非约定，也让同步合并的映射选择退化为一次 match。拓扑序放在读侧而非排序 SQL，避免把 `--order` 语义下沉到 SQL 里（同一 `plan_list.sql` 还要服务 rank/id 两种顺序），并让成环可优雅降级。
+
+**固化**：`src/db/migrations/009_container_links.sql`、`src/db/queries/container_link_{insert,exists,delete}.sql` + `container_links_for.sql`/`container_links_for_all.sql`、`src/container/link.rs`（+ `link_tests.rs`）、`src/cli/args/container_link.rs`、`src/cli/container_link.rs`、`src/cli/container_order.rs::topo_sorted`、`src/db/queries/{plan,milestone}_delete.sql`、`src/db/sync.rs`、`src/db/sync_export.rs`、`src/db/sync_import/merge.rs`、`tests/cli/container_link.rs`。
+
+
