@@ -10,6 +10,7 @@ pub const MIGRATION_004: &str = include_str!("migrations/004_drop_issues_project
 pub const MIGRATION_005: &str = include_str!("migrations/005_runtime_indexes.sql");
 pub const MIGRATION_006: &str = include_str!("migrations/006_plans_uid.sql");
 pub const MIGRATION_007: &str = include_str!("migrations/007_plans_manual_drop.sql");
+pub const MIGRATION_008: &str = include_str!("migrations/008_plans_sort_order.sql");
 
 pub const ISSUE_INSERT: &str = include_str!("queries/issue_insert.sql");
 pub const ISSUE_LIST: &str = include_str!("queries/issue_list.sql");
@@ -84,6 +85,7 @@ pub const PLAN_BACKFILL_UID: &str = include_str!("queries/plan_backfill_uid.sql"
 pub const PLAN_MANUAL_DROPPED: &str = include_str!("queries/plan_manual_dropped.sql");
 pub const PLAN_SET_MANUAL_DROP: &str = include_str!("queries/plan_set_manual_drop.sql");
 pub const PLAN_UPDATE: &str = include_str!("queries/plan_update.sql");
+pub const PLAN_SET_ORDER: &str = include_str!("queries/plan_set_order.sql");
 pub const PLAN_SET_MILESTONE: &str = include_str!("queries/plan_set_milestone.sql");
 pub const PLAN_RESET_PLANNED: &str = include_str!("queries/plan_reset_planned.sql");
 pub const PLAN_DELETE: &str = include_str!("queries/plan_delete.sql");

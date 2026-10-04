@@ -245,7 +245,9 @@ fn st_plan_set_requires_field() {
         .clone();
     let msg = String::from_utf8_lossy(&out);
     assert!(
-        msg.contains("set requires --title, --body, --body-append, --body-file, or --milestone"),
+        msg.contains(
+            "set requires --title, --body, --body-append, --body-file, --milestone, or --rank"
+        ),
         "{msg}"
     );
 }

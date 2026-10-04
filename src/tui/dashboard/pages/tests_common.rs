@@ -46,6 +46,7 @@ pub fn mk_container(
         status: ContainerStatus::Running,
         created_at: "t".into(),
         updated_at: "t".into(),
+        sort_order: None,
     }
 }
 

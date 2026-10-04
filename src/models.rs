@@ -185,6 +185,8 @@ pub struct Container {
     pub status: ContainerStatus,
     pub created_at: String,
     pub updated_at: String,
+    /// plan 在 milestone 内的显式排序（`plan set --rank`）；milestone 恒为 None（#481）。
+    pub sort_order: Option<i64>,
 }
 
 /// issue 摘要（容器 show 内嵌用，避免拖全量 Issue）。

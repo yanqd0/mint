@@ -23,6 +23,16 @@ pub fn update_plan(
     Ok(())
 }
 
+/// 设置 plan 在 milestone 内的显式排序（`None` = 清除，回落 id 倒序）。
+/// 刷新 updated_at（排序变更经跨机 LWW 传播）；不影响派生状态。
+pub fn set_plan_order(conn: &Connection, id: i64, order: Option<i64>) -> Result<(), Error> {
+    let affected = conn.execute(db::PLAN_SET_ORDER, params![id, order])?;
+    if affected == 0 {
+        return Err(Error::Other(format!("plan #{id} not found")));
+    }
+    Ok(())
+}
+
 /// 更新 milestone 的 title/version/body（COALESCE 保留未提供字段）。
 /// 不涉及派生状态同步（title/version/body 变更不影响 milestone 状态）。
 pub fn update_milestone(

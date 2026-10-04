@@ -78,6 +78,7 @@ mod tests {
             status: crate::models::ContainerStatus::Open,
             created_at: "t".into(),
             updated_at: "t".into(),
+            sort_order: None,
         }
     }
 

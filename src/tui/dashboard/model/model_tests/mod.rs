@@ -53,6 +53,7 @@ fn mk_container(id: i64) -> Container {
         status: ContainerStatus::Open,
         created_at: "t".into(),
         updated_at: "t".into(),
+        sort_order: None,
     }
 }
 
@@ -66,6 +67,7 @@ fn mk_plan(id: i64, milestone: Option<i64>, updated: &str) -> Container {
         status: ContainerStatus::Open,
         created_at: "t".into(),
         updated_at: updated.into(),
+        sort_order: None,
     }
 }
 

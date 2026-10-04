@@ -38,6 +38,7 @@ fn mk_container(id: i64, title: &str, version: Option<&str>) -> Container {
         status: ContainerStatus::Open,
         created_at: "t".into(),
         updated_at: "t".into(),
+        sort_order: None,
     }
 }
 

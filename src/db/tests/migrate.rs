@@ -54,7 +54,7 @@ fn migrate_creates_tables_and_sets_version() {
     assert!(cols.iter().any(|c| c == "machine_id"), "missing machine_id");
     assert!(cols.iter().any(|c| c == "uid"), "missing uid");
 
-    // 006/007 加列：plans.uid（跨机稳定键）+ plans.manual_dropped（手动终态标记）
+    // 006/007/008 加列：plans.uid（跨机稳定键）+ plans.manual_dropped（手动终态标记）+ sort_order（显式排序）
     let pcols: Vec<String> = conn
         .prepare("PRAGMA table_info(plans)")
         .unwrap()
@@ -66,6 +66,10 @@ fn migrate_creates_tables_and_sets_version() {
     assert!(
         pcols.iter().any(|c| c == "manual_dropped"),
         "plans missing manual_dropped"
+    );
+    assert!(
+        pcols.iter().any(|c| c == "sort_order"),
+        "plans missing sort_order"
     );
 }
 
@@ -174,6 +178,10 @@ fn runtime_indexes_created() {
     assert!(
         plan_idx.iter().any(|n| n == "idx_plans_uid"),
         "plans 缺索引 idx_plans_uid: {plan_idx:?}"
+    );
+    assert!(
+        plan_idx.iter().any(|n| n == "idx_plans_milestone_sort"),
+        "plans 缺索引 idx_plans_milestone_sort: {plan_idx:?}"
     );
 }
 

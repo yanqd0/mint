@@ -6,6 +6,15 @@ use crate::models::ContainerStatus;
 
 use super::body::BodyEditArgs;
 
+/// 容器 list 的排序方式（默认 `id`，即 SQL 的 id 倒序；`--order` 显式选择）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ContainerOrder {
+    /// Repository order: id descending (default, unchanged)
+    Id,
+    /// Explicit rank (`plan set --rank`) first, then id descending; plan list only
+    Rank,
+}
+
 #[derive(clap::Args)]
 pub struct ListContainersArgs {
     /// Show all statuses (including done)
@@ -26,6 +35,9 @@ pub struct ListContainersArgs {
     /// Filter by text (title/body/status/#id, case-insensitive substring)
     #[arg(long)]
     pub search: Option<String>,
+    /// Sort order: id (default) / rank (explicit `plan set --rank`; plan list only)
+    #[arg(long, value_enum)]
+    pub order: Option<ContainerOrder>,
     /// Page number (1-based)
     #[arg(long)]
     pub page: Option<u32>,
@@ -98,7 +110,7 @@ pub struct PlanIssueArgs {
 pub struct ContainerGetArgs {
     pub id: i64,
     /// Field name: title, body, status, version (milestone), milestone_id (plan),
-    /// created_at, updated_at
+    /// rank (plan), created_at, updated_at
     pub field: String,
     /// Output as JSON
     #[arg(long)]
@@ -127,6 +139,12 @@ pub struct PlanSetArgs {
     /// New milestone to move this plan to (recomputes both milestones' status)
     #[arg(long)]
     pub milestone: Option<i64>,
+    /// Explicit rank inside its milestone (>= 0; orders `plan list --order rank`)
+    #[arg(long, value_name = "N", allow_negative_numbers = true)]
+    pub rank: Option<i64>,
+    /// Clear the explicit rank (falls back to id order); cannot combine with --rank
+    #[arg(long = "no-rank")]
+    pub no_rank: bool,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
@@ -196,7 +214,7 @@ pub enum PlanCmd {
     Detach(PlanIssueArgs),
     /// Get a single field's value (bare output; --json for structured)
     Get(ContainerGetArgs),
-    /// Set fields: --title / body (--body/--body-append/--body-file/--body-section) / --milestone
+    /// Set fields: --title / body (--body/--body-append/--body-file/--body-section) / --milestone / --rank
     Set(PlanSetArgs),
     /// Batch-schedule all open issues of this plan (open -> planned)
     Plan(PlanTransArgs),

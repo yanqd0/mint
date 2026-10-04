@@ -40,15 +40,25 @@ pub fn cmd_plan_create(conn: &Connection, a: &PlanCreateArgs) -> Result<(), Erro
     Ok(())
 }
 
-/// Plan set：更新 title/body/milestone（milestone 移动会级联重算两侧状态，
+/// Plan set：更新 title/body/milestone/rank（milestone 移动会级联重算两侧状态，
 /// 并将其下 planned issue 重置回 open——跨桶排期作废）。
 pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
     let title = s.title.as_deref().map(str::trim);
     let milestone = s.milestone;
-    if title.is_none() && !s.body_edit.is_present() && milestone.is_none() {
+    let rank_set = s.rank.is_some() || s.no_rank;
+    if title.is_none() && !s.body_edit.is_present() && milestone.is_none() && !rank_set {
         return Err(Error::Other(
-            "set requires --title, --body, --body-append, --body-file, or --milestone".to_string(),
+            "set requires --title, --body, --body-append, --body-file, --milestone, or --rank"
+                .to_string(),
         ));
+    }
+    if s.rank.is_some() && s.no_rank {
+        return Err(Error::Other(
+            "--rank and --no-rank cannot be combined".to_string(),
+        ));
+    }
+    if s.rank.is_some_and(|r| r < 0) {
+        return Err(Error::Other("rank must be >= 0".to_string()));
     }
     if title.is_some_and(|t| t.is_empty()) {
         return Err(Error::Other("title must not be empty".to_string()));
@@ -74,6 +84,10 @@ pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
     if let Some(mid) = milestone {
         reset = container::move_plan(conn, s.id, mid)?;
     }
+    // 显式排序设置/清除（不影响派生状态）。
+    if rank_set {
+        container::set_plan_order(conn, s.id, if s.no_rank { None } else { s.rank })?;
+    }
     if s.json {
         let mut obj = serde_json::Map::new();
         obj.insert("id".into(), serde_json::Value::from(s.id));
@@ -87,6 +101,9 @@ pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
             obj.insert("milestone_id".into(), serde_json::Value::from(m));
             obj.insert("reset".into(), serde_json::Value::from(reset));
         }
+        if rank_set {
+            obj.insert("rank".into(), serde_json::Value::from(s.rank));
+        }
         println!(
             "{}",
             serde_json::to_string(&serde_json::Value::Object(obj))?
@@ -95,6 +112,12 @@ pub fn cmd_plan_set(conn: &Connection, s: &PlanSetArgs) -> Result<(), Error> {
         println!("Updated plan #{}", s.id);
         if reset > 0 {
             println!("reset {reset} planned issue(s) to open (moved to another milestone)");
+        }
+        if rank_set {
+            match s.rank {
+                Some(r) if !s.no_rank => println!("rank set to {r}"),
+                _ => println!("rank cleared"),
+            }
         }
     }
     Ok(())
@@ -206,6 +229,7 @@ fn container_field(c: &Container, field: &str) -> Result<String, Error> {
         "status" => Ok(c.status.to_string()),
         "version" => Ok(c.version.clone().unwrap_or_default()),
         "milestone_id" => Ok(c.milestone_id.map(|v| v.to_string()).unwrap_or_default()),
+        "rank" => Ok(c.sort_order.map(|v| v.to_string()).unwrap_or_default()),
         "created_at" => Ok(c.created_at.clone()),
         "updated_at" => Ok(c.updated_at.clone()),
         other => Err(Error::Other(format!("unknown field: {other}"))),

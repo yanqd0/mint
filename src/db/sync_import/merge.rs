@@ -203,14 +203,14 @@ pub(super) fn merge_plans(
                     _ => String::new(),
                 };
                 if new_upd > cur {
-                    // 快照缺列（旧版导出）→ NULL：保留本地 uid 与手动 drop 标记，不抹掉。
+                    // 快照缺列（旧版导出）→ NULL：保留本地 uid / 手动 drop 标记 / 显式 rank，不抹掉。
                     fill_null_from_local(
                         conn,
                         "plans",
                         &cols,
                         &mut row,
                         id,
-                        &["uid", "manual_dropped"],
+                        &["uid", "manual_dropped", "sort_order"],
                     )?;
                     update_row(conn, "plans", &cols, &row, id)?;
                     report.updated += 1;

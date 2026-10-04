@@ -65,6 +65,76 @@ fn st_plan_drop_empty_only_and_survives_move() {
     assert!(err.contains("plan #999 not found"), "stderr: {err}");
 }
 
+/// #481：plan set --rank / --no-rank + `plan get <id> rank` + `--order rank` 排序与参数校验。
+#[test]
+fn st_plan_rank_order() {
+    let (_dir, db) = empty_db();
+    run_json(
+        &db,
+        &["milestone", "create", "ms", "--version", "0.9.0", "--json"],
+    );
+    for t in ["a", "b", "c"] {
+        run_json(&db, &["plan", "create", t, "--milestone", "1", "--json"]);
+    }
+    // 默认顺序 = id 倒序（--order 未指定，行为不变）。
+    let v = run_json(&db, &["plan", "list", "--json", "--no-page"]);
+    assert_eq!(plan_ids(&v), vec![3, 2, 1]);
+
+    // 显式 rank：c=1、a=2 → c, a, b（b 未设 rank 末位）。
+    let v = run_json(&db, &["plan", "set", "1", "--rank", "2", "--json"]);
+    assert_eq!(v["rank"], 2);
+    run_json(&db, &["plan", "set", "3", "--rank", "1", "--json"]);
+    assert_eq!(run_ok(&db, &["plan", "get", "1", "rank"]).trim(), "2");
+
+    let v = run_json(
+        &db,
+        &["plan", "list", "--order", "rank", "--json", "--no-page"],
+    );
+    assert_eq!(plan_ids(&v), vec![3, 1, 2]);
+    assert_eq!(v["items"][0]["rank"], 1);
+    // 文本输出同样按 rank 顺序（a 与 c 的标题出现在 b 之前）。
+    let out = run_ok(&db, &["plan", "list", "--order", "rank", "--no-page"]);
+    let order: Vec<usize> = ["c", "a", "b"]
+        .iter()
+        .map(|t| out.find(&format!("\t{t}\t")).expect("title in list"))
+        .collect();
+    assert!(order.windows(2).all(|w| w[0] < w[1]), "rank order: {out}");
+
+    // --no-rank 清除 → 仅剩 c 有 rank。
+    let v = run_json(&db, &["plan", "set", "1", "--no-rank", "--json"]);
+    assert!(v["rank"].is_null());
+    assert_eq!(run_ok(&db, &["plan", "get", "1", "rank"]).trim(), "");
+    let v = run_json(
+        &db,
+        &["plan", "list", "--order", "rank", "--json", "--no-page"],
+    );
+    assert_eq!(plan_ids(&v), vec![3, 2, 1]);
+
+    // milestone list 不支持 --order rank。
+    let err = run_fail(&db, &["milestone", "list", "--order", "rank"]);
+    assert!(
+        err.contains("--order rank only applies to plan list"),
+        "stderr: {err}"
+    );
+    // 参数校验：互斥 / 负数 / plan 不存在。
+    let err = run_fail(&db, &["plan", "set", "1", "--rank", "1", "--no-rank"]);
+    assert!(err.contains("cannot be combined"), "stderr: {err}");
+    let err = run_fail(&db, &["plan", "set", "1", "--rank", "-1"]);
+    assert!(err.contains("rank must be >= 0"), "stderr: {err}");
+    let err = run_fail(&db, &["plan", "set", "999", "--rank", "1"]);
+    assert!(err.contains("plan #999 not found"), "stderr: {err}");
+}
+
+/// `plan list --json` 的 id 序列。
+fn plan_ids(v: &serde_json::Value) -> Vec<i64> {
+    v["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["id"].as_i64().unwrap())
+        .collect()
+}
+
 /// plan set 的 body 编辑：--body-section 只替换目标段，--body-append 追加（#479）。
 #[test]
 fn st_plan_set_body_edit() {

@@ -171,14 +171,19 @@ impl DashboardModel {
             .unwrap_or_else(|| format!("#{id}"))
     }
 
-    /// 某 milestone 下的 plan（MilestoneDetail 用，按 updated_at 逆序）。
+    /// 某 milestone 下的 plan（MilestoneDetail 用）：显式 rank 优先（升序，未设 rank 末位），
+    /// 其次按 updated_at 逆序（未设 rank 时与既有行为一致）。
     pub fn milestone_plans(&self, milestone_id: i64) -> Vec<&(Container, i64)> {
         let mut ps: Vec<&(Container, i64)> = self
             .plans
             .iter()
             .filter(|(c, _)| c.milestone_id == Some(milestone_id))
             .collect();
-        ps.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at));
+        ps.sort_by(|a, b| {
+            (a.0.sort_order.is_none(), a.0.sort_order.unwrap_or_default())
+                .cmp(&(b.0.sort_order.is_none(), b.0.sort_order.unwrap_or_default()))
+                .then_with(|| b.0.updated_at.cmp(&a.0.updated_at))
+        });
         ps
     }
 

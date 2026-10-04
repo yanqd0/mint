@@ -11,6 +11,7 @@ SELECT
     r.status,
     datetime(r.created_at, 'localtime') AS created_at,
     datetime(r.updated_at, 'localtime') AS updated_at,
+    NULL AS sort_order,
     (
         SELECT count(*)
         FROM milestone_direct_issues di

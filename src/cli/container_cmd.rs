@@ -95,6 +95,13 @@ pub(crate) fn cmd_container_list(
     if let Some(q) = a.search.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
         items.retain(|(c, _)| container_matches_search(c, q));
     }
+    // --order 重排（默认 id 倒序由 SQL 提供，不重排）；在分页之前执行。
+    let items = crate::cli::container_order::order_containers(
+        conn,
+        kind,
+        items,
+        a.order.unwrap_or(crate::cli::ContainerOrder::Id),
+    )?;
     let (items, total, page) = paginate(
         items,
         a.page,
@@ -105,12 +112,19 @@ pub(crate) fn cmd_container_list(
         let arr: Vec<serde_json::Value> = items
             .iter()
             .map(|(c, count)| {
-                serde_json::json!({
+                let mut v = serde_json::json!({
                     "id": c.id, "title": c.title, "version": c.version,
                     "milestone_id": c.milestone_id, "status": c.status,
                     "issue_count": count,
                     "created_at": c.created_at, "updated_at": c.updated_at,
-                })
+                });
+                // rank 仅 plan 有意义（milestone 恒为 NULL，不输出该键）。
+                if kind == ContainerKind::Plan
+                    && let Some(obj) = v.as_object_mut()
+                {
+                    obj.insert("rank".into(), serde_json::json!(c.sort_order));
+                }
+                v
             })
             .collect();
         println!("{}", paged_json(&arr, page, page_size, total));

@@ -12,6 +12,7 @@ SELECT
     p.status,
     datetime(p.created_at, 'localtime') AS created_at,
     datetime(p.updated_at, 'localtime') AS updated_at,
+    p.sort_order,
     (SELECT count(*) FROM issues i WHERE i.plan_id = p.id)
 FROM plans p
 LEFT JOIN milestones m ON m.id = p.milestone_id

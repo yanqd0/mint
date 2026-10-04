@@ -20,7 +20,8 @@ mod sync;
 pub use affiliation::{issues_for, link_direct, set_issue_plan, unlink_direct, unset_issue_plan};
 pub(crate) use lifecycle::delete_txn;
 pub use lifecycle::{
-    delete_issue, delete_milestone, delete_plan, move_plan, update_milestone, update_plan,
+    delete_issue, delete_milestone, delete_plan, move_plan, set_plan_order, update_milestone,
+    update_plan,
 };
 pub use sync::{set_milestone_status, set_plan_status, sync_container_status};
 
@@ -105,8 +106,9 @@ pub fn list(
             status: r.get(5)?,
             created_at: r.get(6)?,
             updated_at: r.get(7)?,
+            sort_order: r.get(8)?,
         };
-        let count: i64 = r.get(8)?;
+        let count: i64 = r.get(9)?;
         Ok((container, count))
     })?;
     rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
@@ -124,6 +126,7 @@ pub fn get(conn: &Connection, kind: ContainerKind, id: i64) -> Result<Option<Con
             status: r.get(5)?,
             created_at: r.get(6)?,
             updated_at: r.get(7)?,
+            sort_order: r.get(8)?,
         })
     })
     .optional()
