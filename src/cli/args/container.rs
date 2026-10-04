@@ -5,6 +5,7 @@ use clap::Subcommand;
 use crate::models::ContainerStatus;
 
 use super::body::BodyEditArgs;
+use super::container_link::ContainerLinkArgs;
 
 /// 容器 list 的排序方式（默认 `id`，即 SQL 的 id 倒序；`--order` 显式选择）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -13,6 +14,8 @@ pub enum ContainerOrder {
     Id,
     /// Explicit rank (`plan set --rank`) first, then id descending; plan list only
     Rank,
+    /// Blocking dependency order (`plan link` / `milestone link`): blockers first
+    Topo,
 }
 
 #[derive(clap::Args)]
@@ -35,7 +38,7 @@ pub struct ListContainersArgs {
     /// Filter by text (title/body/status/#id, case-insensitive substring)
     #[arg(long)]
     pub search: Option<String>,
-    /// Sort order: id (default) / rank (explicit `plan set --rank`; plan list only)
+    /// Sort order: id (default) / rank (explicit `plan set --rank`; plan list only) / topo (blockers first)
     #[arg(long, value_enum)]
     pub order: Option<ContainerOrder>,
     /// Page number (1-based)
@@ -192,6 +195,8 @@ pub enum MilestoneCmd {
     Get(ContainerGetArgs),
     /// Set fields: --title / --body / --version
     Set(MilestoneSetArgs),
+    /// Milestone-to-milestone blocking links (create/remove/list)
+    Link(ContainerLinkArgs),
 }
 
 #[derive(clap::Args)]
@@ -222,4 +227,6 @@ pub enum PlanCmd {
     Close(PlanTransArgs),
     /// Mark an empty plan (no issues) as dropped
     Drop(ContainerIdArgs),
+    /// Plan-to-plan blocking links (create/remove/list)
+    Link(ContainerLinkArgs),
 }

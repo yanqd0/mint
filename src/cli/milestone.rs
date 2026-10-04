@@ -108,5 +108,8 @@ pub fn dispatch(conn: &Connection, project: &str, cmd: &super::MilestoneCmd) -> 
             super::plan::cmd_container_get(conn, ContainerKind::Milestone, g)
         }
         super::MilestoneCmd::Set(s) => cmd_milestone_set(conn, s),
+        super::MilestoneCmd::Link(a) => {
+            crate::cli::container_link::dispatch(conn, ContainerKind::Milestone, a)
+        }
     }
 }

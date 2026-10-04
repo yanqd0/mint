@@ -70,3 +70,60 @@ fn order_id_keeps_input_order() {
     let sorted = order_containers(&conn, ContainerKind::Plan, items, ContainerOrder::Id).unwrap();
     assert_eq!(ids(&sorted), vec![7, 2]);
 }
+
+/// topo：阻塞者在前（rank 决定就绪集中谁先出）。
+#[test]
+fn topo_puts_blockers_first() {
+    // a(1,rank1) blocks c(3,rank2)；b(2,rank3) 无依赖。
+    let items = vec![mk(1, Some(1)), mk(2, Some(3)), mk(3, Some(2))];
+    let (sorted, cycle) = topo_sorted(items, &[(1, 3)]);
+    assert!(cycle.is_empty());
+    assert_eq!(ids(&sorted), vec![1, 3, 2]);
+}
+
+/// topo：无依赖时退化为 rank/id 决策序。
+#[test]
+fn topo_without_edges_matches_rank_order() {
+    let items = vec![mk(1, None), mk(3, None), mk(2, Some(1))];
+    let (sorted, cycle) = topo_sorted(items, &[]);
+    assert!(cycle.is_empty());
+    assert_eq!(ids(&sorted), vec![2, 3, 1]);
+}
+
+/// topo：成环时确定性回退（决策序）并回报成环节点，不报错。
+#[test]
+fn topo_cycle_falls_back_deterministically() {
+    let items = vec![mk(1, None), mk(2, None)];
+    let (sorted, cycle) = topo_sorted(items, &[(1, 2), (2, 1)]);
+    assert_eq!(cycle, vec![2, 1], "成环节点按决策序回报");
+    assert_eq!(ids(&sorted), vec![2, 1]);
+}
+
+/// topo：结果集外的边（被过滤掉的容器）不影响排序。
+#[test]
+fn topo_ignores_edges_outside_result_set() {
+    let items = vec![mk(1, None), mk(2, None)];
+    let (sorted, cycle) = topo_sorted(items, &[(1, 99), (99, 2)]);
+    assert!(cycle.is_empty());
+    assert_eq!(ids(&sorted), vec![2, 1]);
+}
+
+/// `order_containers(Topo)` 从库里读 blocks 边（plan a 阻塞 b → a 在前，而非 id 倒序）。
+#[test]
+fn order_topo_reads_db_edges() {
+    use crate::models::ContainerLinkType;
+
+    let conn = crate::db::open(std::path::Path::new(":memory:")).unwrap();
+    let a = crate::container::create(&conn, ContainerKind::Plan, "a", None, None, None).unwrap();
+    let b = crate::container::create(&conn, ContainerKind::Plan, "b", None, None, None).unwrap();
+    crate::container::link_create(&conn, ContainerKind::Plan, a, ContainerLinkType::Blocks, b)
+        .unwrap();
+    let sorted = order_containers(
+        &conn,
+        ContainerKind::Plan,
+        vec![mk(a, None), mk(b, None)],
+        ContainerOrder::Topo,
+    )
+    .unwrap();
+    assert_eq!(ids(&sorted), vec![a, b]);
+}

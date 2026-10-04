@@ -19,6 +19,7 @@ const SCHEMA_TABLES: &[&str] = &[
     "issue_labels",
     "issue_links",
     "milestone_direct_issues",
+    "container_links",
     "issues_fts",
 ];
 
@@ -141,6 +142,16 @@ pub(super) fn export_table(
         out.push_str(");\n");
     }
     Ok(())
+}
+
+/// 表是否存在于该连接（`export_sql_for_project` 处理旧版 legacy db 时用：旧库可能没有后加的表）。
+pub(super) fn table_exists(conn: &Connection, table: &str) -> Result<bool, Error> {
+    let n: i64 = conn.query_row(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        [table],
+        |r| r.get(0),
+    )?;
+    Ok(n > 0)
 }
 
 /// 取表列（按定义顺序；name + pk 序号）。

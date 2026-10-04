@@ -2,12 +2,14 @@
 
 mod body;
 mod container;
+mod container_link;
 mod io;
 mod project;
 mod sync;
 
 pub use body::*;
 pub use container::*;
+pub use container_link::*;
 pub use io::*;
 pub use project::*;
 pub use sync::*;

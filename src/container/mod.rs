@@ -15,6 +15,7 @@ use crate::models::{Container, ContainerStatus};
 mod affiliation;
 mod derive;
 mod lifecycle;
+mod link;
 mod sync;
 
 pub use affiliation::{issues_for, link_direct, set_issue_plan, unlink_direct, unset_issue_plan};
@@ -23,6 +24,9 @@ pub use lifecycle::{
     delete_issue, delete_milestone, delete_plan, move_plan, set_plan_order, update_milestone,
     update_plan,
 };
+pub use link::create as link_create;
+pub use link::remove as remove_link;
+pub use link::{links_for, links_for_all};
 pub use sync::{set_milestone_status, set_plan_status, sync_container_status};
 
 #[cfg(test)]
@@ -36,6 +40,14 @@ pub enum ContainerKind {
 }
 
 impl ContainerKind {
+    /// 容器类型字符串（CLI 文案 / `container_links.kind` 落库值）。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ContainerKind::Milestone => "milestone",
+            ContainerKind::Plan => "plan",
+        }
+    }
+
     fn insert_sql(self) -> &'static str {
         match self {
             ContainerKind::Milestone => db::MILESTONE_INSERT,

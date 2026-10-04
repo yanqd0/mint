@@ -21,6 +21,7 @@ pub(crate) const DATA_TABLES: &[&str] = &[
     "issue_labels",
     "issue_links",
     "milestone_direct_issues",
+    "container_links",
 ];
 
 /// 判断快照是否为当前格式（首行 v1 头部标记）。pull 导入前校验，旧/异常快照跳过而非卡死（#400）。
@@ -142,6 +143,21 @@ pub fn export_sql_for_project(
         )),
         &[],
     )?;
+    // 容器级链接：两端必须都落在本次导出的容器集合内（否则重放到临时库会指向不存在的容器）。
+    // 源库可能是旧版 legacy db（拆分场景），009 之前的 schema 没有该表 → 跳过（目标库 migrate 自建）。
+    if crate::db::sync::export::table_exists(conn, "container_links")? {
+        let container_links_where = format!(
+            "(kind = 'plan' AND from_id IN (SELECT id FROM plans WHERE {plans_where}) AND to_id IN (SELECT id FROM plans WHERE {plans_where})) \
+             OR (kind = 'milestone' AND from_id IN (SELECT id FROM milestones WHERE {milestones_where}) AND to_id IN (SELECT id FROM milestones WHERE {milestones_where}))"
+        );
+        export_table(
+            conn,
+            &mut out,
+            "container_links",
+            Some(&container_links_where),
+            &[],
+        )?;
+    }
     Ok(out)
 }
 

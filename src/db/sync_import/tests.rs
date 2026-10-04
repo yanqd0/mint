@@ -228,3 +228,69 @@ fn import_links_remap() {
         .unwrap();
     assert_eq!((f, t), (2, 3));
 }
+
+/// container_links（#480）：按 kind 选映射表（plan/milestone 各自 id 空间）做 id 重映射。
+/// 旧快照（无 container_links 行）走同一路径、行数为 0 —— 既有 import 用例即为该分支回归。
+#[test]
+fn import_container_links_remap() {
+    let a = test_conn();
+    a.execute(
+        "INSERT INTO plans (id, title, uid) VALUES (1, 'A1', 'mach-a:plan:1')",
+        [],
+    )
+    .unwrap();
+    a.execute(
+        "INSERT INTO plans (id, title, uid) VALUES (2, 'A2', 'mach-a:plan:2')",
+        [],
+    )
+    .unwrap();
+    a.execute(
+        "INSERT INTO milestones (id, title, version) VALUES (1, 'M1', '0.1.0')",
+        [],
+    )
+    .unwrap();
+    a.execute(
+        "INSERT INTO milestones (id, title, version) VALUES (2, 'M2', '0.2.0')",
+        [],
+    )
+    .unwrap();
+    a.execute(
+        "INSERT INTO container_links (kind, from_id, type, to_id) VALUES ('plan', 1, 'blocks', 2)",
+        [],
+    )
+    .unwrap();
+    a.execute(
+        "INSERT INTO container_links (kind, from_id, type, to_id) VALUES ('milestone', 2, 'blocks', 1)",
+        [],
+    )
+    .unwrap();
+    let sql = crate::db::sync::export_sql(&a).unwrap();
+
+    // B 机：plan id 1 / milestone id 1 已被占用（uid/version 均不同）→ 触发重映射。
+    let mut b = test_conn();
+    b.execute(
+        "INSERT INTO plans (id, title, uid) VALUES (1, 'B1', 'mach-b:plan:1')",
+        [],
+    )
+    .unwrap();
+    b.execute(
+        "INSERT INTO milestones (id, title, version) VALUES (1, 'B1', '9.9.9')",
+        [],
+    )
+    .unwrap();
+    let r = import_sql(&mut b, &sql).unwrap();
+    assert!(r.inserted >= 2, "plans/milestones 应插入: {r:?}");
+
+    // A 的 plan1→B 2、plan2→3；A 的 milestone1→B 2、milestone2→3。
+    let rows: Vec<(String, i64, i64)> = b
+        .prepare("SELECT kind, from_id, to_id FROM container_links ORDER BY kind, from_id")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![("milestone".to_string(), 3, 2), ("plan".to_string(), 2, 3),]
+    );
+}

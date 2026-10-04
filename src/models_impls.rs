@@ -82,6 +82,30 @@ impl rusqlite::types::FromSql for LinkType {
     }
 }
 
+impl std::fmt::Display for ContainerLinkType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl rusqlite::ToSql for ContainerLinkType {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::Borrowed(self.as_str().into()))
+    }
+}
+
+impl rusqlite::types::FromSql for ContainerLinkType {
+    fn column_result(v: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        match v.as_str()? {
+            "blocked_by" => Ok(ContainerLinkType::BlockedBy),
+            "blocks" => Ok(ContainerLinkType::Blocks),
+            other => Err(rusqlite::types::FromSqlError::Other(
+                format!("invalid container link type: {other}").into(),
+            )),
+        }
+    }
+}
+
 impl std::fmt::Display for ContainerStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())

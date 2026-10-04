@@ -11,6 +11,7 @@ pub const MIGRATION_005: &str = include_str!("migrations/005_runtime_indexes.sql
 pub const MIGRATION_006: &str = include_str!("migrations/006_plans_uid.sql");
 pub const MIGRATION_007: &str = include_str!("migrations/007_plans_manual_drop.sql");
 pub const MIGRATION_008: &str = include_str!("migrations/008_plans_sort_order.sql");
+pub const MIGRATION_009: &str = include_str!("migrations/009_container_links.sql");
 
 pub const ISSUE_INSERT: &str = include_str!("queries/issue_insert.sql");
 pub const ISSUE_LIST: &str = include_str!("queries/issue_list.sql");
@@ -38,6 +39,11 @@ pub const ISSUE_LINK_INSERT: &str = include_str!("queries/issue_link_insert.sql"
 pub const ISSUE_LINK_DELETE: &str = include_str!("queries/issue_link_delete.sql");
 pub const ISSUE_LINKS_FOR: &str = include_str!("queries/issue_links_for.sql");
 pub const ISSUE_LINKS_FOR_ALL: &str = include_str!("queries/issue_links_for_all.sql");
+pub const CONTAINER_LINK_EXISTS: &str = include_str!("queries/container_link_exists.sql");
+pub const CONTAINER_LINK_INSERT: &str = include_str!("queries/container_link_insert.sql");
+pub const CONTAINER_LINK_DELETE: &str = include_str!("queries/container_link_delete.sql");
+pub const CONTAINER_LINKS_FOR: &str = include_str!("queries/container_links_for.sql");
+pub const CONTAINER_LINKS_FOR_ALL: &str = include_str!("queries/container_links_for_all.sql");
 pub const ISSUE_LABELS_FOR_ALL: &str = include_str!("queries/issue_labels_for_all.sql");
 pub const ISSUE_LABELS_COLORS_FOR_ALL: &str =
     include_str!("queries/issue_labels_colors_for_all.sql");

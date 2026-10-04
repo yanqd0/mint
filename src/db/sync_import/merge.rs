@@ -14,6 +14,11 @@ use super::rows::{
     row_id, set_id, update_row,
 };
 
+#[path = "merge_assoc.rs"]
+mod assoc;
+
+use assoc::{merge_assoc, merge_container_links};
+
 pub(super) fn merge_all(conn: &Connection, tmp: &Connection) -> Result<MergeReport, Error> {
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let res = merge_all_inner(conn, tmp);
@@ -82,6 +87,7 @@ pub(super) fn merge_all_inner(conn: &Connection, tmp: &Connection) -> Result<Mer
         &issues_map,
         &mut report,
     )?;
+    merge_container_links(conn, tmp, &milestones_map, &plans_map, &mut report)?;
 
     Ok(report)
 }
@@ -237,36 +243,6 @@ pub(super) fn merge_plans(
         };
         if let Some(orig) = orig_id {
             id_map.insert(orig, target_id);
-        }
-    }
-    Ok(())
-}
-
-/// 关联表（issue_labels/issue_links/milestone_direct_issues）：引用 id 映射后 INSERT OR IGNORE。
-pub(super) fn merge_assoc(
-    conn: &Connection,
-    tmp: &Connection,
-    table: &str,
-    id_cols: &[&str],
-    map_a: &HashMap<i64, i64>,
-    map_b: &HashMap<i64, i64>,
-    report: &mut MergeReport,
-) -> Result<(), Error> {
-    let cols = columns(tmp, table)?;
-    let mut stmt = conn.prepare(&format!(
-        "INSERT OR IGNORE INTO {table} ({}) VALUES ({})",
-        cols.join(", "),
-        (1..=cols.len())
-            .map(|i| format!("?{i}"))
-            .collect::<Vec<_>>()
-            .join(", ")
-    ))?;
-    for mut row in read_rows(tmp, table, &cols)? {
-        map_value(&mut row[col_idx(&cols, id_cols[0])], map_a);
-        map_value(&mut row[col_idx(&cols, id_cols[1])], map_b);
-        match stmt.execute(params_from_iter(row.iter())) {
-            Ok(1) => report.inserted += 1,
-            _ => report.skipped += 1,
         }
     }
     Ok(())

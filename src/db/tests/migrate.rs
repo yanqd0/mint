@@ -23,7 +23,7 @@ fn migrate_creates_tables_and_sets_version() {
         .unwrap()
         .map(|r| r.unwrap())
         .collect();
-    assert_eq!(tables.len(), 10);
+    assert_eq!(tables.len(), 11);
     for t in [
         "projects",
         "issues",
@@ -34,6 +34,7 @@ fn migrate_creates_tables_and_sets_version() {
         "machines",
         "milestone_direct_issues",
         "issue_links",
+        "container_links",
         "issues_fts",
     ] {
         assert!(tables.iter().any(|n| n == t), "missing table {t}");
@@ -183,6 +184,29 @@ fn runtime_indexes_created() {
         plan_idx.iter().any(|n| n == "idx_plans_milestone_sort"),
         "plans 缺索引 idx_plans_milestone_sort: {plan_idx:?}"
     );
+
+    // 009 建表 + 索引：container_links（容器级 blocks）
+    let link_idx: Vec<String> = conn
+        .prepare("PRAGMA index_list(container_links)")
+        .unwrap()
+        .query_map([], |r| r.get(1))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert!(
+        link_idx.iter().any(|n| n == "idx_container_links_to"),
+        "container_links 缺索引 idx_container_links_to: {link_idx:?}"
+    );
+    let link_cols: Vec<String> = conn
+        .prepare("PRAGMA table_info(container_links)")
+        .unwrap()
+        .query_map([], |r| r.get(1))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    for c in ["kind", "from_id", "type", "to_id", "created_at"] {
+        assert!(link_cols.iter().any(|n| n == c), "container_links 缺列 {c}");
+    }
 }
 
 /// 既有 v2 库升级：migrate 从 user_version=2 自动跑 003（FTS 扩展），存量数据回填。

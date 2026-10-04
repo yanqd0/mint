@@ -124,6 +124,7 @@ pub(crate) fn advance_to_done(db: &str, id: i64) {
 }
 
 mod alias;
+mod container_link;
 mod delete;
 /// retest：test→dev 打回，保留 last_commit_id，更新 test_cmd。
 mod edit;

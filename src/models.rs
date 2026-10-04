@@ -139,6 +139,35 @@ pub struct Link {
     pub created_at: String,
 }
 
+/// 容器级链接类型（plan/milestone 之间的阻塞依赖，见 #480）：
+/// 只表达 blocks（阻塞）/ blocked_by（被阻塞），`blocked_by` 写入时归一化方向为 blocks。
+/// 与 [`LinkType`] 分开：容器不带 solves/duplicates/related 语义。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum ContainerLinkType {
+    #[serde(rename = "blocked_by")]
+    BlockedBy,
+    #[serde(rename = "blocks")]
+    Blocks,
+}
+
+impl ContainerLinkType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ContainerLinkType::BlockedBy => "blocked_by",
+            ContainerLinkType::Blocks => "blocks",
+        }
+    }
+
+    /// 反向类型的字符串表示（仅显示用，不落库）：blocked_by ↔ blocks 互逆。
+    pub fn reverse(&self) -> &'static str {
+        match self {
+            ContainerLinkType::BlockedBy => "blocks",
+            ContainerLinkType::Blocks => "blocked_by",
+        }
+    }
+}
+
 /// Label 标签。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Label {

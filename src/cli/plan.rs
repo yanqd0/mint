@@ -165,6 +165,9 @@ pub fn dispatch(conn: &Connection, project: &str, cmd: &super::PlanCmd) -> Resul
         super::PlanCmd::Plan(a) => cmd_plan_batch(conn, a, Action::Plan),
         super::PlanCmd::Close(a) => cmd_plan_batch(conn, a, Action::Close),
         super::PlanCmd::Drop(a) => cmd_plan_drop(conn, a),
+        super::PlanCmd::Link(a) => {
+            crate::cli::container_link::dispatch(conn, ContainerKind::Plan, a)
+        }
     }
 }
 
