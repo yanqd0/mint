@@ -598,3 +598,23 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 **理由**：缺陷只存在于发布产物、修复算法成熟；锚点补丁让上游文件仍是事实源（只在必要处动刀），cargo-dist 升级时以「release 失败 + 锚点清单」暴露而非静默退化。发布期改包 + 重打包在本仓库已有先例（`publish-npm-github` 的 scoped 改名 + 重打包）。
 
 **固化**：`scripts/npm/`（`patch-installer.mjs`、`patch.test.mjs`、`race.test.mjs`、`fixtures/binary-install.mint-faa-0.8.0.js`、`README.md`）、`release.yml` 两个 publish job、`ci.yml` `npm-installer` job、`scripts/precheck.sh` §5、`docs/RELEASING.md`「npm installer patch (#504)」。修复随 **0.8.1**（稳定版）进 npm；预发布不发 npm（dist `publish-prereleases` 默认 false）。
+
+---
+
+## D48：plan 在 milestone 内的显式排序 sort_order（2026-10-04，#481 / plan #109）
+
+**背景**：#481：`plan list` 只能按 id 倒序，milestone 内的执行顺序无法表达，只能写进 milestone body 的散文（plan #109 的由来）。plans 表 9 列无任何排序字段（001 + 005 索引 + 006 uid + 007 manual_dropped）。
+
+**决策**：
+
+- **落库列名 `sort_order`（可空、无默认）**，不用 `rank`：`rank` 是 SQLite 窗口函数关键字、FTS5 亦有同名特殊列，列名零歧义优先；CLI 面向用户仍叫 `--rank`（issue 建议的旗标）。迁移 `008_plans_sort_order.sql` 加列 + `idx_plans_milestone_sort (milestone_id, sort_order)`。
+- **写入走独立语句 `plan_set_order.sql`**（`UPDATE plans SET sort_order = ?2, updated_at = datetime('now')`），不复用 `plan_update.sql` 的 `CASE WHEN` 形态：后者的 NULL 语义是「不更新」，**无法表达清除 rank**；`--no-rank` 传 NULL 清空。校验 `>= 0`，`--rank` 与 `--no-rank` 互斥。
+- **排序是 opt-in，默认行为不变**：`plan list` / `milestone list` 默认仍 id 倒序；`--order rank` 才按 `(sort_order IS NULL, sort_order, id DESC)` 重排（显式 rank 升序在前、未设 rank 末位）。`--order rank` 对 milestone list 报错（同 `--milestone only applies to plan list` 先例）。排序在过滤之后、分页之前执行。
+- **TSV 不加 Rank 列**：只加 `plan list --json` 的 `"rank"` 键与 `plan get <id> rank` 裸值——list 是 agent 高频路径，恒为空的列纯属 token 开销（与 D45 「不引入 TOON」同一取舍方向）。
+- **TUI milestone 面板同步 rank 优先**（`milestone_plans()`：rank 升序、未设 rank 末位，再按 updated_at 逆序），否则 `plan set --rank` 刷新 updated_at 会让 TUI 顺序与 CLI 相悖。
+- **跨机同步保留本地 rank**：`merge_plans` 的 `fill_null_from_local` 白名单加 `"sort_order"`（旧快照缺列重放为 NULL 时不清零本地值）；导出端按 `PRAGMA table_info` 动态取列，无需改。
+
+**理由**：显式排序是「排期意图」而非「活跃度」，用独立可空列表达、默认不参与排序，既满足 milestone 内排序需求，又让未使用该特性的库输出逐字节不变（零回归面）；`--order` 显式化避免改变既有脚本/TUI 的默认视图。
+
+**固化**：`src/db/migrations/008_plans_sort_order.sql`、`src/db/queries/plan_set_order.sql` + `plan_list.sql`/`plan_select.sql`/`milestone_list.sql`/`milestone_select.sql` 列调整、`src/container/lifecycle.rs::set_plan_order`、`src/cli/container_order.rs`（+ 单测）、`src/cli/args/container.rs`（`ContainerOrder`/`--rank`/`--no-rank`）、`src/tui/dashboard/model_view.rs`、`src/db/sync_import/merge.rs`、`tests/cli/plan_ext.rs::st_plan_rank_order`。
+
