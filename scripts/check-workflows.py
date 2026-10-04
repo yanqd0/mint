@@ -59,6 +59,15 @@ for wf in ("publish-crates-io.yml", "publish-pypi.yml"):
         "判定逻辑必须只在 scripts/release-gate.sh（#506）",
     )
 
+# ── 不变式：Create GitHub Release 不带 --target（#509）────────────────
+# tag 已存在时 --target 被忽略，但会让 GITHUB_TOKEN 走 workflow-scope 校验 →
+# 「Resource not accessible by integration」（tag 提交带 workflow 改动时必现）。
+check(
+    "release.yml: gh release create 不带 --target",
+    not re.search(r"gh release create[^\n]*--target", read("release.yml")),
+    "去掉 --target（#509）",
+)
+
 # ── YAML 语法（可选：需要 pyyaml）─────────────────────────────────────
 try:
     import yaml  # type: ignore
