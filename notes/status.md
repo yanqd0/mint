@@ -30,6 +30,9 @@
 - 判定：任一活跃 → `running`；全 `done` → `done`；全 `dropped` → `dropped`；恰 `{done,dropped}` 混合 → `partial`；全 `open`/空 → `open`。
 - 优先级：`running > done > dropped > partial > open`（见 `DDD.md`「Container」段）。
 - 变更即同步：改 issue → 重算其 plan → 重算 plan 所在 milestone，同一事务。
+- **写侧不变式（#104）**：milestone 默认同刻至多 1 个 `running`。写事务内取 before 快照、派生同步后比对，
+  `before` 非空且 running 数增加 → 整体回滚；唯一放行入口 `milestone set <ID> --status running --force`
+  （净计数不变/减少放行）。只读出口 `mint milestone current`（0 个 / ≥2 个 → 退出码 1）。
 
 ## 着色（TUI）
 

@@ -9,8 +9,20 @@ Used by all flows when recording or advancing, to choose the right action per sc
 | Scenario | Action |
 |---|---|
 | Has an associated plan (active plan) | `plan attach <PLAN> <ISSUE>` |
-| No plan but has target version | `milestone attach <RM> <ISSUE>` (mount directly to milestone/milestone) |
+| No plan but has target version | `milestone attach <RM> <ISSUE>` (mount directly to the milestone) |
 | Uncertain / standalone | Don't mount (standalone issue, schedule later) |
+
+### Choosing the target milestone (#104: 1 running at a time by default)
+
+| Situation | Action |
+|---|---|
+| One running milestone | Always mount on it: `mint milestone current` for the id, then `plan create --milestone <RM>` / `milestone attach <RM> <ISSUE>` |
+| No running milestone | Infer the next semver + **ask the user**; after confirmation `milestone set <ID> --status running` or create one (never set it running on your own) |
+| Want to mount in-flight work into an `open` milestone | The CLI rejects it (that would silently start another version) — the work belongs to the running milestone |
+| The user asks for parallel versions | `milestone set <ID> --status running --force` (the only escape hatch), then mount the in-flight plans/issues right away |
+
+Guard semantics: a write that **increases** the running count while ≥1 milestone is already running rolls back entirely
+(`milestone set --status open|done|dropped`, `plan set --milestone` with an unchanged count, etc. still work).
 
 ## Test branch (close requires --test-cmd)
 

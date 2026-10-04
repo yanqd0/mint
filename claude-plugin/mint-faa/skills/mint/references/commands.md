@@ -121,13 +121,22 @@ mint list --label agent:<host>            # list issues involving a participant
 ```bash
 mint milestone create "v0.4 TUI" --version 0.4.0 --body "scope…"
 mint plan create "sprint-1" --body "goal…" --milestone 4
+mint milestone current                          # the single running milestone (TSV row; exits 1 when 0 or 2+ are running)
 mint milestone show 4
 mint plan show 12
 mint plan attach 12 42                        # attach issue to plan (single arg: one issue per call, repeat for multiple)
 mint plan detach 12 42                 # detach
 mint milestone attach 4 42                      # attach issue directly to milestone
 mint milestone detach 4 42               # detach
+mint milestone set 4 --status running           # make it the current version (rejected while another is running)
+mint milestone set 11 --status running --force  # parallel versions: the only escape hatch (user must ask for it)
+mint milestone set 4 --status done              # release; --status dropped cancels (count drops, never blocked)
 ```
+
+> **Single running (#104)**: exactly 1 running milestone by default. Any write (state transition, mount, cross-milestone move,
+> `milestone set`) that **increases** the running count while ≥1 milestone is already running rolls back entirely; the error
+> message prints the `milestone set <ID> --status running --force` escape hatch. Use parallel versions only when the user
+> explicitly asks for them.
 
 ## delete
 

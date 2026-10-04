@@ -658,3 +658,21 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 **固化**：`scripts/release-gate.sh` + `scripts/release-gate.test.sh`、`scripts/is-published.sh` + `scripts/is-published.test.sh`、`scripts/check-workflows.py`、`scripts/precheck.sh` §1/§8、`ci.yml` `release-scripts` job、`publish-crates-io.yml` / `publish-pypi.yml`（workflow_run + 幂等 + required tag）、`release.yml`（去 `--target`、去 PR 触发、npm 幂等）、`AGENTS.md`、`CONTRIBUTING.md`§Release pipeline checks、`docs/RELEASING.md`。远程验收（预发布 tag 全跳过、正式 tag 串联顺序、Release 重跑幂等）需在下次发版时确认。
 
 
+
+---
+
+## D51：唯一 running milestone 写侧守卫 + `milestone current`（2026-10-04，plan #104 / #516-#518）
+
+**背景**：milestone 状态纯派生（issue → plan → milestone），于是「把在途 plan/issue 挂进一个 open milestone」会让该 milestone **静默变成 running**。多个 running 的主要来源正是这条路径（把新 plan 建到 open milestone、把旧 plan/issue 挂进去），而 CLI 侧没有任何拦截；skill/hook 只能事后提示（#276 检测 ≥2 running 后请用户重置）。
+
+**决策**：
+
+- **计数口径的写侧不变式**：写事务内取 `before`（running milestone 快照），全部派生同步完成后比对——`before` 非空且 running 数**增加**即报错，由调用方既有 `Err` 分支 ROLLBACK。取「净计数」而非「某 milestone 由 open→running」，因为 `plan set --milestone A→B` 会同时推进 B、回落 A，按单点转换判定会误报。
+- **接入四处写事务**（`apply_transition` / `reassign_container` / `move_plan` / `delete_txn`，后者天然只减、接入求一致），**豁免 `import` / `sync merge` / 迁移拆分**（直接写 SQL，不经 container 层）：跨机合并出多个 running 是数据事实，不该让合并失败。
+- **唯一放行入口在 `milestone set`**（`-f/--force`）：不在 attach / state 等命令上加 force——放行面收敛到一个语义明确的动作（「确认要并行开发两个版本」），报错文案直接给出该命令；`milestone set --status running` 自身走同一预检（`ensure_running_start_allowed`）。口径：running ≥1 时禁止任何使其 +1 的操作，0 → N 放行。
+- **新增只读 `mint milestone current`**：恰 1 个 → 与 `milestone list` 同列的单行 TSV / `--json`（复用抽出的 `container_item_json`，避免与 list 两处漂移）；0 个或 ≥2 个 → 退出码 1 并给出下一步。skill 用它一步拿到默认挂载目标，不必解析 list。
+- **不做** running 粘滞（手动置 running 仍会被后续派生重算覆盖——故文档要求放行后立即挂入在途项），也**不做** close-milestone 挂载限制（原 #104 body 的「挂入 close milestone 只接受 close 态」在本次收敛中放弃：running 计数不变式已覆盖真实缺陷，再加限制属过度强制）。
+
+**理由**：版本语义下「当前版本」唯一，但 milestone 也可能代表大 feature，或确实多版本并行（0.9.0 与 1.0.0 同时开发）——所以不做绝对不变量，而是「默认唯一 + 显式放行」。检查放在**事务边界**（而非 `sync_milestone` 内部）是唯一能同时满足「覆盖全部写路径」与「不误报净计数不变操作」的位置；放行面收敛到 `milestone set --force` 后，help-llm 与 skill 只需讲一条命令。
+
+**固化**：`src/container/guard.rs`、`src/db/queries/milestone_running.sql`（去 `LIMIT 1`，与 #483 的 `issue add` 提示共用）、`src/container/{mod,affiliation,lifecycle}.rs`、`src/state.rs`、`src/cli/args/container.rs`、`src/cli/milestone.rs`、`src/cli/container_cmd.rs`（`container_item_json`）、`src/cli/help_llm/notes.rs`、`src/container/tests/guard.rs`、`src/state_tests.rs`、`tests/cli/milestone.rs`；skill（CN 为源 + EN 翻译）`SKILL.md` / `references/flow-planning.md` / `references/flow-conditions.md` / `references/commands.md`、`claude-plugin/mint-faa/hooks/inject_context.sh`；dsh-mint 仓 `skill/` 与 `src/context.ts` 同步。

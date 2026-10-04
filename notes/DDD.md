@@ -90,6 +90,8 @@ issue/plan 之上的**聚合容器**。概念层级：`roadmap`（上位抽象�
 
 **机器可读归属**（#503）：`list`/`search --json` 的 issue item 带 `milestone_id`（有效 milestone）与 `milestone_direct`（是否直挂）；默认 TSV 末列 `Milestone`（`#N`，只追加、既有列索引不变）。消费方无需逐 milestone 反查；plan version 不下发（`plan_id` + milestone 字典已足够表达 `#14 (0.2.0)`）。
 
+**唯一 running 写侧守卫**（#104，2026-10-04）：默认同刻至多 1 个 running milestone（当前开发版本），由**计数口径**强制：写事务内取 before 快照，全部派生同步完成后比对，`before` 非空且 running 数**增加**即 `Error`（`Err` 分支 ROLLBACK，整个操作原子回滚）。接入四处写事务——`state::apply_transition`（issue 状态机）、`affiliation::reassign_container`（attach/detach）、`lifecycle::move_plan`（`plan set --milestone`）、`lifecycle::delete_txn`（删除天然只减，接入求一致）；`import` / `sync merge` / 迁移拆分直接写 SQL，不经 guard（跨机合并出多个 running 仍可落库）。**唯一放行入口**是 `milestone set <ID> --status running [-f|--force]`（报错文案直接给出该命令；`milestone set --status running` 自身走 `ensure_running_start_allowed` 预检）。净计数不变（`A→B` 跨桶迁移：A 回落 + B 推进）与减少（发布/取消/删除）一律放行，故不误报。只读命令 `mint milestone current` 输出唯一 running milestone（恰 1 个 → 与 `milestone list` 同列的单行 TSV / `--json`；0 个或 ≥2 个 → 退出码 1 并列出）。
+
 ### Plan（计划）
 
 编程 agent 的**执行计划**：记录标题 + 完整 markdown 信息（body），主要**关联多个 issue**（issues.plan_id）。程序化承载 mint-dogfood skill 的"多 issue plan 统一测试"模式——plan 记录拆解、issue 分批推进、全绿后统一 `close`。

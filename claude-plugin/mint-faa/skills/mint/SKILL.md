@@ -80,7 +80,7 @@ Before any flow, determine the current host agent and `Read` **only** the matchi
 When called without `<description>`, enters takeover mode to replace initial thinking:
 
 1. **Scan TODO/FIXME/XXX**: grep project code markers, convert each to an issue (dedup, no duplicates; body notes source location).
-2. **Milestone/milestone check**: Compare existing milestones with project state; suggest creating new ones when version planning signs appear → **confirm with user** before creating (skip if duplicate). **Single-running constraint (#276)**: at any time only 1 milestone should be `running` (the current development target); if ≥2 are running, list them to the user and ask how to handle it (e.g. move the far-future milestone's completed plans/issues to the current one, reset its running-state plans/issues to open), then reset the far-future milestone to `open` after confirmation.
+2. **Milestone check**: `mint milestone current` returns the single running milestone (the default mount target for new plans / standalone issues); compare existing milestones with project state and suggest creating new ones when version-planning signs appear → **confirm with user** before creating (skip if that version already exists). **Single running (#104)**: exactly 1 milestone is running at a time by default — the CLI rejects any write that *increases* the running count (`milestone set <ID> --status running --force` is the only escape hatch); if ≥2 are running, list them to the user and ask (keep them when the parallelism is intentional; otherwise move the far-future milestone's plans/issues to the current one and `milestone set <ID> --status open`). **The skill must never pass `-f` on its own** — only when the user explicitly asks for parallel versions.
 3. **Next step recommendation**: Topological sort by blocks (dependencies first), same level by priority ascending, with rationale.
 4. **Declare takeover**: Subsequent sessions can describe intent directly; the skill auto-follows the mint flow.
 
@@ -119,9 +119,11 @@ mint issue set 42 --title "new title" --priority 1
 mint issue link create 42 solves 10
 mint issue link create 42 blocked_by 55
 
-# Plans (plan/sprint under milestone/milestone)
+# Plans (plan/sprint under a milestone)
+mint milestone current              # the single running milestone (errors on 0 or 2+)
 mint plan create "sprint-1" --body "goal…" --milestone 4
 mint plan attach 12 42              # single arg: one issue per call, repeat for multiple (not the batch form above)
+mint milestone set 11 --status running --force   # parallel versions (only escape hatch; user must ask for it)
 
 # sync (multi-machine; first use specifies backend/remote, then cached)
 mint sync push --backend rclone --remote jianguo:/mint   # first time
@@ -156,7 +158,7 @@ Follow templates for issue/plan/milestone title & body, **record only what the L
 - **Memory division of labor**: mint manages issues (actionable todos); the memory layer (facts/lessons) is optionally integrated per host — Claude Code integrates mem-lite, contract in `references/agent/claude.md`; other hosts may ignore the memory layer.
 - **Completion requires `state commit <id> --sha <SHA>`** (defaults to HEAD); `close` requires `--test-cmd` (use `not-tested` if tests were skipped).
 - **Plan vs. single-item**: cross-module/multi-step → create a plan/sprint + split issues; single small fix/review finding → just record an issue.
-- **Mount rules** (`references/flow-conditions.md`): associate with plan → no plan? mount milestone → neither (standalone); issue is either-or (can't directly mount a milestone after belonging to a plan).
+- **Mount rules** (`references/flow-conditions.md`): associate with plan → no plan? mount milestone → neither (standalone); issue is either-or (can't directly mount a milestone after belonging to a plan). **The mount target defaults to the running milestone** (`milestone current`): while one is running, mounting an in-flight (planned/dev/test/done) plan or issue into an `open` milestone is rejected by the CLI (it would silently start another version).
 - **link**: introduced by another change → `link create <issue> solves <introducing-requirement>`.
 - **delete is dangerous/irreversible**: avoid by default, narrow scenarios only + explicit user confirmation; prefer `state drop` for issues.
 - **Clean up verification artifacts**: temporary issues/plans/milestones created during verification should be `state drop`ped (with reason) to avoid noise.

@@ -81,7 +81,7 @@ allowed-tools: Bash(mint:*) Bash(git:*) Bash(grep:*) Read
 无 `<description>` 参数时进入接管模式，代替用户初始化思考：
 
 1. **扫描 TODO/FIXME/XXX**：grep 项目代码标记，逐个转 issue（查重不重复，body 注明来源位置）。
-2. **milestone/milestone 检查与建议**：对比现有 milestone 与项目状态，发现新版本规划迹象 → **和用户确认后**创建（重复则不问）。**唯一 running 约束（#276）**：同刻只应有 1 个 milestone 为 running（当前开发目标）；发现 ≥2 running → 向用户列出并反问处理意见（如把远期 milestone 已完成 plan/issue 挪当期、远期 running 态 plan/issue 重置 open），确认后重置远期 milestone 为 open。
+2. **milestone 检查与建议**：`mint milestone current` 取当前唯一 running milestone（新 plan / 独立 issue 的默认挂载目标）；对比项目状态发现新版本规划迹象 → **和用户确认后**创建（按 version 查重，重复则不问）。**唯一 running（#104）**：同刻默认只有 1 个 running——CLI 已拦「让 running 数增加」的写操作（`milestone set <ID> --status running --force` 是唯一放行入口）；发现 ≥2 running → 向用户列出并反问（有意并行则保留；否则把远期 milestone 的 plan/issue 挪当期、远期 `milestone set <ID> --status open`）。**skill 不得自行 `-f`**，必须用户明确要求并行版本。
 3. **下一步计划建议**：按 blocks 拓扑排序（被依赖者优先），同层按 priority 升序推荐下一个应开发项，附理由。
 4. **声明接管**：后续 session 直接描述意图即可，skill 自动走 mint 流程。
 
@@ -120,9 +120,11 @@ mint issue set 42 --title "新标题" --priority 1
 mint issue link create 42 solves 10
 mint issue link create 42 blocked_by 55
 
-# 计划（plan/sprint 挂 milestone/milestone）
+# 计划（plan/sprint 挂 milestone）
+mint milestone current              # 当前唯一 running milestone（0 个 / ≥2 个报错）
 mint plan create "sprint-1" --body "目标…" --milestone 4
 mint plan attach 12 42              # 单参：一次只挂一个 issue，多 issue 逐条执行（勿与上方批量混淆）
+mint milestone set 11 --status running --force   # 并行多版本（唯一放行入口；须用户明确要求）
 
 # 同步（多机；首次指定后免参复用缓存）
 mint sync push --backend rclone --remote jianguo:/mint   # 首次指定
@@ -157,7 +159,7 @@ mint sync push --all          # 多项目
 - **记忆分工**：mint 管 issue（可执行待办）；记忆层（事实/教训）按宿主可选接入——Claude Code 集成 mem-lite，契约见 `references/agent/claude.md`；其它宿主可忽略记忆层。
 - **开发完成必须 `state commit <id> --sha <SHA>`**（默认读 HEAD）；`close` 必填 `--test-cmd`（无测试填 `not-tested`）。
 - **方案 vs 单点区分**：跨模块/多步骤方案 → 建 plan/sprint + 拆 issues；单点小改动/审查发现/观察项 → 只记 issue。
-- **挂载规则**（`references/flow-conditions.md`）：关联 plan → 无 plan 挂 milestone → 不挂（独立）；issue 二选一（属 plan 后不能直接挂 milestone）。
+- **挂载规则**（`references/flow-conditions.md`）：关联 plan → 无 plan 挂 milestone → 不挂（独立）；issue 二选一（属 plan 后不能直接挂 milestone）。**挂载目标默认是当前 running milestone**（`milestone current`）：已有 running 时，把在途（planned/dev/test/done）plan/issue 挂进 open milestone 会被 CLI 拒（等价于静默多开版本）。
 - **link**：被别的修改引入 → `link create <issue> solves <引入它的需求>`。
 - **delete 是危险/不可逆操作**：默认不使用，极窄场景 + 用户显式确认；issue 优先 `state drop`。
 - **验证产物清理**：验证性操作产生的临时 issue/plan/milestone 验证后 `state drop` 清理（附 reason），不残留噪音。

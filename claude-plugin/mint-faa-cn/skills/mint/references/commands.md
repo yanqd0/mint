@@ -122,13 +122,21 @@ mint list --label agent:<宿主>            # 查某参与者相关的 issue
 ```bash
 mint milestone create "v0.4 TUI" --version 0.4.0 --body "范围…"
 mint plan create "sprint-1" --body "目标…" --milestone 4
+mint milestone current                          # 当前唯一 running milestone（TSV 行；0 个 / ≥2 个 → 退出码 1）
 mint milestone show 4
 mint plan show 12
 mint plan attach 12 42                        # 挂 issue 到 plan（单参：一次一个 issue，多 issue 逐条执行）
 mint plan detach 12 42                 # 解挂
 mint milestone attach 4 42                      # 直接挂 issue 到 milestone
 mint milestone detach 4 42               # 解挂
+mint milestone set 4 --status running           # 置为当前版本（已有其他 running 时被拒）
+mint milestone set 11 --status running --force  # 并行多版本：唯一放行入口（须用户明确要求）
+mint milestone set 4 --status done              # 发布；--status dropped 取消（running 数减少，不受守卫限制）
 ```
+
+> **唯一 running（#104）**：同刻默认只有 1 个 running milestone。任何写操作（状态机推进、挂载、跨桶迁移、
+> `milestone set`）若让 running 数**增加**、且操作前已有 ≥1 个 running，则整体回滚；报错文案会给出
+> `milestone set <ID> --status running --force` 这条放行命令。并行开发多版本只在用户明确要求时使用。
 
 ## delete
 
