@@ -19,7 +19,7 @@ mint = **M**inimal **I**ssue & **N**eeds **T**racker。一个全局、单机、S
 - **沙箱边界**：数据库、临时库与 `TMPDIR` 必须落在工作区内。受限沙箱（如 DSH `workspace-write`）下跑测试/建临时库用 `TMPDIR=$PWD/.tmp-test`（已 gitignore）；在 `/tmp` 建库会因 SQLite temp/WAL 被拒而报 `unable to open database file`。
 - **用户侧输出全英文**（i18n 前）：CLI help/错误/输出无中文；代码注释与 `notes/` 文档用中文（标识符英文）。**mint 数据**（issue/plan/milestone 的 title/body、label）用中文（项目记忆，与 `notes/` 一致）；机器可读字段用英文——`test_cmd` 填英文命令，跳过测试统一 `not-tested`。
 - **6 态状态机**：`open/planned/dev/test/done/dropped`；`close` 必填 `test_cmd`（跳过测试填 `not-tested`），无 dev→done 捷径——见 `notes/DDD.md`。
-- **版本同步**：Cargo.toml `version` 是权威版本号。正式版发布时同步更新 **4 个版本文件**：`claude-plugin/{mint-faa,mint-faa-cn}/.claude-plugin/plugin.json` + 两处 `marketplace.json`（仓库根 `.claude-plugin/` 与 `claude-plugin/.claude-plugin/`）；**预发布版（`-alpha`/`-beta`/`-rc`）不碰**。`scripts/precheck.sh` 按此校验。
+- **版本同步**：Cargo.toml `version` 是权威版本号。正式版发布时同步更新 **4 个版本文件**：`claude-plugin/{mint-faa,mint-faa-cn}/.claude-plugin/plugin.json` + 两处 `marketplace.json`（仓库根 `.claude-plugin/` 与 `claude-plugin/.claude-plugin/`）；**预发布版（版本号含任意 `-` 后缀，如 `-alpha`/`-beta`/`-rc`/`-dev`）不碰**。`scripts/precheck.sh` 按此校验；**stable/预发布与 `tag == 版本` 的判定唯一实现在 `scripts/release-gate.sh`**（三条发布流水线 + precheck 共用，改语义只改这一处）。
 - **CHANGELOG 全英文**：`CHANGELOG.md` 的版本段与条目一律用英文撰写（与用户侧输出一致）；新增/整理版本条目时自动按英文写。
 
 ## 文档导航

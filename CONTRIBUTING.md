@@ -74,6 +74,23 @@ cargo fmt --check        # formatting (rustfmt, default config)
 cargo clippy --all-targets   # static analysis (aim for zero warnings)
 ```
 
+## Release pipeline checks
+
+`scripts/release-gate.sh` is the **only** place that decides "stable vs pre-release" and "tag == Cargo.toml version" — the three release workflows and `scripts/precheck.sh` all call it. `.github/workflows/**` is hand-maintained on top of cargo-dist output (`allow-dirty = ["ci"]`), so the following checks guard it:
+
+```bash
+bash scripts/release-gate.test.sh     # release-gate decision matrix (no cargo, no network)
+python3 scripts/check-workflows.py    # workflow invariants (+ YAML syntax when pyyaml is present)
+```
+
+When the system Python has no `pyyaml`, run the syntax check through uv:
+
+```bash
+UV_CACHE_DIR=$PWD/.tmp-test/uv-cache uv run --no-project --with pyyaml python scripts/check-workflows.py
+```
+
+CI runs both in the `release-scripts` job; `scripts/precheck.sh` runs them locally.
+
 ## Data
 
 On first run, mint creates a per-project database at

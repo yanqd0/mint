@@ -9,6 +9,7 @@
 #   - lint：sqruff（SQL）+ clippy + fmt 全绿。
 #   - npm 安装器（#504）：node 可用时跑 scripts/npm/*.test.mjs（补丁锚点 + 并发行为）。
 #   - 文件行数：src/ tests/ 下无超过 300 行的 .rs（src/AGENTS.md 规范）。
+#   - 发布流水线（#506）：release-gate 判定测试 + workflow 不变式/YAML 语法。
 #
 # 用法：scripts/precheck.sh
 # 退出码 0 = 全通过；1 = 任一检查失败。
@@ -23,18 +24,19 @@ warn() { printf '⚠️  %s\n' "$*"; }
 err()  { printf '❌  %s\n' "$*"; FAIL=1; }
 ok()   { printf '✅  %s\n' "$*"; }
 
-# ── 1. 读取 Cargo 权威版本 ────────────────────────────────────────
-VERSION="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+# ── 1. 读取 Cargo 权威版本（判定唯一实现在 scripts/release-gate.sh）────
+VERSION="$(bash scripts/release-gate.sh --print version 2>/dev/null)"
 if [ -z "$VERSION" ]; then
-  err "无法从 Cargo.toml 解析 version"
+  err "无法从 Cargo.toml 解析 version（scripts/release-gate.sh）"
   exit 1
 fi
 say "Cargo version: $VERSION"
 
-case "$VERSION" in
-  *-alpha*|*-beta*|*-rc*) IS_STABLE=0 ;;
-  *) IS_STABLE=1 ;;
-esac
+if [ "$(bash scripts/release-gate.sh --print is_stable 2>/dev/null)" = "true" ]; then
+  IS_STABLE=1
+else
+  IS_STABLE=0
+fi
 
 # ── 2. 版本一致性（仅正式版）──────────────────────────────────────
 if [ "$IS_STABLE" = "1" ]; then
@@ -111,6 +113,28 @@ if [ -z "$TRACKED_TMP" ]; then
 else
   err ".tmp-test/ 不应入库（测试生成物；清理：git rm -r --cached .tmp-test）"
   printf '%s\n' "$TRACKED_TMP" | head -5 | sed 's/^/     /'
+fi
+
+# ── 8. 发布脚本 / workflow 检查（#506）──────────────────────────
+if OUT="$(bash scripts/release-gate.test.sh 2>&1)"; then
+  ok "release-gate 判定测试通过（scripts/release-gate.test.sh）"
+else
+  err "release-gate 判定测试失败（scripts/release-gate.test.sh）"
+  printf '%s\n' "$OUT" | tail -20 | sed 's/^/     /'
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+  OUT="$(python3 scripts/check-workflows.py 2>&1)"; RC=$?
+  if [ "$RC" = "0" ]; then
+    ok "发布 workflow 不变式通过（scripts/check-workflows.py）"
+    printf '%s\n' "$OUT" | grep -q '^SKIP' &&
+      warn "workflow YAML 语法未校验（缺 pyyaml；见 scripts/check-workflows.py 头部用法）"
+  else
+    err "发布 workflow 不变式失败（python3 scripts/check-workflows.py）"
+    printf '%s\n' "$OUT" | tail -20 | sed 's/^/     /'
+  fi
+else
+  warn "python3 未安装，跳过发布 workflow 检查"
 fi
 
 say ""
