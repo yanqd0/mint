@@ -98,11 +98,12 @@ use crate::label;
 
 ## 数据模型约束
 
-- 9 表：`projects` / `issues` / `labels` / `issue_labels` / `machines` / `milestones` / `plans` / `milestone_direct_issues` / `issue_links`（另有 FTS5 虚表 `issues_fts`）。迁移由 `src/db/mod.rs` 的 `MIGRATIONS` 有序数组 + `CURRENT_VERSION` 驱动（**当前 v7；以该常量为准**，本文不写死版本号）。`machines`：`machine_id` 主键 + hostname/user（本机标识，多机同步用），见 `notes/DDD.md`。
+- 10 表：`projects` / `issues` / `labels` / `issue_labels` / `machines` / `milestones` / `plans` / `milestone_direct_issues` / `issue_links` / `container_links`（另有 FTS5 虚表 `issues_fts`）。迁移由 `src/db/mod.rs` 的 `MIGRATIONS` 有序数组 + `CURRENT_VERSION` 驱动（**版本号以该常量为准，本文不写死**；增减表或列时同步核对本清单）。`machines`：`machine_id` 主键 + hostname/user（本机标识，多机同步用），见 `notes/DDD.md`。
 - `issues`：`kind` 限 `problem|requirement|task`（DB 无 CHECK，由应用层 FromSql/ValueEnum 强校验）；`status` 限 `open|planned|dev|test|done|dropped`；`last_commit_id` 记最后关联 commit；`plan_id` 外键 → plans（一对多）。
-- 容器（`milestones`/`plans`）：`status` 限 `open|running|partial|dropped|done`（5 态派生，写后同步，CLI 只读）；milestones 有 `version`(UNIQUE) + `body`；plans 有 `body` + `milestone_id`。
+- 容器（`milestones`/`plans`）：`status` 限 `open|running|partial|dropped|done`（5 态派生，写后同步，CLI 只读）；milestones 有 `version`(UNIQUE) + `body`；plans 有 `body` + `milestone_id` + `sort_order`（milestone 内显式排序，可空 NULL = 未设；`plan set --rank` 写入，`plan list --order rank/topo` 读）。
 - `milestone_direct_issues`：复合主键 `(milestone_id,issue_id)`；issue 二选一（属 plan 后不能直接挂 milestone）。
 - `issue_links`：`type` 限 5 值 `related|solves|duplicates|blocked_by|blocks`（`001_init.sql` 的 CHECK）；`blocked_by` 写入时归一化为 `blocks`（方向互换：A blocked_by B → 存 `(B, blocks, A)`），查询反向派生；复合主键 `(from_id,type,to_id)`；禁自环；单向存。
+- `container_links`：容器级阻塞依赖（`plan↔plan` / `milestone↔milestone`，**不跨 kind**）；列 `(kind, from_id, type, to_id)`，`kind` 限 `plan|milestone`、`type` 限 `blocks`，复合主键 + `CHECK (from_id != to_id)`；**无外键**（一表引两父表不可行），端点存在性由应用层校验；`blocked_by` 同样归一化为 `blocks`；删容器需同事务清边（无 FK 级联）。
 - 状态转换写 `updated_at`；`state commit` 必填 `--sha`（写 last_commit_id）；`close` 必填 `test_cmd`；`drop` 写 `dropped_reason`；**不做 `resolution`/`resolved_at`**。
 - FTS5（0.3.0 实现）用 external content + 触发器同步 `issues_fts`；0.1.0 不建 FTS。
 
