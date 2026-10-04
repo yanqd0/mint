@@ -374,7 +374,7 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 **决策**：
 - **三端统一包名 `mint-faa`**（crates.io/PyPI/npm 均空闲），bin 名 `mint` 不变；author = "Yan QiDong"。
-- **受 tag 激活**：发布链 `push: tags: ['v*']` 触发；普通 push/merge 只跑门禁 CI。tag 由用户手动打 = 符合"远程发布仅用户手动"硬约束；crates.io/PyPI 再加受保护 environment 人工审批（双手动闸）。
+- **受 tag 激活**：发布链 `push: tags: ['v*']` 触发；普通 push/merge 只跑门禁 CI。tag 由用户手动打 = 符合"远程发布仅用户手动"硬约束；crates.io/PyPI 再加受保护 environment 人工审批（双手动闸）。（**修订**：D50 起 crates.io/PyPI 不再由 tag push 直接触发，改由 Release 成功后的 `workflow_run` 串联。）
 - **npm 走 cargo-dist**（GitHub Release + npm 安装器）；**crates.io/PyPI 走独立 workflow**（cargo-dist 无这两端）。GitHub Releases = 二进制事实来源，npm 壳从 Releases 拉二进制。
 - **发布走 musl libc**（`x86_64-unknown-linux-musl` 静态链接，单文件免依赖）；**glibc 仅本地开发**（clang+mold 在 gitignore 的 `.cargo/config.local.toml`）——修好 `cargo install --git` 对无 mold 用户不可用。
 - **Cargo.toml include 白名单**：只打包 Cargo.toml/Cargo.lock/LICENSE/README/src/**（防 adapter/plugin/notes 打进 crate）。
@@ -647,7 +647,7 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 **决策**：
 
 - **判定唯一来源 `scripts/release-gate.sh`**：**stable 判定 = 版本号不含 `-` 后缀**（覆盖 `-alpha/-beta/-rc/-dev`，对齐 D31）；tag 允许一个 `v` 前缀且必须等于 Cargo.toml 版本；输出 `version=/tag=/is_stable=`（可直接 `>> "$GITHUB_OUTPUT"`）+ `--print KEY` 裸值。三条发布流水线与 `precheck.sh` 共用，`AGENTS.md`「版本同步」指向它（改语义只改一处）。
-- **顺序原则落到结构上：不可逆的注册表后置**。registry 不再由 tag push 直接触发，改 `workflow_run: workflows: ["Release"], types: [completed]`，并额外要求 `conclusion == 'success'` 且 `event == 'push'`；`ref: head_sha` 检出 tag 提交，发布身份用 `git tag --points-at HEAD` 解析（不依赖 `head_branch` 等事件负载字段），再交 `release-gate.sh` 校验。Release（GitHub Release + npm，可逆）整条成功后才允许 PyPI/crates.io（不可逆）。
+- **顺序原则落到结构上：不可逆的注册表后置**（修订 D31 的 registry 触发面）。registry 不再由 tag push 直接触发，改 `workflow_run: workflows: ["Release"], types: [completed]`，并额外要求 `conclusion == 'success'` 且 `event == 'push'`；`ref: head_sha` 检出 tag 提交，发布身份用 `git tag --points-at HEAD` 解析（不依赖 `head_branch` 等事件负载字段），再交 `release-gate.sh` 校验。Release（GitHub Release + npm，可逆）整条成功后才允许 PyPI/crates.io（不可逆）。
 - **幂等化是串联的前置**：`scripts/is-published.sh` 探测（`crates-io` 走官方 API 且必带 User-Agent；`npm` 走 `npm view`，E404 视为未发布），退出码 0/1/2 = 已发布/未发布/**探测失败**——失败 fail-loud，绝不盲发；PyPI 用 `skip-existing`。同 tag 重跑链路不再因「版本已存在」失败，否则串联会把「可恢复的半发布」变成「卡住且不能重跑」。
 - **不合并为单条 orchestrator**（#508 的评估结论）：`release.yml` 是 cargo-dist 生成物（`allow-dirty = ["ci"]`，已累计 5 处手改），把 PyPI/crates.io job 塞进生成文件会让 `dist generate` 后的重贴面继续扩大；三条小 workflow 的重跑/审批边界更清晰（crates.io 有受保护 environment 人工闸）；单 orchestrator 会串起全部环节、单点 flaky 即阻塞整链。其收益（单一判定、单一顺序、`needs:` 天然一损俱损）已由 release-gate 收口 + workflow_run 串联拿到。**将来合并的前置**：cargo-dist 出 `workflow_call` 形态或接受在生成文件里重贴 registry job、幂等化已就绪、单 job 超时预算评估。
 - **触发面**：`release.yml` 不声明 `on: pull_request`（PR 只跑 `ci.yml`，不再白跑全平台 build）；registry 只接受 tag 锚定入口（Release 完成事件，或带 **required `tag`** 的 `workflow_dispatch`，checkout 固定到该 tag），不存在按分支发布的路径。**workflow 改动必须先落默认分支再打 tag**（`workflow_run` 只从默认分支的依赖方文件触发；同时规避 workflow-scope 403）——#509 的 403 修复即 `gh release create` 去掉 `--target`（tag 已存在时该参数本就被忽略）。
