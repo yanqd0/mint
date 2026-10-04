@@ -1,10 +1,12 @@
-# crates.io 发布：tag vX.Y.Z 激活；判定（tag==版本 + stable/预发布）唯一实现是 scripts/release-gate.sh。
+# crates.io 发布：由 Release workflow 成功后串联触发（#505）；判定（tag==版本 + stable/预发布）
+# 唯一实现是 scripts/release-gate.sh。
 # 受保护 environment `crates-io`（放 CARGO_REGISTRY_TOKEN + Required reviewers 审批）。
 name: Publish crates.io
 
 on:
-  push:
-    tags: ['v*', '[0-9]+.[0-9]+.[0-9]+*']
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -12,14 +14,35 @@ permissions:
 
 jobs:
   gate:
+    # 只认 tag 触发的 Release 且必须成功（#505：Release/npm 缺失时 registry 零发布）；
+    # 手工入口由 dispatch 提供显式 tag（#510）。
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.check.outputs.version }}
       is_stable: ${{ steps.check.outputs.is_stable }}
     steps:
+      # workflow_run 的执行 ref 是默认分支，发布身份由 checkout 的提交（tag 提交）决定
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
       - id: check
-        run: scripts/release-gate.sh >> "$GITHUB_OUTPUT"
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            # 不依赖事件负载字段：直接取落在 HEAD 上的同版本 tag
+            VERSION="$(scripts/release-gate.sh --print version)"
+            TAG="$(git tag --points-at HEAD | grep -x -e "$VERSION" -e "v$VERSION" | head -n1)"
+            if [ -z "$TAG" ]; then
+              echo "::error::no tag matching Cargo.toml $VERSION at HEAD"
+              exit 1
+            fi
+          fi
+          scripts/release-gate.sh --tag "$TAG" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: gate
@@ -31,6 +54,8 @@ jobs:
       VERSION: ${{ needs.gate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # 幂等化（#507）：同一 tag 重跑时不因「版本已存在」失败

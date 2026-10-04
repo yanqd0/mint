@@ -59,6 +59,26 @@ for wf in ("publish-crates-io.yml", "publish-pypi.yml"):
         "判定逻辑必须只在 scripts/release-gate.sh（#506）",
     )
 
+# ── 不变式：registry 由「Release 成功」事件串联（#505）────────────────
+# registry 不再直接由 tag push 触发：等 Release（GitHub Release + npm，可逆）整条
+# 成功后才发不可逆的 PyPI/crates.io，避免「注册表已发、Release/npm 缺失」。
+for wf in ("publish-crates-io.yml", "publish-pypi.yml"):
+    text = read(wf)
+    block = on_block(text)
+    check(
+        f'{wf}: on: 为 workflow_run(["Release"], completed)',
+        "workflow_run" in block and 'workflows: ["Release"]' in block and "types: [completed]" in block,
+    )
+    check(
+        f"{wf}: on: 无 push 触发",
+        not re.search(r"^\s+push:", block, re.M),
+        "registry 只能由 Release workflow_run 或显式 tag 的 dispatch 触发",
+    )
+    check(
+        f"{wf}: gate 只在 Release 成功（push 触发）时进入",
+        "workflow_run.conclusion == 'success'" in text and "workflow_run.event == 'push'" in text,
+    )
+
 # ── 不变式：发布幂等探针（#507）───────────────────────────────────────
 check(
     "publish-crates-io.yml: crates.io 幂等探针",
