@@ -3,8 +3,8 @@
 use rusqlite::Connection;
 
 use crate::cli::{
-    MilestoneCreateArgs, MilestoneSetArgs, cmd_container_list, cmd_container_show,
-    print_issue_link_json,
+    MilestoneCreateArgs, MilestoneCurrentArgs, MilestoneSetArgs, cmd_container_list,
+    cmd_container_show, container_item_json, print_issue_link_json,
 };
 use crate::container::{self, ContainerKind};
 use crate::error::Error;
@@ -91,6 +91,58 @@ pub fn cmd_milestone_set(conn: &Connection, s: &MilestoneSetArgs) -> Result<(), 
     Ok(())
 }
 
+/// Milestone current：当前唯一 running milestone（0 个 / ≥2 个报错，退出码 1）。
+/// TSV 列与 `milestone list` 一致（单行、无页脚），`--json` 复用同一 item 形状。
+pub fn cmd_milestone_current(conn: &Connection, a: &MilestoneCurrentArgs) -> Result<(), Error> {
+    let items = container::list(
+        conn,
+        ContainerKind::Milestone,
+        true,
+        Some(ContainerStatus::Running),
+    )?;
+    match items.as_slice() {
+        [(c, count)] => {
+            if a.json {
+                println!(
+                    "{}",
+                    serde_json::to_string(&container_item_json(
+                        ContainerKind::Milestone,
+                        c,
+                        *count
+                    ))?
+                );
+            } else {
+                let (headers, rows) = crate::cli::list_common::containers(&items);
+                print!("{}", crate::output::format_tsv(&headers, &rows));
+            }
+            Ok(())
+        }
+        [] => Err(Error::Other(
+            "no running milestone; start one with `mint milestone set <ID> --status running`"
+                .to_string(),
+        )),
+        _ => {
+            // id 升序列出（`container::list` 默认 id 倒序，报错文案按 id 升序更易读）。
+            let labels: Vec<String> = items
+                .iter()
+                .rev()
+                .map(|(c, _)| {
+                    container::RunningMilestone {
+                        id: c.id,
+                        version: c.version.clone(),
+                    }
+                    .label()
+                })
+                .collect();
+            Err(Error::Other(format!(
+                "{} milestones are running: {}; `milestone current` needs exactly one",
+                items.len(),
+                labels.join(", ")
+            )))
+        }
+    }
+}
+
 /// Milestone 命令分发。
 pub fn dispatch(conn: &Connection, project: &str, cmd: &super::MilestoneCmd) -> Result<(), Error> {
     match cmd {
@@ -101,6 +153,7 @@ pub fn dispatch(conn: &Connection, project: &str, cmd: &super::MilestoneCmd) -> 
         super::MilestoneCmd::Show(a) => {
             cmd_container_show(conn, project, ContainerKind::Milestone, a)
         }
+        super::MilestoneCmd::Current(a) => cmd_milestone_current(conn, a),
         super::MilestoneCmd::Attach(a) => {
             container::link_direct(conn, a.id, a.issue_id)?;
             print_issue_link_json(a.id, a.issue_id, "attached", a.json)

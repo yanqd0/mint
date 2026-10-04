@@ -14,6 +14,7 @@ pub(super) const CONVENTIONS: &[&str] = &[
     "  Body: all TSV output escapes \\t/\\n/\\r and backslash; `get <ID> body` returns raw text.",
     "  Body edit: --body-append adds a block; --body-file replaces from a file; --body-section replaces one section.",
     "  Milestone: show/get <ID> milestone/list --milestone use the effective milestone (direct, else via plan).",
+    "  Running: 1 milestone at a time; a 2nd needs `milestone set <ID> --status running --force`",
     "  Paging: default 5 rows; --page-size N / --page N / --no-page; a \"# Page x/y ...\" footer on stdout, not stderr.",
     "  Batch: state transitions and container batch commands take one or more IDs (invalid ones are skipped and reported).",
     "  Order: `--order rank|topo` on plan/milestone list is opt-in (default id desc).",
@@ -60,7 +61,13 @@ pub(super) const NOTES: &[(&str, Option<&str>)] = &[
     ),
     (
         "milestone set",
-        Some("--status accepts only done (released) or dropped (cancelled)"),
+        Some(
+            "--status: done=released / dropped=cancelled; running needs --force when another milestone is running",
+        ),
+    ),
+    (
+        "milestone current",
+        Some("the single running milestone; errors when 0 or 2+ are running"),
     ),
     (
         "plan plan",
@@ -192,7 +199,11 @@ pub(super) fn render_state_machine(out: &mut String) {
     );
     line(
         out,
-        "  derived from their issues; only done (released) and dropped (cancelled) are set explicitly.",
+        "  derived from their issues; done (released) / dropped (cancelled) are set explicitly;",
+    );
+    line(
+        out,
+        "  1 running milestone at a time (a 2nd needs --status running --force).",
     );
 }
 

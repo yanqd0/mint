@@ -29,7 +29,7 @@ pub use args::*;
 #[cfg(feature = "tui")]
 pub(crate) use container_cmd::container_matches_search;
 pub(crate) use container_cmd::{
-    cmd_container_list, cmd_container_show, kind_noun, print_issue_link_json,
+    cmd_container_list, cmd_container_show, container_item_json, kind_noun, print_issue_link_json,
 };
 pub use label::{LabelArgs, LabelCmd};
 

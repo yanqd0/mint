@@ -111,21 +111,7 @@ pub(crate) fn cmd_container_list(
     if a.json {
         let arr: Vec<serde_json::Value> = items
             .iter()
-            .map(|(c, count)| {
-                let mut v = serde_json::json!({
-                    "id": c.id, "title": c.title, "version": c.version,
-                    "milestone_id": c.milestone_id, "status": c.status,
-                    "issue_count": count,
-                    "created_at": c.created_at, "updated_at": c.updated_at,
-                });
-                // rank 仅 plan 有意义（milestone 恒为 NULL，不输出该键）。
-                if kind == ContainerKind::Plan
-                    && let Some(obj) = v.as_object_mut()
-                {
-                    obj.insert("rank".into(), serde_json::json!(c.sort_order));
-                }
-                v
-            })
+            .map(|(c, count)| container_item_json(kind, c, *count))
             .collect();
         println!("{}", paged_json(&arr, page, page_size, total));
     } else {
@@ -134,6 +120,27 @@ pub(crate) fn cmd_container_list(
         print_page_footer(page, page_size, total);
     }
     Ok(())
+}
+
+/// 单条容器的 `--json` item 形状（`list` 与 `current` 共用，避免两处漂移）。
+pub(crate) fn container_item_json(
+    kind: ContainerKind,
+    c: &Container,
+    count: i64,
+) -> serde_json::Value {
+    let mut v = serde_json::json!({
+        "id": c.id, "title": c.title, "version": c.version,
+        "milestone_id": c.milestone_id, "status": c.status,
+        "issue_count": count,
+        "created_at": c.created_at, "updated_at": c.updated_at,
+    });
+    // rank 仅 plan 有意义（milestone 恒为 NULL，不输出该键）。
+    if kind == ContainerKind::Plan
+        && let Some(obj) = v.as_object_mut()
+    {
+        obj.insert("rank".into(), serde_json::json!(c.sort_order));
+    }
+    v
 }
 
 /// 容器 show：详情 + 其下 issue。

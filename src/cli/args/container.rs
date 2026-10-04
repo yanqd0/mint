@@ -92,6 +92,13 @@ pub struct PlanCreateArgs {
 }
 
 #[derive(clap::Args)]
+pub struct MilestoneCurrentArgs {
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(clap::Args)]
 pub struct MilestoneIssueArgs {
     pub id: i64,
     pub issue_id: i64,
@@ -190,13 +197,15 @@ pub enum MilestoneCmd {
     List(ListContainersArgs),
     /// Show a milestone's details and its issues
     Show(ContainerIdArgs),
+    /// Show the single running milestone (errors when 0 or 2+ are running)
+    Current(MilestoneCurrentArgs),
     /// Attach an issue directly to a milestone (must not belong to a plan)
     Attach(MilestoneIssueArgs),
     /// Detach an issue from a milestone
     Detach(MilestoneIssueArgs),
     /// Get a single field's value (bare output; --json for structured)
     Get(ContainerGetArgs),
-    /// Set fields: --title / --body / --version
+    /// Set fields: --title / --body / --version / --status (--force allows a 2nd running)
     Set(MilestoneSetArgs),
     /// Milestone-to-milestone blocking links (create/remove/list)
     Link(ContainerLinkArgs),

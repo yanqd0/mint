@@ -24,7 +24,8 @@ pub struct RunningMilestone {
 
 impl RunningMilestone {
     /// `#7 (0.9.0)`；version 缺失/空白（手工 SQL 造出的脏数据）只写 `#7`。
-    fn label(&self) -> String {
+    /// CLI 文案（`milestone current` 的多 running 报错）复用同一渲染，避免两处格式漂移。
+    pub fn label(&self) -> String {
         match self
             .version
             .as_deref()
