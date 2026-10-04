@@ -35,8 +35,10 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
       - id: check
+        env:
+          INPUT_TAG: ${{ inputs.tag }}   # 经 env 传递，避免表达式注入
         run: |
-          TAG="${{ inputs.tag }}"
+          TAG="$INPUT_TAG"
           if [ -z "$TAG" ]; then
             # 不依赖事件负载字段：直接取落在 HEAD 上的同版本 tag
             VERSION="$(scripts/release-gate.sh --print version)"
