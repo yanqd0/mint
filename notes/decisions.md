@@ -638,4 +638,23 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 
 **固化**：`src/db/migrations/009_container_links.sql`、`src/db/queries/container_link_{insert,exists,delete}.sql` + `container_links_for.sql`/`container_links_for_all.sql`、`src/container/link.rs`（+ `link_tests.rs`）、`src/cli/args/container_link.rs`、`src/cli/container_link.rs`、`src/cli/container_order.rs::topo_sorted`、`src/db/queries/{plan,milestone}_delete.sql`、`src/db/sync.rs`、`src/db/sync_export.rs`、`src/db/sync_import/merge.rs`、`tests/cli/container_link.rs`。
 
+---
+
+## D50：发布流水线加固与编排定案（2026-10-04，plan #114 / #505–#511）
+
+**背景**：0.8.1 出现**半发布**——`release.yml` 的 host job 因 workflow-scope 403 失败（tag 提交带未入默认分支的 workflow 改动，`gh release create --target` 触发校验），GitHub Release 与 npm 缺失，而 `publish-crates-io.yml` / `publish-pypi.yml` 已各自被 tag **独立触发**并把不可逆的注册表发布了。同时 stable/版本判定有四份实现且已漂移：两个 registry workflow 内联 `*-*`、`precheck.sh` 只认 `-alpha/-beta/-rc`（`-dev` 被当正式版）、`release.yml` 的 npm 依赖 dist 的 `announcement_is_prerelease`。
+
+**决策**：
+
+- **判定唯一来源 `scripts/release-gate.sh`**：**stable 判定 = 版本号不含 `-` 后缀**（覆盖 `-alpha/-beta/-rc/-dev`，对齐 D31）；tag 允许一个 `v` 前缀且必须等于 Cargo.toml 版本；输出 `version=/tag=/is_stable=`（可直接 `>> "$GITHUB_OUTPUT"`）+ `--print KEY` 裸值。三条发布流水线与 `precheck.sh` 共用，`AGENTS.md`「版本同步」指向它（改语义只改一处）。
+- **顺序原则落到结构上：不可逆的注册表后置**。registry 不再由 tag push 直接触发，改 `workflow_run: workflows: ["Release"], types: [completed]`，并额外要求 `conclusion == 'success'` 且 `event == 'push'`；`ref: head_sha` 检出 tag 提交，发布身份用 `git tag --points-at HEAD` 解析（不依赖 `head_branch` 等事件负载字段），再交 `release-gate.sh` 校验。Release（GitHub Release + npm，可逆）整条成功后才允许 PyPI/crates.io（不可逆）。
+- **幂等化是串联的前置**：`scripts/is-published.sh` 探测（`crates-io` 走官方 API 且必带 User-Agent；`npm` 走 `npm view`，E404 视为未发布），退出码 0/1/2 = 已发布/未发布/**探测失败**——失败 fail-loud，绝不盲发；PyPI 用 `skip-existing`。同 tag 重跑链路不再因「版本已存在」失败，否则串联会把「可恢复的半发布」变成「卡住且不能重跑」。
+- **不合并为单条 orchestrator**（#508 的评估结论）：`release.yml` 是 cargo-dist 生成物（`allow-dirty = ["ci"]`，已累计 5 处手改），把 PyPI/crates.io job 塞进生成文件会让 `dist generate` 后的重贴面继续扩大；三条小 workflow 的重跑/审批边界更清晰（crates.io 有受保护 environment 人工闸）；单 orchestrator 会串起全部环节、单点 flaky 即阻塞整链。其收益（单一判定、单一顺序、`needs:` 天然一损俱损）已由 release-gate 收口 + workflow_run 串联拿到。**将来合并的前置**：cargo-dist 出 `workflow_call` 形态或接受在生成文件里重贴 registry job、幂等化已就绪、单 job 超时预算评估。
+- **触发面**：`release.yml` 不声明 `on: pull_request`（PR 只跑 `ci.yml`，不再白跑全平台 build）；registry 只接受 tag 锚定入口（Release 完成事件，或带 **required `tag`** 的 `workflow_dispatch`，checkout 固定到该 tag），不存在按分支发布的路径。**workflow 改动必须先落默认分支再打 tag**（`workflow_run` 只从默认分支的依赖方文件触发；同时规避 workflow-scope 403）——#509 的 403 修复即 `gh release create` 去掉 `--target`（tag 已存在时该参数本就被忽略）。
+- **防漂移门禁**：`scripts/check-workflows.py` 用文本不变式守住「判定只有一处」「registry 只能由 Release 成功事件或显式 tag 触发」「`release.yml` 无 PR 触发 / 无 `--target`」「幂等探针在位」，有 pyyaml 时兼做语法解析（CI `release-scripts` job + `precheck.sh` §8）；两个脚本各带离线测试（判定矩阵、注入 curl/npm stub 的探针测试）。
+
+**理由**：半发布的根因不是某一个 workflow 写错，而是「三条链路各自判定、各自触发、无幂等」——所以先收口判定、再让发布顺序成为事件结构（不可逆后置），最后补幂等让链路可重跑；生成文件的边界决定了编排应保持三条小 workflow 而不是并入 cargo-dist 的产物；把不变式写进门禁，才能让 5 处手工补丁在 `dist generate` 之后仍可审计。
+
+**固化**：`scripts/release-gate.sh` + `scripts/release-gate.test.sh`、`scripts/is-published.sh` + `scripts/is-published.test.sh`、`scripts/check-workflows.py`、`scripts/precheck.sh` §1/§8、`ci.yml` `release-scripts` job、`publish-crates-io.yml` / `publish-pypi.yml`（workflow_run + 幂等 + required tag）、`release.yml`（去 `--target`、去 PR 触发、npm 幂等）、`AGENTS.md`、`CONTRIBUTING.md`§Release pipeline checks、`docs/RELEASING.md`。远程验收（预发布 tag 全跳过、正式 tag 串联顺序、Release 重跑幂等）需在下次发版时确认。
+
 
