@@ -79,6 +79,21 @@ for wf in ("publish-crates-io.yml", "publish-pypi.yml"):
         "workflow_run.conclusion == 'success'" in text and "workflow_run.event == 'push'" in text,
     )
 
+# ── 不变式：触发面收窄（#510）───────────────────────────────────────
+# Release 只由 tag 触发（PR 跑 CI 即可）；手工入口必须显式给出 tag，不允许按分支发布。
+check(
+    "release.yml: on: 无 pull_request 触发",
+    not re.search(r"^\s+pull_request:", on_block(read("release.yml")), re.M),
+    "PR 不应白跑全平台 build",
+)
+for wf in ("publish-crates-io.yml", "publish-pypi.yml"):
+    block = on_block(read(wf))
+    check(
+        f"{wf}: dispatch 必须带 required tag 输入",
+        "workflow_dispatch:" in block and "required: true" in block,
+        "手工入口必须显式指定 tag（分支 ref 一律拒绝）",
+    )
+
 # ── 不变式：发布幂等探针（#507）───────────────────────────────────────
 check(
     "publish-crates-io.yml: crates.io 幂等探针",

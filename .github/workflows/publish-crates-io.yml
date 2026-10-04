@@ -8,6 +8,10 @@ on:
     workflows: ["Release"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. 0.9.0); must match Cargo.toml"
+        required: true
 
 permissions:
   contents: read
@@ -27,7 +31,7 @@ jobs:
       # workflow_run 的执行 ref 是默认分支，发布身份由 checkout 的提交（tag 提交）决定
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ inputs.tag || github.event.workflow_run.head_sha || github.ref }}
           fetch-depth: 0
           fetch-tags: true
       - id: check
@@ -55,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ inputs.tag || github.event.workflow_run.head_sha || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # 幂等化（#507）：同一 tag 重跑时不因「版本已存在」失败

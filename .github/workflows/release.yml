@@ -39,8 +39,9 @@ permissions:
 #
 # If there's a prerelease-style suffix to the version, then the release(s)
 # will be marked as a prerelease.
+# #510：不声明 `on: pull_request`（PR 只跑 CI 门禁，避免白跑全平台 build）。
+# `dist generate` 会把它加回来——重贴手改时删掉（docs/RELEASING.md 手工补丁清单）。
 on:
-  pull_request:
   push:
     tags:
       - '**[0-9]+.[0-9]+.[0-9]+*'
