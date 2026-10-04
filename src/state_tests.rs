@@ -176,3 +176,77 @@ fn task_flow_skips_dev_and_commit_unreachable() {
         apply_transition(&conn, id, Action::Close, Some("cargo test"), None, None).unwrap();
     assert_eq!((from, to), (Status::Test, Status::Done));
 }
+
+/// #104：状态机推进会让第二个 milestone 变 running 时整体回滚——issue 状态与容器状态都不变。
+#[test]
+fn apply_transition_rolls_back_when_running_would_increase() {
+    let (conn, id) = db_with_issue(Status::Open);
+    // milestone A：issue #1 直挂并置 dev → A running。
+    let ma = container::create(
+        &conn,
+        container::ContainerKind::Milestone,
+        "a",
+        Some("0.1.0"),
+        None,
+        None,
+    )
+    .unwrap();
+    container::link_direct(&conn, ma, id).unwrap();
+    conn.execute(
+        "UPDATE issues SET status = 'dev' WHERE id = ?1",
+        rusqlite::params![id],
+    )
+    .unwrap();
+    container::sync_container_status(&conn, id).unwrap();
+
+    // milestone B + plan P + issue #2（open）。
+    conn.execute(
+        "INSERT INTO issues (title, status) VALUES ('t2', 'open')",
+        [],
+    )
+    .unwrap();
+    let id2 = conn.last_insert_rowid();
+    let mb = container::create(
+        &conn,
+        container::ContainerKind::Milestone,
+        "b",
+        Some("0.2.0"),
+        None,
+        None,
+    )
+    .unwrap();
+    let p = container::create(
+        &conn,
+        container::ContainerKind::Plan,
+        "p",
+        None,
+        None,
+        Some(mb),
+    )
+    .unwrap();
+    container::set_issue_plan(&conn, id2, p).unwrap();
+
+    // #2 open -> planned 会让 B 变 running → 拒（A 已 running），事务整体回滚。
+    let err = apply_transition(&conn, id2, Action::Plan, None, None, None).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("refusing to add a running milestone"),
+        "{err}"
+    );
+    let status: Status = conn
+        .query_row(
+            "SELECT status FROM issues WHERE id = ?1",
+            rusqlite::params![id2],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(status, Status::Open, "issue 状态未变");
+    assert_eq!(
+        container::get(&conn, container::ContainerKind::Milestone, mb)
+            .unwrap()
+            .unwrap()
+            .status,
+        crate::models::ContainerStatus::Open,
+        "milestone 状态未变"
+    );
+}

@@ -65,6 +65,8 @@ pub(crate) fn delete_txn(
     }
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let result = (|| {
+        // 唯一 running 守卫的 before 快照（#104）：删除只会减少 running，接入以保持「所有写事务都断言不变式」。
+        let before = super::running_milestones(conn)?;
         // 逐语句参数化执行：execute_batch 不支持绑定参数，原 `sql.replace("?1", id)` 有
         // 误替换（字面量含 ?1 / ?10）风险；delete SQL 均仅单参数 `?1`、注释/语句间无分号，
         // 按 ';' 拆分 + params![id] 绑定安全。
@@ -72,6 +74,7 @@ pub(crate) fn delete_txn(
             conn.execute(stmt, params![id])?;
         }
         after(conn)?;
+        super::ensure_running_not_increased(conn, &before)?;
         Ok(())
     })();
     match result {
@@ -123,6 +126,8 @@ pub fn move_plan(conn: &Connection, id: i64, new_milestone_id: i64) -> Result<us
     }
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let result = (|| {
+        // 唯一 running 守卫的 before 快照（#104）：旧侧重算后比对，净计数不变（A→B）放行、增加则回滚。
+        let before = super::running_milestones(conn)?;
         conn.execute(db::PLAN_SET_MILESTONE, params![new_milestone_id, id])?;
         // 跨桶移动 = 排期上下文变更：planned（已排期未开始）作废回 open，由新归属重新排期；
         // dev/test/done/dropped 不动（进行中/已完成与版本桶归属无关）。
@@ -131,6 +136,7 @@ pub fn move_plan(conn: &Connection, id: i64, new_milestone_id: i64) -> Result<us
         if let Some(rid) = old {
             sync_milestone(conn, rid)?; // 旧侧重算（回落）
         }
+        super::ensure_running_not_increased(conn, &before)?;
         Ok(reset)
     })();
     match result {

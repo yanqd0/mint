@@ -94,6 +94,8 @@ pub fn apply_transition(
 
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let result = (|| {
+        // 唯一 running 守卫的 before 快照（#104）：与写入、派生同步同事务，净计数增加即整体回滚。
+        let before = container::running_milestones(conn)?;
         // 事务内读当前状态与 kind（BEGIN IMMEDIATE 持写锁，多 agent 并发串行，消除 TOCTOU）
         let (current, kind): (Status, Kind) = conn
             .query_row(db::ISSUE_SELECT_STATUS_KIND, rusqlite::params![id], |r| {
@@ -138,6 +140,7 @@ pub fn apply_transition(
             rusqlite::params![target, test_cmd, id, reset, drop_reason, reopen, commit_sha],
         )?;
         container::sync_container_status(conn, id)?;
+        container::ensure_running_not_increased(conn, &before)?;
         Ok((current, target))
     })();
     match result {

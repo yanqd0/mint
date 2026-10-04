@@ -4,7 +4,8 @@
 //! （milestone_direct_issues，二选一约束）。容器状态 5 态派生（写后同步，CLI 只读）。
 //!
 //! 子模块：`derive`（5 态派生纯函数）、`sync`（派生写回与级联）、`affiliation`（归属挂载）、
-//! `lifecycle`（更新/删除/跨桶移动）。对外 API 由本模块 `pub use` 再导出，调用方路径不变。
+//! `lifecycle`（更新/删除/跨桶移动）、`guard`（唯一 running 写侧守卫）。对外 API 由本模块
+//! `pub use` 再导出，调用方路径不变。
 
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -14,11 +15,16 @@ use crate::models::{Container, ContainerStatus};
 
 mod affiliation;
 mod derive;
+mod guard;
 mod lifecycle;
 mod link;
 mod sync;
 
 pub use affiliation::{issues_for, link_direct, set_issue_plan, unlink_direct, unset_issue_plan};
+pub use guard::{
+    RunningMilestone, ensure_running_not_increased, ensure_running_start_allowed,
+    running_milestones,
+};
 pub(crate) use lifecycle::delete_txn;
 pub use lifecycle::{
     delete_issue, delete_milestone, delete_plan, move_plan, set_plan_order, update_milestone,

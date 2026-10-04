@@ -64,6 +64,8 @@ fn reassign_container(
     }
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let result = (|| {
+        // 唯一 running 守卫的 before 快照（#104）：全部派生同步完成后比对，净计数增加即整体回滚。
+        let before = super::running_milestones(conn)?;
         write(conn)?;
         sync_container_status(conn, issue_id)?;
         for &p in old_plans {
@@ -72,6 +74,7 @@ fn reassign_container(
         for &m in old_milestones {
             sync_milestone(conn, m)?;
         }
+        super::ensure_running_not_increased(conn, &before)?;
         Ok(())
     })();
     match result {

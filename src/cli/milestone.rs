@@ -1,4 +1,4 @@
-//! Milestone container CLI 子命令（create/list/show/attach/detach/set/get）。
+//! Milestone container CLI 子命令（create/list/show/attach/detach/set/get/current）。
 
 use rusqlite::Connection;
 
@@ -8,6 +8,7 @@ use crate::cli::{
 };
 use crate::container::{self, ContainerKind};
 use crate::error::Error;
+use crate::models::ContainerStatus;
 
 /// Milestone create：必填 --version。
 pub fn cmd_milestone_create(conn: &Connection, a: &MilestoneCreateArgs) -> Result<(), Error> {
@@ -57,8 +58,12 @@ pub fn cmd_milestone_set(conn: &Connection, s: &MilestoneSetArgs) -> Result<(), 
     if title.is_some() || version.is_some() || body.is_some() {
         container::update_milestone(conn, s.id, title, version, body)?;
     }
-    // 手动状态（发布 done / 取消 dropped），终态派生不覆盖。
+    // 手动状态（发布 done / 取消 dropped / 显式 running），终态派生不覆盖。
     if let Some(st) = s.status {
+        // 唯一 running 守卫（#104）：已有其他 running 时置 running 被拒，`--force` 是唯一放行入口。
+        if st == ContainerStatus::Running && !s.force {
+            container::ensure_running_start_allowed(conn, s.id)?;
+        }
         container::set_milestone_status(conn, s.id, st)?;
     }
     if s.json {

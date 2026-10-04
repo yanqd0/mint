@@ -165,9 +165,12 @@ pub struct MilestoneSetArgs {
     /// New body (omit to keep; empty string clears)
     #[arg(long)]
     pub body: Option<String>,
-    /// Manual status override (done=released / dropped=cancelled; other statuses derived)
+    /// Manual status override (done=released / dropped=cancelled; running=current version)
     #[arg(long)]
     pub status: Option<ContainerStatus>,
+    /// Allow starting a second running milestone (parallel versions)
+    #[arg(short = 'f', long = "force")]
+    pub force: bool,
     /// Output as JSON
     #[arg(long)]
     pub json: bool,
