@@ -59,6 +59,16 @@ for wf in ("publish-crates-io.yml", "publish-pypi.yml"):
         "判定逻辑必须只在 scripts/release-gate.sh（#506）",
     )
 
+# ── 不变式：发布幂等探针（#507）───────────────────────────────────────
+check(
+    "publish-crates-io.yml: crates.io 幂等探针",
+    "scripts/is-published.sh crates-io" in read("publish-crates-io.yml"),
+)
+check(
+    "release.yml: npm 幂等探针（npmjs + GitHub Packages）",
+    read("release.yml").count("scripts/is-published.sh npm") >= 2,
+)
+
 # ── 不变式：Create GitHub Release 不带 --target（#509）────────────────
 # tag 已存在时 --target 被忽略，但会让 GITHUB_TOKEN 走 workflow-scope 校验 →
 # 「Resource not accessible by integration」（tag 提交带 workflow 改动时必现）。

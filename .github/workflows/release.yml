@@ -303,8 +303,17 @@ jobs:
         with:
           node-version: '22.x'
           registry-url: 'https://registry.npmjs.org'
-      - run: |
+      - name: Publish to npm (skip if this version exists)
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
           npm install -g npm@11   # OIDC 发布需 npm >= 11.5.1（Node 22 自带 npm 10 不足）
+          VERSION="$(scripts/release-gate.sh --tag "$TAG" --print version)"
+          # 幂等化（#507）：同一 tag 重跑时 npm 同版本不可重发，命中即跳过
+          if scripts/is-published.sh npm "$VERSION"; then
+            echo "mint-faa $VERSION is already on npmjs — skipping publish"
+            exit 0
+          fi
           for release in $(echo "$PLAN" | jq --compact-output '.releases[] | select([.artifacts[] | endswith("-npm-package.tar.gz")] | any)'); do
             pkg=$(echo "$release" | jq '.artifacts[] | select(endswith("-npm-package.tar.gz"))' --raw-output)
             work=$(mktemp -d)
@@ -348,6 +357,12 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ github.token }} # setup-node 只写 .npmrc 占位符，需显式注入 token
         run: |
+          VERSION="$(scripts/release-gate.sh --tag "${{ needs.plan.outputs.tag }}" --print version)"
+          # 幂等化（#507）：GitHub Packages 同样不可重发，命中即跳过整步
+          if scripts/is-published.sh npm "$VERSION" --package @yanqd0/mint-faa --registry https://npm.pkg.github.com; then
+            echo "@yanqd0/mint-faa $VERSION is already on GitHub Packages — skipping publish"
+            exit 0
+          fi
           for release in $(echo "$PLAN" | jq --compact-output '.releases[] | select([.artifacts[] | endswith("-npm-package.tar.gz")] | any)'); do
             pkg=$(echo "$release" | jq '.artifacts[] | select(endswith("-npm-package.tar.gz"))' --raw-output)
             pkgpath="./npm/${pkg}"

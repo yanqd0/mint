@@ -71,6 +71,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: release-gate tests
         run: bash scripts/release-gate.test.sh
+      - name: is-published tests
+        run: bash scripts/is-published.test.sh
       - name: workflow invariants + YAML syntax
         run: |
           python3 -m venv "$RUNNER_TEMP/venv"

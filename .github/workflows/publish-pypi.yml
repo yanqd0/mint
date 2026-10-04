@@ -74,4 +74,5 @@ jobs:
           merge-multiple: true
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          # 幂等化（#507）：同版本文件已存在视为成功，重跑发布链路不会失败
           skip-existing: true

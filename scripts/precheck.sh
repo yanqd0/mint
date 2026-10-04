@@ -123,6 +123,13 @@ else
   printf '%s\n' "$OUT" | tail -20 | sed 's/^/     /'
 fi
 
+if OUT="$(bash scripts/is-published.test.sh 2>&1)"; then
+  ok "is-published 幂等探针测试通过（scripts/is-published.test.sh）"
+else
+  err "is-published 幂等探针测试失败（scripts/is-published.test.sh）"
+  printf '%s\n' "$OUT" | tail -20 | sed 's/^/     /'
+fi
+
 if command -v python3 >/dev/null 2>&1; then
   OUT="$(python3 scripts/check-workflows.py 2>&1)"; RC=$?
   if [ "$RC" = "0" ]; then

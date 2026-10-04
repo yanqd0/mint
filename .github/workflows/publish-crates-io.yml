@@ -14,6 +14,7 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     outputs:
+      version: ${{ steps.check.outputs.version }}
       is_stable: ${{ steps.check.outputs.is_stable }}
     steps:
       - uses: actions/checkout@v4
@@ -27,8 +28,16 @@ jobs:
     environment: crates-io
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      VERSION: ${{ needs.gate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo publish --locked
+      # 幂等化（#507）：同一 tag 重跑时不因「版本已存在」失败
+      - name: Publish (skip if already on crates.io)
+        run: |
+          if scripts/is-published.sh crates-io "$VERSION"; then
+            echo "mint-faa $VERSION is already on crates.io — skipping publish"
+          else
+            cargo publish --locked
+          fi
