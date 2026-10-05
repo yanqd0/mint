@@ -56,6 +56,12 @@ pub(super) const NOTES: &[(&str, Option<&str>)] = &[
     ("list", Some("shortcut for `issue list`")),
     ("show", Some("shortcut for `issue show`")),
     (
+        "doctor",
+        Some(
+            "read-only health: stale/overlapping plans, idle milestone, stalled dev issues; --strict exits 1 on warnings",
+        ),
+    ),
+    (
         "milestone attach",
         Some("the issue must not already belong to a plan"),
     ),

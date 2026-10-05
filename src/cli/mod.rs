@@ -13,6 +13,7 @@ mod container_cmd;
 mod container_link;
 mod container_order;
 pub mod delete;
+pub mod doctor;
 pub mod export;
 mod help_llm;
 pub mod import;
@@ -72,6 +73,8 @@ pub enum Commands {
     Show(ShowArgs),
     /// Full-text search issues (FTS5)
     Search(SearchArgs),
+    /// Read-only project health check: stale/overlapping plans, idle milestone, stalled dev issues
+    Doctor(DoctorArgs),
     /// Label subcommands
     Label(LabelArgs),
     /// Project subcommands

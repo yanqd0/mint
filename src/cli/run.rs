@@ -7,7 +7,7 @@ use rusqlite::Connection;
 
 use crate::cli::label::{cmd_label_list, cmd_label_set};
 use crate::cli::{Cli, Commands, LabelCmd, ProjectCmd, SyncCmd};
-use crate::cli::{delete, export, help_llm, import, issue, milestone, plan, project, sync};
+use crate::cli::{delete, doctor, export, help_llm, import, issue, milestone, plan, project, sync};
 use crate::error::Error;
 
 use super::sync::hint::detect_unmerged_machines;
@@ -79,6 +79,7 @@ impl Cli {
             Commands::List(l) => issue::list::cmd_list(&conn, &project, l),
             Commands::Show(s) => issue::list::cmd_show(&conn, &project, s),
             Commands::Search(s) => issue::list::cmd_search(&conn, &project, s),
+            Commands::Doctor(d) => doctor::cmd_doctor(&conn, d),
             Commands::Label(t) => match &t.command {
                 LabelCmd::List(l) => cmd_label_list(&conn, l),
                 LabelCmd::Set(s) => cmd_label_set(&conn, s),

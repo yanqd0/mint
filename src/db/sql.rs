@@ -97,6 +97,10 @@ pub const PLAN_RESET_PLANNED: &str = include_str!("queries/plan_reset_planned.sq
 pub const PLAN_DELETE: &str = include_str!("queries/plan_delete.sql");
 
 pub const PLAN_ISSUE_STATUSES: &str = include_str!("queries/plan_issue_statuses.sql");
+pub const DOCTOR_RUNNING_PLANS: &str = include_str!("queries/doctor_running_plans.sql");
+pub const DOCTOR_PLAN_ACTIVE_ISSUES: &str = include_str!("queries/doctor_plan_active_issues.sql");
+pub const DOCTOR_MILESTONE_CHILDREN: &str = include_str!("queries/doctor_milestone_children.sql");
+pub const DOCTOR_STALLED_DEV_ISSUES: &str = include_str!("queries/doctor_stalled_dev_issues.sql");
 pub const MILESTONE_PLAN_STATUSES: &str = include_str!("queries/milestone_plan_statuses.sql");
 pub const MILESTONE_DIRECT_ISSUE_STATUSES: &str =
     include_str!("queries/milestone_direct_issue_statuses.sql");

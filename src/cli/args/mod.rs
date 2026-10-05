@@ -3,6 +3,7 @@
 mod body;
 mod container;
 mod container_link;
+mod doctor;
 mod io;
 mod project;
 mod sync;
@@ -10,6 +11,7 @@ mod sync;
 pub use body::*;
 pub use container::*;
 pub use container_link::*;
+pub use doctor::*;
 pub use io::*;
 pub use project::*;
 pub use sync::*;
