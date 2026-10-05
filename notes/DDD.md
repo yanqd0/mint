@@ -200,6 +200,27 @@ hook 事件的统一入口：接收 agent 传来的信号并登记。**0.3.0 定
 
 FTS5 外部内容表 + 触发器保持 `issues_fts` 与 `issues` 同步（INSERT/UPDATE/DELETE 自动维护）。**0.3.0 已实现**。实现：`tokenize='trigram'`（中文按 3 字符子串索引）、`content='issues'`/`content_rowid='id'`、ai/ad/au 触发器（`UPDATE OF title,body` 先删后插，状态流转不触发）、迁移内回填存量；`mint search <q>` 默认全状态、`ORDER BY rank`、`--project/--label/--status` 过滤、查询需 ≥3 字符（见 decisions.md D23）。
 
+### doctor（健康度检查）
+
+`mint doctor [--days N] [--strict] [--json]`：只读一条命令给出项目健康度，兼作会话注入的一行摘要（#482 / plan #115）。**0.9.0 已实现**。
+
+五项检查（固定顺序）：
+
+| check | 判定 |
+|-------|------|
+| `multiple-running` | 同刻 ≥2 个 running milestone（写侧守卫的漏网数据，如跨机 merge） |
+| `stale-plan` | 有活跃子项（planned/dev/test），但自身与子项的最后更新都在窗口外 |
+| `overlap-plan` | 两个**活跃** plan 标题相似（复用 `dedup` 的相似度闸，不新写阈值） |
+| `idle-milestone` | running milestone 的**全部**子项（直属 issue + plan 下 issue）都已陈旧 |
+| `stalled-dev` | `dev` 态长期无更新，且不归属某 milestone 的 plan（避免与上条同因双报） |
+
+- **窗口**：统一 N 天（默认 30，`--days` 覆盖），按整日比较 `now - updated_at`（DB 内 UTC 时间列）。
+- **不查 git**：陈旧度只看 `updated_at`（状态转换与容器派生写回都会刷新），故无子进程、可离线——与 `src/git.rs`「非关键路径不调 git」一致。
+- **互斥**：`stale-plan` 与 `idle-milestone` 不对同一事实双报——milestone 的 `updated_at` 随其 plan 的派生同步刷新，只有计划面彻底静默才命中空转。
+- **输出契约**：TSV 明细（`Check`/`Target`/`Refs`/`Detail`）+ 末行恒打印的一行摘要（`# doctor: checks=… warnings=… strict=… days=… counts=…`）；`--json` 给插件稳定字段（`items[].target/refs` + 顶层 `counts`/`summary.line`）。
+- **退出码**：默认恒 0（读命令语义：有告警不是错误），`--strict` 且有告警才 1；用法错误仍是 2。
+- **实现约束**：`src/db/queries/doctor_milestone_children.sql` 用联表 + `OR`，**不用 UNION ALL**——`SELECT … UNION ALL SELECT …` 经 rusqlite `query_map` 实测只回第二分支（同一 SQL 由 sqlite3 CLI 执行结果正确），根因未定位，勿改回。
+
 ---
 
 ## 与 mem-lite 的分工

@@ -676,3 +676,22 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 **理由**：版本语义下「当前版本」唯一，但 milestone 也可能代表大 feature，或确实多版本并行（0.9.0 与 1.0.0 同时开发）——所以不做绝对不变量，而是「默认唯一 + 显式放行」。检查放在**事务边界**（而非 `sync_milestone` 内部）是唯一能同时满足「覆盖全部写路径」与「不误报净计数不变操作」的位置；放行面收敛到 `milestone set --force` 后，help-llm 与 skill 只需讲一条命令。
 
 **固化**：`src/container/guard.rs`、`src/db/queries/milestone_running.sql`（去 `LIMIT 1`，与 #483 的 `issue add` 提示共用）、`src/container/{mod,affiliation,lifecycle}.rs`、`src/state.rs`、`src/cli/args/container.rs`、`src/cli/milestone.rs`、`src/cli/container_cmd.rs`（`container_item_json`）、`src/cli/help_llm/notes.rs`、`src/container/tests/guard.rs`、`src/state_tests.rs`、`tests/cli/milestone.rs`；skill（CN 为源 + EN 翻译）`SKILL.md` / `references/flow-planning.md` / `references/flow-conditions.md` / `references/commands.md`、`claude-plugin/mint-faa/hooks/inject_context.sh`；**dsh-mint 侧不在本仓改**（独立仓 + 独立 mint 项目，跨项目数据互不可见）——已在该项目登记 plan #22（挂 milestone 4 / 0.3.0）+ issue #117（skill 口径）/ #118（`src/context.ts` 注入与测试）待执行。
+
+---
+
+## D52：`mint doctor` 只读健康度命令（2026-10-05，plan #115 / #482、#522-#523）
+
+**背景**：#482——项目编排出了问题（两个 plan 主题重叠、milestone running 却无 issue 在开发、plan 长期没动静）时**没有任何入口能发现**：`list`/`plan list` 只给平铺清单，`milestone current` 只看 running 数，人工只能凭记忆比对。会话注入（dsh-mint）当时也只能拼 `list` + `milestone list`，拿不到「哪里不对劲」。
+
+**决策**：
+
+- **一条只读命令五个确定性检查**：`multiple-running` / `stale-plan` / `overlap-plan` / `idle-milestone` / `stalled-dev`，固定顺序输出（同一库两次运行逐字节一致），不做任何写与自动修复。
+- **陈旧度只看 DB 时间列**：统一窗口（默认 30 天，`--days` 覆盖），比较 `now - updated_at`（UTC，按整日）。**不查 git 历史**——`updated_at` 在状态转换与容器派生写回时都会刷新，足够表达「这块工作多久没动」；换来的是零子进程、可离线、固定成本，也守住 `git.rs`「非关键路径不调 git」的分工。
+- **重叠复用 dedup 的闸**：`normalize` + `similarity ≥ DEDUP_THRESHOLD(0.8)` + 两侧长度 ≥ `DEDUP_MIN_LEN`，只比**活跃** plan 的标题。理由：同一阈值若两处维护必然漂移；「add 会合并的，doctor 会报出来」才可解释。不做语义/正文相似度（成本与误报都不划算）。
+- **同因不双报**：`stalled-dev` 排除归属某 milestone 的 plan 下的 issue——该事实已由 `idle-milestone`（milestone 全子项陈旧）表达；`idle-milestone` 只对**非空** milestone 报（空 milestone 的语义已由 `milestone current` 覆盖）。
+- **输出与退出码**：TSV 明细 + 末行**恒打印**的一行摘要（`# doctor: …`，stdout，与 `# Page x/y` 脚注同约定），`--json` 给插件稳定字段；**默认 exit 0**，`--strict` 且有告警才 1。理由：doctor 是读命令，有告警不是错误，让它默认非 0 会逼所有调用方（含注入路径）吞退出码；`--strict` 把「当门禁用」的选择留给调用方。运行期错误仍 1、用法错误仍 2（对齐既有约定）。
+- **实现坑位**：`DOCTOR_MILESTONE_CHILDREN` 必须用联表 + `OR`，**不可用 `UNION ALL`**——实测 `SELECT … UNION ALL SELECT …` 经 rusqlite `query_map` 只回第二分支（同 SQL 由 sqlite3 CLI 执行正确），根因未定位。
+
+**理由**：编排问题的成本在「发现得晚」，而不是「修得难」——所以先做**读侧**发现（零风险、可逆），把处置留给人和 skill；阈值、退出码这类会长期影响调用方的语义一次定死并文档化，避免每个宿主各猜一套。
+
+**固化**：`src/doctor/{mod,checks,overlap,summary,tests}.rs`、`src/cli/doctor.rs`、`src/cli/args/doctor.rs`、`src/cli/mod.rs`（`Commands::Doctor`）、`src/cli/run.rs`、`src/cli/help_llm/notes.rs`（叶子必须分类）、`src/db/sql.rs` + `src/db/queries/doctor_*.sql`、`tests/cli/doctor.rs`、`tests/cli/main.rs`；`notes/DDD.md`「doctor（健康度检查）」段。**dsh-mint 侧注入消费是仓外任务**（plan #115 的 #515，独立仓）——本仓只保证输出契约稳定。
