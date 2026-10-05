@@ -203,10 +203,11 @@ fn running_plans(conn: &Connection) -> Result<Vec<(i64, String, String)>, Error>
 }
 
 /// milestone 的全部子项 `(issue_id, updated_at)`（去重；升序）。
+/// 一条联表查询覆盖「直属挂载」与「plan 下 issue」两种归属（见 SQL 内注释：不用 UNION ALL）。
 fn milestone_children(conn: &Connection, milestone_id: i64) -> Result<Vec<(i64, String)>, Error> {
     let mut stmt = conn.prepare(db::DOCTOR_MILESTONE_CHILDREN)?;
-    let rows = stmt.query_map([milestone_id, 0], |r| {
-        Ok((r.get::<_, i64>(1)?, r.get::<_, String>(2)?))
+    let rows = stmt.query_map(rusqlite::params![milestone_id], |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
     })?;
     let mut seen = HashSet::new();
     let mut out = Vec::new();
