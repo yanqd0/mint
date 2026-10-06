@@ -1,27 +1,30 @@
 # scripts/npm
 
-Tooling for the **npm installer** shipped as the `mint-faa` package (#504, #514).
+Tooling for the **npm installer** shipped as the `mint-faa` package (#504, #514,
+#520).
 
 The npm package is not maintained in this repository: cargo-dist renders it at
 release time (`dist build --artifacts=global` → `mint-faa-<version>-npm-package.tar.gz`),
 and its launcher (`binary-install.js`) deletes and re-creates the install
 directory without any coordination, so two concurrent first runs destroy each
-other's work. The release workflow therefore patches that generated file before
-publishing; the patch and its regression tests live here.
+other's work. The release workflow therefore patches the generated launchers
+before publishing; the patch and its regression tests live here.
 
 ## Files
 
 | File | Purpose |
 |---|---|
 | `patch-installer.mjs` | CLI: applies the anchor patches to an unpacked npm package (or a single generated file). `--check` asserts an already-patched package. |
-| `installer-patches.mjs` | Anchor-based rewriters for the generated launchers plus the lock policy constants. |
+| `installer-patches.mjs` | Anchor-based rewriters for the generated launchers (`binary-install.js`, `binary.js`) plus the lock and download policy constants. |
 | `patch.test.mjs` | Unit tests: anchors, idempotency, syntax, CLI behaviour. |
-| `race.test.mjs` | Behaviour tests against the patched launcher over loopback HTTP: an in-flight install must not touch the existing directory, four concurrent first installs must all succeed and clean up, staging must stay beside the install directory, a cross-device commit must fall back to a copy, and a failed install must release the lock. |
+| `race.test.mjs` | Behaviour tests over loopback HTTP: an in-flight install must not touch the existing directory, four concurrent first installs must all succeed and clean up, staging must stay beside the install directory, a cross-device commit must fall back to a copy, a failed install must release the lock, and a lock owned by a dead process must be stolen immediately. |
+| `sources.test.mjs` | Behaviour tests for the download policy: retry the failing source, fall through to the next source, do not retry a 4xx, and report one diagnostic line per source when everything failed. |
 | `fixtures/binary-install.mint-faa-0.8.0.js` | Byte-exact copy of the cargo-dist 0.32.0-generated `binary-install.js` from the published `mint-faa@0.8.0` package (sha256 `f9cd1e11d9fdbbcaec5cf0a52145a0495d109967ac60363ced9e2bb6f28472dd`). |
+| `fixtures/binary.mint-faa-0.8.1.js` | Byte-exact copy of the cargo-dist 0.32.0-generated `binary.js` from the published `mint-faa@0.8.1` package (sha256 `4355398e7705fdf14d3c7ece43ec1f2fee2010eecc590cc9a311b44d8258544b`). |
 
-The fixture is the anchor contract. When cargo-dist changes the generated
-launcher, `patch-installer.mjs` fails with the list of missing anchors — update
-the anchors against the new file and refresh the fixture in the same commit.
+The fixtures are the anchor contract. When cargo-dist changes a generated file,
+`patch-installer.mjs` fails with the list of missing anchors — update the anchors
+against the new file and refresh the fixture in the same commit.
 
 ## What the patch changes
 
@@ -42,6 +45,19 @@ the anchors against the new file and refresh the fixture in the same commit.
 - **Cross-device commit (#514)**: if the commit rename still fails with `EXDEV`
   (or a Windows `EPERM` volume edge), the staged tree is copied instead, so the
   install still completes. A failed install never deletes a working install.
+- **Download sources (#520)**: `binary.js` hands the installer *every* entry of
+  `artifactDownloadUrls` (upstream only ever used `[0]`, see its `FIXME`), and
+  `binary-install.js` walks them in order with a per-source attempt budget.
+- **Download policy (#520)**: the official source gets one attempt plus one
+  retry; if both fail the next source (the mirror) gets one attempt plus one
+  retry — four attempts in total with one mirror. Network-level failures (socket
+  hang up, DNS, TLS, stalled body, 5xx, 429) are retried with a 1 s backoff;
+  other 4xx switch source immediately. An idle download is aborted after 30 s
+  (socket timeout) and a proxy CONNECT after 15 s, so a stalled transfer cannot
+  hang an install forever.
+- **Diagnostics (#520)**: when every source fails, the error carries one line per
+  source with its last failure and attempt count, plus a hint about
+  `HTTPS_PROXY`/mirrors — instead of the previous bare `socket hang up`.
 
 ## Usage
 

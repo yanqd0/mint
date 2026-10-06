@@ -28,6 +28,20 @@ export const LOCK = {
   timeoutMs: 15 * 60 * 1000,
 };
 
+/**
+ * Download policy (#520), interpolated into the generated installer.
+ *
+ * Every configured source gets `attemptsPerSource` tries (the first is the
+ * initial attempt, the rest are retries): official first, then each mirror.
+ * With one mirror that is four attempts in total — three retries.
+ */
+export const DOWNLOAD = {
+  attemptsPerSource: 2,
+  retryBackoffMs: 1000,
+  idleTimeoutMs: 30 * 1000,
+  connectTimeoutMs: 15 * 1000,
+};
+
 const FS_ANCHOR = `const {
   createWriteStream,
   existsSync,
@@ -265,6 +279,95 @@ function abortStagedInstall(pkg, finalDir, stagingDir) {
   }
 }
 
+// [mint #520] Download policy: the official release URL first, then the mirrors
+// recorded in the package metadata; every source gets one initial attempt plus
+// retries, and a failing source falls through to the next one.
+const DOWNLOAD_ATTEMPTS_PER_SOURCE = ${DOWNLOAD.attemptsPerSource};
+const DOWNLOAD_RETRY_BACKOFF_MS = ${DOWNLOAD.retryBackoffMs};
+const DOWNLOAD_IDLE_TIMEOUT_MS = ${DOWNLOAD.idleTimeoutMs};
+const DOWNLOAD_CONNECT_TIMEOUT_MS = ${DOWNLOAD.connectTimeoutMs};
+
+function downloadSources(pkg) {
+  const urls = Array.isArray(pkg.downloadUrls) ? pkg.downloadUrls : [];
+  const candidates = urls.length > 0 ? urls : [pkg.url];
+  return candidates.filter((url) => typeof url === "string" && url.length > 0);
+}
+
+function sourceLabel(index) {
+  return index === 0 ? "official" : \`mirror \${index}\`;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** HTTP 4xx other than 429 is a property of the source, not a transient error. */
+function isRetryableDownloadError(e) {
+  const match = /^HTTP (\\d{3})\\b/.exec(e && e.message ? e.message : "");
+  if (!match) {
+    return true; // network-level failure: socket hang up, timeout, DNS, TLS
+  }
+  const status = Number(match[1]);
+  return status >= 500 || status === 429;
+}
+
+function resetStaging(pkg) {
+  const stagingDir = pkg.installDirectory;
+  rmSync(stagingDir, { recursive: true, force: true });
+  mkdirSync(stagingDir, { recursive: true });
+}
+
+function downloadFailureReport(pkg, failures) {
+  const lines = [
+    \`all download sources failed for \${pkg.filename || pkg.name}\`,
+  ];
+  failures.forEach((failure, index) => {
+    const attempts = \`\${failure.attempts} attempt\${failure.attempts === 1 ? "" : "s"}\`;
+    lines.push(\`  [\${sourceLabel(index)}] \${failure.url}: \${failure.reason} (\${attempts})\`);
+  });
+  lines.push(
+    "hint: retry, set HTTPS_PROXY/NO_PROXY, or check the mirror list in the package metadata",
+  );
+  return lines.join("\\n");
+}
+
+function fetchFromAnySource(pkg, sources, suppressLogs) {
+  const failures = [];
+  const attemptSource = (index) => {
+    const url = sources[index];
+    const failure = { url, reason: "unknown error", attempts: 0 };
+    const tryOnce = () => {
+      failure.attempts += 1;
+      return pkg.fetchFrom(url, suppressLogs).then(
+        () => true,
+        (e) => {
+          failure.reason = e && e.message ? e.message : String(e);
+          if (
+            !isRetryableDownloadError(e) ||
+            failure.attempts >= DOWNLOAD_ATTEMPTS_PER_SOURCE
+          ) {
+            failures.push(failure);
+            return false;
+          }
+          resetStaging(pkg);
+          return sleep(DOWNLOAD_RETRY_BACKOFF_MS * failure.attempts).then(tryOnce);
+        },
+      );
+    };
+    return tryOnce().then((ok) => {
+      if (ok) {
+        return undefined;
+      }
+      if (index + 1 < sources.length) {
+        resetStaging(pkg);
+        return attemptSource(index + 1);
+      }
+      throw new Error(downloadFailureReport(pkg, failures));
+    });
+  };
+  return Promise.resolve().then(() => attemptSource(0));
+}
+
 class Package {`;
 
 const INSTALL_HEAD_ANCHOR = `  install(suppressLogs = false) {
@@ -324,7 +427,8 @@ const INSTALL_HEAD_REPLACEMENT = `  install(suppressLogs = false) {
     const stagingDir = mkdtempSync(\`\${finalDir}.staging-\`);
     mkdirSync(stagingDir, { recursive: true });
     this.installDirectory = stagingDir;
-    return this.fetchFrom(this.url, suppressLogs).then(
+    const sources = downloadSources(this);
+    return fetchFromAnySource(this, sources, suppressLogs).then(
       () => {
         try {
           commitStagedInstall(this, finalDir, stagingDir);
@@ -357,6 +461,33 @@ const INSTALL_TAIL_ANCHOR = `      .then(() => {
 
 const INSTALL_TAIL_REPLACEMENT = `      .then(() => {});`;
 
+const DOWNLOAD_IDLE_ANCHOR = `      req.on("error", reject);
+      req.end();`;
+
+const DOWNLOAD_IDLE_REPLACEMENT = `      req.setTimeout(DOWNLOAD_IDLE_TIMEOUT_MS, () => {
+        // A stalled body must fail the attempt instead of hanging forever.
+        req.destroy(
+          new Error(
+            \`download stalled: no data for \${DOWNLOAD_IDLE_TIMEOUT_MS}ms\`,
+          ),
+        );
+      });
+      req.on("error", reject);
+      req.end();`;
+
+const PROXY_CONNECT_ANCHOR = `    connectReq.on("error", reject);
+    connectReq.end();`;
+
+const PROXY_CONNECT_REPLACEMENT = `    connectReq.setTimeout(DOWNLOAD_CONNECT_TIMEOUT_MS, () => {
+      connectReq.destroy(
+        new Error(
+          \`proxy connect timed out after \${DOWNLOAD_CONNECT_TIMEOUT_MS}ms\`,
+        ),
+      );
+    });
+    connectReq.on("error", reject);
+    connectReq.end();`;
+
 const PATCHES = [
   { name: "fs imports", from: FS_ANCHOR, to: FS_REPLACEMENT },
   { name: "path imports", from: PATH_ANCHOR, to: PATH_REPLACEMENT },
@@ -364,6 +495,8 @@ const PATCHES = [
   { name: "class Package", from: CLASS_ANCHOR, to: HELPERS },
   { name: "install() head", from: INSTALL_HEAD_ANCHOR, to: INSTALL_HEAD_REPLACEMENT },
   { name: "install() tail", from: INSTALL_TAIL_ANCHOR, to: INSTALL_TAIL_REPLACEMENT },
+  { name: "download() idle timeout", from: DOWNLOAD_IDLE_ANCHOR, to: DOWNLOAD_IDLE_REPLACEMENT },
+  { name: "proxy connect timeout", from: PROXY_CONNECT_ANCHOR, to: PROXY_CONNECT_REPLACEMENT },
 ];
 
 /**
@@ -374,6 +507,45 @@ const PATCHES = [
  */
 export function patchBinaryInstall(source) {
   return applyPatches(source, PATCHES);
+}
+
+export const BINARY_FILENAME = "binary.js";
+
+const BINARY_FALLBACK_ANCHOR = `// FIXME: implement NPM installer handling of fallback download URLs
+const artifactDownloadUrl = artifactDownloadUrls[0];`;
+
+const BINARY_FALLBACK_REPLACEMENT = `// [mint #520] every configured source is tried in order by the installer.
+const artifactDownloadUrl = artifactDownloadUrls[0];
+const artifactDownloadUrlList = artifactDownloadUrls.slice();`;
+
+const BINARY_GET_PACKAGE_ANCHOR = `  const url = \`\${artifactDownloadUrl}/\${platform.artifactName}\`;
+  let filename = platform.artifactName;
+  let ext = platform.zipExt;
+  let binary = new Package(platform, name, url, filename, ext, platform.bins);`;
+
+const BINARY_GET_PACKAGE_REPLACEMENT = `  const urls = artifactDownloadUrlList.map(
+    (base) => \`\${base}/\${platform.artifactName}\`,
+  );
+  const url = urls[0];
+  let filename = platform.artifactName;
+  let ext = platform.zipExt;
+  let binary = new Package(platform, name, url, filename, ext, platform.bins);
+  binary.downloadUrls = urls;`;
+
+const BINARY_PATCHES = [
+  { name: "binary.js fallback URLs", from: BINARY_FALLBACK_ANCHOR, to: BINARY_FALLBACK_REPLACEMENT },
+  { name: "binary.js getPackage", from: BINARY_GET_PACKAGE_ANCHOR, to: BINARY_GET_PACKAGE_REPLACEMENT },
+];
+
+/**
+ * Rewrite cargo-dist's generated `binary.js` so the installer knows every
+ * configured download source instead of only `artifactDownloadUrls[0]` (#520).
+ *
+ * @param {string} source
+ * @returns {{code: string, changed: boolean, missing: string[], ambiguous: string[]}}
+ */
+export function patchBinaryJs(source) {
+  return applyPatches(source, BINARY_PATCHES);
 }
 
 /** Apply an anchor patch set, reporting missing/ambiguous anchors instead of guessing. */
@@ -405,6 +577,7 @@ export function applyPatches(source, patches) {
 /** Patched files of one npm package, in patch order. */
 export const PATCH_TARGETS = [
   { filename: INSTALLER_FILENAME, patch: patchBinaryInstall },
+  { filename: BINARY_FILENAME, patch: patchBinaryJs },
 ];
 
 /** Throws when `code` is not valid CommonJS JavaScript. */

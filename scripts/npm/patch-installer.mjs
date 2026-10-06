@@ -26,10 +26,12 @@ import {
 } from "./installer-patches.mjs";
 
 export {
+  BINARY_FILENAME,
   INSTALLER_FILENAME,
   MARKER,
   assertSyntax,
   patchBinaryInstall,
+  patchBinaryJs,
 } from "./installer-patches.mjs";
 
 const USAGE =
