@@ -219,7 +219,7 @@ FTS5 外部内容表 + 触发器保持 `issues_fts` 与 `issues` 同步（INSERT
 - **互斥**：`stale-plan` 与 `idle-milestone` 不对同一事实双报——milestone 的 `updated_at` 随其 plan 的派生同步刷新，只有计划面彻底静默才命中空转。
 - **输出契约**：TSV 明细（`Check`/`Target`/`Refs`/`Detail`）+ 末行恒打印的一行摘要（`# doctor: checks=… warnings=… strict=… days=… counts=…`）；`--json` 给插件稳定字段（`items[].target/refs` + 顶层 `counts`/`summary.line`）。
 - **退出码**：默认恒 0（读命令语义：有告警不是错误），`--strict` 且有告警才 1；用法错误仍是 2。
-- **实现约束**：`src/db/queries/doctor_milestone_children.sql` 用联表 + `OR`，**不用 UNION ALL**——`SELECT … UNION ALL SELECT …` 经 rusqlite `query_map` 实测只回第二分支（同一 SQL 由 sqlite3 CLI 执行结果正确），根因未定位，勿改回。
+- **实现约束**：`src/db/queries/doctor_milestone_children.sql` 用联表 + `OR`，**不用 UNION ALL**——本机实测 rusqlite 0.39.0 + bundled SQLite 3.51.3 下 `SELECT 1 AS a UNION ALL SELECT 2` 经 `prepare`/`query` 只回最后一行（丢首行；`VALUES (1),(2)` 与多列 SELECT 正常，凡 compound SELECT 都少行），同 SQL 由 sqlite3 CLI（3.42.0）执行正确；根因未定位，勿改回。
 
 ---
 

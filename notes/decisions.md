@@ -690,7 +690,7 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 - **重叠复用 dedup 的闸**：`normalize` + `similarity ≥ DEDUP_THRESHOLD(0.8)` + 两侧长度 ≥ `DEDUP_MIN_LEN`，只比**活跃** plan 的标题。理由：同一阈值若两处维护必然漂移；「add 会合并的，doctor 会报出来」才可解释。不做语义/正文相似度（成本与误报都不划算）。
 - **同因不双报**：`stalled-dev` 排除归属某 milestone 的 plan 下的 issue——该事实已由 `idle-milestone`（milestone 全子项陈旧）表达；`idle-milestone` 只对**非空** milestone 报（空 milestone 的语义已由 `milestone current` 覆盖）。
 - **输出与退出码**：TSV 明细 + 末行**恒打印**的一行摘要（`# doctor: …`，stdout，与 `# Page x/y` 脚注同约定），`--json` 给插件稳定字段；**默认 exit 0**，`--strict` 且有告警才 1。理由：doctor 是读命令，有告警不是错误，让它默认非 0 会逼所有调用方（含注入路径）吞退出码；`--strict` 把「当门禁用」的选择留给调用方。运行期错误仍 1、用法错误仍 2（对齐既有约定）。
-- **实现坑位**：`DOCTOR_MILESTONE_CHILDREN` 必须用联表 + `OR`，**不可用 `UNION ALL`**——实测 `SELECT … UNION ALL SELECT …` 经 rusqlite `query_map` 只回第二分支（同 SQL 由 sqlite3 CLI 执行正确），根因未定位。
+- **实现坑位**：`DOCTOR_MILESTONE_CHILDREN` 必须用联表 + `OR`，**不可用 `UNION ALL`**——本机实测（rusqlite 0.39.0 + bundled SQLite 3.51.3）`SELECT 1 AS a UNION ALL SELECT 2` 经 `prepare`/`query` 只回最后一行 `[2]`（首行静默丢失）；`VALUES (1),(2)`、多列 `SELECT 1,2` 正常，凡 compound SELECT（UNION/UNION ALL/CTE/子查询包裹）都少行；同一 SQL 由 sqlite3 CLI（3.42.0）执行结果正确。根因未定位（疑似 bundled SQLite 3.51.x 的 compound SELECT 回归），已知规避手段是避免在 rusqlite 里用 compound SELECT。
 
 **理由**：编排问题的成本在「发现得晚」，而不是「修得难」——所以先做**读侧**发现（零风险、可逆），把处置留给人和 skill；阈值、退出码这类会长期影响调用方的语义一次定死并文档化，避免每个宿主各猜一套。
 
