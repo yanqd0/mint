@@ -113,6 +113,16 @@ check(
     "去掉 --target（#509）",
 )
 
+# ── 不变式：npm 安装器补丁带摘要注入（#521）──────────────────────────
+# release.yml 由 cargo-dist 生成、`allow-dirty = ["ci"]` 手工维护；`dist generate`
+# 会丢掉本地补丁步骤的旗标，于是安装包缺 artifactSha256（校验静默失效）。
+check(
+    "release.yml: npm publish 前注入镜像源与 sha256（两个 job）",
+    read("release.yml").count("patch-installer.mjs") >= 2
+    and read("release.yml").count("--checksums-from ./npm") >= 2,
+    "两个 npm publish job 都必须带 --checksums-from（#521）",
+)
+
 # ── YAML 语法（可选：需要 pyyaml）─────────────────────────────────────
 try:
     import yaml  # type: ignore

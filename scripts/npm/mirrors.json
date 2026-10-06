@@ -1,0 +1,4 @@
+{
+  "note": "Mirror templates appended to artifactDownloadUrls when the npm package is published (#521). {url} is replaced by each official artifact URL. Only sources whose bytes are verified against the recorded sha256 belong here. The official GitHub release URL always stays first.",
+  "mirrors": ["https://gh-proxy.com/{url}"]
+}

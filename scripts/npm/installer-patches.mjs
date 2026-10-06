@@ -74,6 +74,11 @@ const OS_ANCHOR = `const { tmpdir } = require("os");`;
 
 const OS_REPLACEMENT = `const { hostname, tmpdir } = require("os");`;
 
+const CRYPTO_ANCHOR = `const https = require("node:https");`;
+
+const CRYPTO_REPLACEMENT = `const { createHash } = require("node:crypto");
+const https = require("node:https");`;
+
 const CLASS_ANCHOR = "class Package {";
 
 const HELPERS = `// [mint #504/#514] Install lock + staged commit helpers.
@@ -368,6 +373,30 @@ function fetchFromAnySource(pkg, sources, suppressLogs) {
   return Promise.resolve().then(() => attemptSource(0));
 }
 
+// [mint #521] Check the downloaded archive against the digest recorded in the
+// package metadata before it is unpacked into the staging directory, so a
+// tampered or truncated mirror download cannot be installed.
+function verifyArchiveDigest(pkg, archivePath, expectedSha256, url) {
+  if (!expectedSha256) {
+    if (!pkg.digestWarningEmitted) {
+      pkg.digestWarningEmitted = true;
+      console.error(
+        \`warning: no sha256 recorded for \${pkg.filename || pkg.name}; skipping download verification\`,
+      );
+    }
+    return;
+  }
+  if (!archivePath || !existsSync(archivePath)) {
+    throw new Error(\`cannot verify \${url}: the downloaded archive is missing\`);
+  }
+  const actual = createHash("sha256").update(readFileSync(archivePath)).digest("hex");
+  if (actual !== expectedSha256) {
+    throw new Error(
+      \`sha256 mismatch for \${url}: expected \${expectedSha256}, got \${actual} (tampered or truncated download)\`,
+    );
+  }
+}
+
 class Package {`;
 
 const INSTALL_HEAD_ANCHOR = `  install(suppressLogs = false) {
@@ -450,6 +479,11 @@ const INSTALL_HEAD_REPLACEMENT = `  install(suppressLogs = false) {
   fetchFrom(url, suppressLogs) {
     this.url = url;`;
 
+const ARCHIVE_PATH_ANCHOR = `            let tempFile = join(directory, this.filename);`;
+
+const ARCHIVE_PATH_REPLACEMENT = `            let tempFile = join(directory, this.filename);
+            this._archivePath = tempFile;`;
+
 const INSTALL_TAIL_ANCHOR = `      .then(() => {
         if (!suppressLogs) {
           console.error(\`\${this.name} has been installed!\`);
@@ -459,7 +493,10 @@ const INSTALL_TAIL_ANCHOR = `      .then(() => {
         error(\`Error fetching release: \${e.message}\`);
       });`;
 
-const INSTALL_TAIL_REPLACEMENT = `      .then(() => {});`;
+const INSTALL_TAIL_REPLACEMENT = `      .then(() => {
+        verifyArchiveDigest(this, this._archivePath, this.expectedSha256, this.url);
+        this._archivePath = undefined;
+      });`;
 
 const DOWNLOAD_IDLE_ANCHOR = `      req.on("error", reject);
       req.end();`;
@@ -492,8 +529,10 @@ const PATCHES = [
   { name: "fs imports", from: FS_ANCHOR, to: FS_REPLACEMENT },
   { name: "path imports", from: PATH_ANCHOR, to: PATH_REPLACEMENT },
   { name: "os imports", from: OS_ANCHOR, to: OS_REPLACEMENT },
+  { name: "crypto import", from: CRYPTO_ANCHOR, to: CRYPTO_REPLACEMENT },
   { name: "class Package", from: CLASS_ANCHOR, to: HELPERS },
   { name: "install() head", from: INSTALL_HEAD_ANCHOR, to: INSTALL_HEAD_REPLACEMENT },
+  { name: "archive path", from: ARCHIVE_PATH_ANCHOR, to: ARCHIVE_PATH_REPLACEMENT },
   { name: "install() tail", from: INSTALL_TAIL_ANCHOR, to: INSTALL_TAIL_REPLACEMENT },
   { name: "download() idle timeout", from: DOWNLOAD_IDLE_ANCHOR, to: DOWNLOAD_IDLE_REPLACEMENT },
   { name: "proxy connect timeout", from: PROXY_CONNECT_ANCHOR, to: PROXY_CONNECT_REPLACEMENT },
@@ -510,6 +549,21 @@ export function patchBinaryInstall(source) {
 }
 
 export const BINARY_FILENAME = "binary.js";
+
+const BINARY_METADATA_ANCHOR = `const {
+  name,
+  artifactDownloadUrls,
+  supportedPlatforms,
+  glibcMinimum,
+} = require("./package.json");`;
+
+const BINARY_METADATA_REPLACEMENT = `const {
+  name,
+  artifactDownloadUrls,
+  artifactSha256,
+  supportedPlatforms,
+  glibcMinimum,
+} = require("./package.json");`;
 
 const BINARY_FALLBACK_ANCHOR = `// FIXME: implement NPM installer handling of fallback download URLs
 const artifactDownloadUrl = artifactDownloadUrls[0];`;
@@ -530,9 +584,11 @@ const BINARY_GET_PACKAGE_REPLACEMENT = `  const urls = artifactDownloadUrlList.m
   let filename = platform.artifactName;
   let ext = platform.zipExt;
   let binary = new Package(platform, name, url, filename, ext, platform.bins);
-  binary.downloadUrls = urls;`;
+  binary.downloadUrls = urls;
+  binary.expectedSha256 = (artifactSha256 || {})[platform.artifactName];`;
 
 const BINARY_PATCHES = [
+  { name: "binary.js metadata", from: BINARY_METADATA_ANCHOR, to: BINARY_METADATA_REPLACEMENT },
   { name: "binary.js fallback URLs", from: BINARY_FALLBACK_ANCHOR, to: BINARY_FALLBACK_REPLACEMENT },
   { name: "binary.js getPackage", from: BINARY_GET_PACKAGE_ANCHOR, to: BINARY_GET_PACKAGE_REPLACEMENT },
 ];

@@ -48,6 +48,8 @@ test("patches the cargo-dist installer fixture", () => {
   assert.ok(patched.code.includes("abortStagedInstall(this, finalDir, stagingDir)"));
   assert.ok(patched.code.includes("function fetchFromAnySource"));
   assert.ok(patched.code.includes("req.setTimeout(DOWNLOAD_IDLE_TIMEOUT_MS"));
+  assert.ok(patched.code.includes("verifyArchiveDigest(this, this._archivePath"));
+  assert.ok(patched.code.includes("this._archivePath = tempFile;"));
   // The unguarded install-directory deletion must be gone.
   assert.equal(patched.code.includes("rmSync(this.installDirectory"), false);
   // Upstream's own logic is preserved verbatim.
@@ -62,6 +64,8 @@ test("patches the cargo-dist binary.js fixture", () => {
   assert.ok(patchedBinary.code.includes(MARKER));
   assert.ok(patchedBinary.code.includes("const artifactDownloadUrlList"));
   assert.ok(patchedBinary.code.includes("binary.downloadUrls = urls;"));
+  assert.ok(patchedBinary.code.includes("artifactSha256"));
+  assert.ok(patchedBinary.code.includes("binary.expectedSha256"));
   assert.equal(patchedBinary.code.includes("FIXME"), false);
   // Upstream's platform handling is untouched.
   assert.ok(patchedBinary.code.includes("const getPlatform = () => {"));

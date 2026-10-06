@@ -695,3 +695,23 @@ merged（普通/JSON）。手写 Levenshtein，不引第三方相似度 crate。
 **理由**：编排问题的成本在「发现得晚」，而不是「修得难」——所以先做**读侧**发现（零风险、可逆），把处置留给人和 skill；阈值、退出码这类会长期影响调用方的语义一次定死并文档化，避免每个宿主各猜一套。
 
 **固化**：`src/doctor/{mod,checks,overlap,summary,tests}.rs`、`src/cli/doctor.rs`、`src/cli/args/doctor.rs`、`src/cli/mod.rs`（`Commands::Doctor`）、`src/cli/run.rs`、`src/cli/help_llm/notes.rs`（叶子必须分类）、`src/db/sql.rs` + `src/db/queries/doctor_*.sql`、`tests/cli/doctor.rs`、`tests/cli/main.rs`；`notes/DDD.md`「doctor（健康度检查）」段。**dsh-mint 侧注入消费是仓外任务**（plan #115 的 #515，独立仓）——本仓只保证输出契约稳定。
+
+---
+
+## D53：npm 安装器加固——锁主人判定、同设备暂存、下载策略与摘要校验（2026-10-06，plan #116 / #504、#514、#520、#521）
+
+**背景**：#504 用「锁 + 暂存 + 原子 rename」修了并发首次安装互相破坏，但补丁自身有三处缺陷（实测于 0.8.1）：① 暂存目录建在 `tmpdir()`，与安装目标跨设备时 `renameSync` 报 `EXDEV`，而 `commitStagedInstall` 先删 finalDir → 原本可用的安装被破坏；② 失败路径在 promise 链内 `process.exit(1)`，`withInstallLock` 的释放分支永不执行 → `.bin_real.lock` 残留，且 `STALE(20min) > TIMEOUT(15min)` 使抢锁分支在单次等待内不可达（必然白等 15min）；③ `download()` 无超时/无重试，`binary.js` 只取 `artifactDownloadUrls[0]`（上游 FIXME），大陆直连 GitHub release 首字节 8–15s、1.3KB/s、中途 reset 时安装直接失败且报错不可诊断（`socket hang up`）。
+
+**决策**：
+
+- **暂存与安装目标同设备**：staging 由 `mkdtempSync(join(tmpDir, "mint-faa-install-"))` 改为 `<installDirectory>.staging-XXXXXX`（同父目录 ⇒ 同设备），提交仍为「先删 finalDir 再 `renameSync`」；rename 遇 `EXDEV`/`EPERM` 回退**自写递归复制**（`readdirSync`+`mkdirSync`+`copyFileSync`+`chmodSync`，**不用 `fs.cpSync`**，不抬高 Node 基线）。上锁后清理同目录遗留 `.staging-*`（崩溃进程残留）。
+- **锁主人可判定**：锁目录写 `owner.json`（`pid`/`startedAt`/`host`），`process.kill(pid,0)` 判活；**主人已死即秒抢**，owner 不可判定才按 age 回退（`STALE=10min < TIMEOUT=15min`，不变式有单测断言）。已知假设：NFS/共享 `node_modules` 上远端进程可能被误判为死（退化为 age 阈值）。
+- **失败必释锁**：安装失败改为 **reject Error**，`install()` 最外层 `.catch` 才 `console.error` + `process.exit(1)`——锁已由 `withInstallLock` 在微任务里释放；锁超时也走同一出口，退出码仍为 1。
+- **下载策略（用户指定）**：源顺序 = 官方 → 镜像（`mirrors.json` 默认 `gh-proxy.com`，实测 429KB/s 且 sha256 与 GitHub digest 一致）；**每源 2 次尝试**（首试 + 1 次重试），一个镜像时共 4 次尝试 / 3 次重试。网络类失败（socket hang up/DNS/TLS/超时/5xx/429）按 1s×attempt 退避重试，其它 4xx 直接换源；下载空闲 30s、代理 CONNECT 15s 超时后 destroy，卡死不再永久挂起。全部失败时**每源一行**报错（该源最后一次原因 + 尝试次数 + 代理/镜像提示），不再逐次罗列。
+- **上游代码只移动不重写**：`install()` 中「Downloading → download → mkdtemp → 落盘 → tar/unzip」整段原样搬进新方法 `fetchFrom(url, suppressLogs)`，循环/校验全在新增 HELPERS 内；锚点从 4 处增至 10 处（binary-install.js）+ 3 处（binary.js），缺失/歧义仍**响亮失败**。
+- **校验在提交前、摘要随包发布**：发布期由 `patch-installer.mjs --checksums-from <dir>` 计算每个 `supportedPlatforms[*].artifactName` 的 sha256 写入 `package.json` 的 `artifactSha256`（任一产物缺失 ⇒ release 失败），镜像 URL 追加进 `artifactDownloadUrls`；安装期解包后、commit 前校验，不符即 `sha256 mismatch for <url>: expected <a>, got <b>` 并重试/换源。缺摘要的包 warn 一次后放行（手工构造场景）。
+- **备选未采纳**：① 平台二进制走 npm 平台包（esbuild `optionalDependencies` 模式）——cargo-dist 不支持，需另建 6 个平台包与发布链，超出本版；② PyPI wheel 作二进制源——需 wheel tag 映射与额外 API，链路更长；③ 自维护 launcher（整份 vendored）——会接手平台识别/代理等上游逻辑，维护面反而更大（D47 已否决，本次仍维持锚点补丁）。镜像方案失效时再单独立 issue 评估 ①。
+
+**理由**：缺陷都只存在于**发布产物**，而上游文件仍是唯一事实源——继续用「发布期锚点补丁 + 缺失即失败」能在 cargo-dist 升级时以红流水线暴露，而不是静默发一个未加固/不可校验的安装包；下载策略把「重试预算」与「换源」放在源维度（而不是 URL 维度），才能在官方通道整体不可用时仍有可用路径，同时用包内摘要把第三方镜像降级为「纯传输通道」。
+
+**固化**：`scripts/npm/{installer-patches,manifest,patch-installer}.mjs`、`scripts/npm/mirrors.json`、`scripts/npm/{patch,race,sources,manifest}.test.mjs`、`scripts/npm/fixtures/{binary-install.mint-faa-0.8.0.js,binary.mint-faa-0.8.1.js}`、`scripts/npm/README.md`、`release.yml` 两个 publish job（`--checksums-from ./npm`）、`scripts/check-workflows.py`（新增「两个 job 都注入」不变式）、`scripts/precheck.sh` §5、`docs/RELEASING.md`（Notes + §3 验证清单 5 步）。npm 端验收（并发/换源/校验/锁恢复）属发布后动作，任一不过则 reopen 对应 issue。修复随 **0.9.0** 稳定版进 npm（预发布不发 npm）。

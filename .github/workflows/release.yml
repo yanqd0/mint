@@ -319,9 +319,10 @@ jobs:
             pkg=$(echo "$release" | jq '.artifacts[] | select(endswith("-npm-package.tar.gz"))' --raw-output)
             work=$(mktemp -d)
             tar -xzf "./npm/${pkg}" -C "$work"
-            # #504：cargo-dist 生成的安装器并发首次安装会互相破坏，发布前重写为「锁 + 暂存 + 原子 rename」
-            node scripts/npm/patch-installer.mjs "$work/package"
-            # 用 tar 重打包（而非 npm pack）：保持 dist 产物内容逐字节不变，只改 binary-install.js
+            # #504/#514：cargo-dist 生成的安装器并发首次安装会互相破坏，发布前重写为「锁 + 暂存 + 原子 rename」
+            # #520/#521：注入镜像源与每个平台产物的 sha256（安装前校验），并接入下载重试/换源
+            node scripts/npm/patch-installer.mjs "$work/package" --checksums-from ./npm
+            # 用 tar 重打包（而非 npm pack）：保持 dist 产物内容逐字节不变，只改生成的 launcher 与 package.json
             tgz="$work/mint-faa-npm-package.tgz"
             tar -czf "$tgz" -C "$work" package
             npm publish --access public --provenance "$tgz"
@@ -370,8 +371,8 @@ jobs:
             work=$(mktemp -d)
             tar -xzf "$pkgpath" -C "$work"
             pkgdir="$work/package"
-            # #504：与 npmjs 同一补丁（锁 + 暂存 + 原子 rename）
-            node scripts/npm/patch-installer.mjs "$pkgdir"
+            # #504/#514：与 npmjs 同一补丁（锁 + 暂存 + 原子 rename）；#521：同一份镜像源与 sha256 注入
+            node scripts/npm/patch-installer.mjs "$pkgdir" --checksums-from ./npm
             # 改 scoped 包名（@yanqd0/mint-faa）后重新 pack 发布到 GitHub Packages
             node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('$pkgdir/package.json'));p.name='@yanqd0/mint-faa';fs.writeFileSync('$pkgdir/package.json',JSON.stringify(p,null,2))"
             (cd "$pkgdir" && npm pack --silent)

@@ -8,6 +8,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -80,9 +81,20 @@ chmodSync(fixtureBinary, 0o755);
 execFileSync("tar", ["czf", tarball, "-C", archiveRoot, "mint-faa-0.0.0"]);
 const archive = readFileSync(tarball);
 
+// A second, still perfectly valid archive with different bytes: it exercises the
+// digest check without tripping the tar step first.
+const evilRoot = join(scratch, "evil");
+const evilTarball = join(scratch, `evil-${ARTIFACT_NAME}`);
+mkdirSync(join(evilRoot, "mint-faa-0.0.0"), { recursive: true });
+const evilBinary = join(evilRoot, "mint-faa-0.0.0", "mint");
+writeFileSync(evilBinary, "#!/bin/sh\necho mint-evil\n");
+chmodSync(evilBinary, 0o755);
+execFileSync("tar", ["czf", evilTarball, "-C", evilRoot, "mint-faa-0.0.0"]);
+const evilArchive = readFileSync(evilTarball);
+
 /** One fake download source: mode is "ok", "500" or "404". */
 function makeSource(mode) {
-  const state = { hits: 0, mode };
+  const state = { hits: 0, mode, payload: archive };
   const server = createServer((_req, res) => {
     state.hits += 1;
     if (state.mode === "500") {
@@ -96,7 +108,7 @@ function makeSource(mode) {
       return;
     }
     res.writeHead(200, { "content-type": "application/octet-stream" });
-    res.end(archive);
+    res.end(state.payload);
   });
   return { state, server };
 }
@@ -192,6 +204,10 @@ function resetHits() {
   mirror.state.hits = 0;
 }
 
+function digestOf(buffer) {
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
 function assertInstalled() {
   const binary = join(installDir, "mint");
   assert.ok(existsSync(binary), "the binary must be installed");
@@ -255,4 +271,38 @@ test("reports one line per source when every source fails", { skip: skipOnWindow
     "no binary may be committed after a failed install",
   );
   assert.equal(existsSync(`${installDir}.lock`), false, "the lock must be released");
+});
+
+test("refuses a download whose sha256 does not match the package metadata", { skip: skipOnWindows || triple === null }, async () => {
+  // Both archives are valid tarballs, so only the digest check can catch this.
+  official.state.mode = "ok";
+  official.state.payload = evilArchive;
+  mirror.state.mode = "500";
+  resetHits();
+  writePackage([official.base], {
+    artifactSha256: { [ARTIFACT_NAME]: digestOf(archive) },
+  });
+
+  const result = await runChild();
+  assert.equal(result.code, 1, "a tampered download must fail the install");
+  assert.match(result.stderr, /sha256 mismatch/);
+  assert.equal(official.state.hits, 2, "a digest mismatch is retried");
+  assert.equal(
+    existsSync(join(installDir, "mint")),
+    false,
+    "nothing may be committed from a tampered download",
+  );
+  assert.equal(existsSync(`${installDir}.lock`), false, "the lock must be released");
+});
+
+test("warns but installs when the package records no digest", { skip: skipOnWindows || triple === null }, async () => {
+  official.state.mode = "ok";
+  official.state.payload = archive;
+  resetHits();
+  writePackage([official.base]);
+
+  const result = await runChild();
+  assert.equal(result.code, 0, `child failed: ${result.stderr}`);
+  assert.match(result.stderr, /no sha256 recorded/);
+  assertInstalled();
 });
