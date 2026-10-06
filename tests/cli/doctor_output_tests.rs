@@ -90,3 +90,46 @@ fn st_doctor_json_matches_tsv() {
         "{v}"
     );
 }
+
+/// dev 长期无更新（无 milestone 归属）→ stalled-dev；`--strict` 有告警才退出 1。
+#[test]
+fn st_doctor_reports_stalled_dev_and_strict_exit() {
+    let (_dir, db) = empty_db();
+    let plan = run_json(&db, &["plan", "create", "stalled dev fixture", "--json"])["id"]
+        .as_i64()
+        .unwrap();
+    let id = add_issue(&db, "stalled dev child");
+    run_json(
+        &db,
+        &[
+            "plan",
+            "attach",
+            &plan.to_string(),
+            &id.to_string(),
+            "--json",
+        ],
+    );
+    run_json(&db, &["issue", "state", "plan", &id.to_string(), "--json"]);
+    run_json(&db, &["issue", "state", "start", &id.to_string(), "--json"]);
+    assert!(findings(&run_ok(&db, &["doctor"])).is_empty(), "窗口内不报");
+
+    let conn = open_db(&db);
+    backdate(&conn, "issues", 40);
+    let out = run_ok(&db, &["doctor"]);
+    let rows = findings(&out);
+    let stalled: Vec<&String> = rows
+        .iter()
+        .filter(|r| r.starts_with("stalled-dev"))
+        .collect();
+    assert_eq!(stalled.len(), 1, "{out}");
+    assert!(stalled[0].contains(&format!("issue={id}")), "{out}");
+    assert!(stalled[0].contains(&format!("plan={plan}")), "{out}");
+
+    // 默认 exit 0（读命令语义）；--strict 有告警 → exit 1 且 stderr 给出计数。
+    let msg = run_fail(&db, &["doctor", "--strict"]);
+    assert!(msg.contains("health warning(s) (strict)"), "{msg}");
+
+    // 无告警的库：--strict 仍 exit 0。
+    let (_dir2, db2) = empty_db();
+    run_ok(&db2, &["doctor", "--strict"]);
+}
