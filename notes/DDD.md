@@ -202,7 +202,7 @@ FTS5 外部内容表 + 触发器保持 `issues_fts` 与 `issues` 同步（INSERT
 
 ### doctor（健康度检查）
 
-`mint doctor [--days N] [--strict] [--json]`：只读一条命令给出项目健康度，兼作会话注入的一行摘要（#482 / plan #115）。**0.9.0 已实现**。
+`mint doctor [--days N] [--strict] [--json]`：只读一条命令给出项目健康度，兼作会话注入的一行摘要（#482 / plan #115）。**0.9.0-dev 已实现**（随 0.9.0 发布）。
 
 五项检查（固定顺序）：
 
